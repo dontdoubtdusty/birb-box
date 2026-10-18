@@ -1,0 +1,17 @@
+# Build output
+bin/
+obj/
+
+# IDE / tooling
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Dear ImGui window layout (per-machine)
+imgui.ini
+
+# OS clutter
+.DS_Store
+Thumbs.db
