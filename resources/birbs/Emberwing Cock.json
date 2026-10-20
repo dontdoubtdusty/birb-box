@@ -1,0 +1,403 @@
+{
+  "FormatVersion": 1,
+  "Size": 0.33,
+  "MapColor": {
+    "R": 227,
+    "G": 74,
+    "B": 74,
+    "A": 255
+  },
+  "Common": true,
+  "Shape": {
+    "Name": "Emberwing Cock",
+    "Parts": [
+      {
+        "Name": "Body",
+        "Mesh": "sphere",
+        "Offset": {
+          "X": 0,
+          "Y": -0.72,
+          "Z": 0
+        },
+        "Scale": {
+          "X": 0.75,
+          "Y": 0.72,
+          "Z": 1
+        },
+        "Rotation": {
+          "X": 0,
+          "Y": 0,
+          "Z": 0
+        },
+        "Color": {
+          "R": 210,
+          "G": 40,
+          "B": 40,
+          "A": 255
+        },
+        "Role": "Body"
+      },
+      {
+        "Name": "Head",
+        "Mesh": "cube",
+        "Offset": {
+          "X": 0,
+          "Y": 0.3,
+          "Z": 0.7
+        },
+        "Scale": {
+          "X": 0.5,
+          "Y": 0.5,
+          "Z": 0.5
+        },
+        "Rotation": {
+          "X": 0,
+          "Y": 0,
+          "Z": 0
+        },
+        "Color": {
+          "R": 210,
+          "G": 40,
+          "B": 40,
+          "A": 255
+        },
+        "Role": "Head",
+        "Parent": "Body"
+      },
+      {
+        "Name": "Crest",
+        "Mesh": "cone",
+        "Offset": {
+          "X": 0,
+          "Y": 1.18,
+          "Z": 0.62
+        },
+        "Scale": {
+          "X": 0.2,
+          "Y": 0.43,
+          "Z": 0.2
+        },
+        "Rotation": {
+          "X": -25,
+          "Y": 0,
+          "Z": 0
+        },
+        "Color": {
+          "R": 225,
+          "G": 50,
+          "B": 45,
+          "A": 255
+        },
+        "Role": "None",
+        "Parent": "Head"
+      },
+      {
+        "Name": "Mask",
+        "Mesh": "sphere",
+        "Offset": {
+          "X": 0,
+          "Y": 0.38,
+          "Z": 1.02
+        },
+        "Scale": {
+          "X": 0.3,
+          "Y": 0.24,
+          "Z": 0.2
+        },
+        "Rotation": {
+          "X": 0,
+          "Y": 0,
+          "Z": 0
+        },
+        "Color": {
+          "R": 25,
+          "G": 22,
+          "B": 24,
+          "A": 255
+        },
+        "Role": "None",
+        "Parent": "Head"
+      },
+      {
+        "Name": "Beak",
+        "Mesh": "cone",
+        "Offset": {
+          "X": 0,
+          "Y": 0.66,
+          "Z": 1.08
+        },
+        "Scale": {
+          "X": 0.16,
+          "Y": 0.22,
+          "Z": 0.16
+        },
+        "Rotation": {
+          "X": 90,
+          "Y": 0,
+          "Z": 0
+        },
+        "Color": {
+          "R": 240,
+          "G": 140,
+          "B": 60,
+          "A": 255
+        },
+        "Role": "Beak",
+        "Parent": "Head"
+      },
+      {
+        "Name": "Left Eye",
+        "Mesh": "sphere",
+        "Offset": {
+          "X": 0.3,
+          "Y": 0.75,
+          "Z": 1.2
+        },
+        "Scale": {
+          "X": 0.07,
+          "Y": 0.07,
+          "Z": 0.07
+        },
+        "Rotation": {
+          "X": 0,
+          "Y": 0,
+          "Z": 0
+        },
+        "Color": {
+          "R": 25,
+          "G": 22,
+          "B": 24,
+          "A": 255
+        },
+        "Role": "None",
+        "Parent": "Head"
+      },
+      {
+        "Name": "Right Eye",
+        "Mesh": "sphere",
+        "Offset": {
+          "X": -0.3,
+          "Y": 0.75,
+          "Z": 1.2
+        },
+        "Scale": {
+          "X": 0.07,
+          "Y": 0.07,
+          "Z": 0.07
+        },
+        "Rotation": {
+          "X": 0,
+          "Y": -0,
+          "Z": -0
+        },
+        "Color": {
+          "R": 25,
+          "G": 22,
+          "B": 24,
+          "A": 255
+        },
+        "Role": "None",
+        "Parent": "Head"
+      },
+      {
+        "Name": "Left Wing",
+        "Mesh": "sphere",
+        "Offset": {
+          "X": 0.62,
+          "Y": 0.25,
+          "Z": 0.63
+        },
+        "Scale": {
+          "X": 0.16,
+          "Y": 0.8,
+          "Z": 0.48
+        },
+        "Rotation": {
+          "X": -102,
+          "Y": 0,
+          "Z": 8
+        },
+        "Color": {
+          "R": 160,
+          "G": 30,
+          "B": 35,
+          "A": 255
+        },
+        "Role": "Wing",
+        "Parent": "Body"
+      },
+      {
+        "Name": "Right Wing",
+        "Mesh": "sphere",
+        "Offset": {
+          "X": -0.62,
+          "Y": 0.25,
+          "Z": 0.63
+        },
+        "Scale": {
+          "X": 0.16,
+          "Y": 0.8,
+          "Z": 0.48
+        },
+        "Rotation": {
+          "X": -102,
+          "Y": -0,
+          "Z": -8
+        },
+        "Color": {
+          "R": 160,
+          "G": 30,
+          "B": 35,
+          "A": 255
+        },
+        "Role": "Wing",
+        "Parent": "Body"
+      },
+      {
+        "Name": "Tail",
+        "Mesh": "cube",
+        "Offset": {
+          "X": 0,
+          "Y": 0.29,
+          "Z": -0.73
+        },
+        "Scale": {
+          "X": 0.26,
+          "Y": 0.55,
+          "Z": 0.06
+        },
+        "Rotation": {
+          "X": -108,
+          "Y": 0,
+          "Z": 0
+        },
+        "Color": {
+          "R": 160,
+          "G": 30,
+          "B": 35,
+          "A": 255
+        },
+        "Role": "Tail",
+        "Parent": "Body"
+      },
+      {
+        "Name": "Left Leg",
+        "Mesh": "cube",
+        "Offset": {
+          "X": 0.25,
+          "Y": -0.64,
+          "Z": 0.1
+        },
+        "Scale": {
+          "X": 0.04,
+          "Y": 0.25,
+          "Z": 0.04
+        },
+        "Rotation": {
+          "X": 180,
+          "Y": 0,
+          "Z": 0
+        },
+        "Color": {
+          "R": 95,
+          "G": 75,
+          "B": 65,
+          "A": 255
+        },
+        "Role": "Leg"
+      },
+      {
+        "Name": "Right Leg",
+        "Mesh": "cube",
+        "Offset": {
+          "X": -0.25,
+          "Y": -0.64,
+          "Z": 0.1
+        },
+        "Scale": {
+          "X": 0.04,
+          "Y": 0.25,
+          "Z": 0.04
+        },
+        "Rotation": {
+          "X": 180,
+          "Y": -0,
+          "Z": -0
+        },
+        "Color": {
+          "R": 95,
+          "G": 75,
+          "B": 65,
+          "A": 255
+        },
+        "Role": "Leg"
+      },
+      {
+        "Name": "Left Foot",
+        "Mesh": "cube",
+        "Offset": {
+          "X": 0.25,
+          "Y": -1.14,
+          "Z": 0.08
+        },
+        "Scale": {
+          "X": 0.05,
+          "Y": 0.08,
+          "Z": 0.02
+        },
+        "Rotation": {
+          "X": 90,
+          "Y": 0,
+          "Z": 0
+        },
+        "Color": {
+          "R": 95,
+          "G": 75,
+          "B": 65,
+          "A": 255
+        },
+        "Role": "None",
+        "Parent": "Left Leg"
+      },
+      {
+        "Name": "Right Foot",
+        "Mesh": "cube",
+        "Offset": {
+          "X": -0.25,
+          "Y": -1.14,
+          "Z": 0.08
+        },
+        "Scale": {
+          "X": 0.05,
+          "Y": 0.08,
+          "Z": 0.02
+        },
+        "Rotation": {
+          "X": 90,
+          "Y": -0,
+          "Z": -0
+        },
+        "Color": {
+          "R": 95,
+          "G": 75,
+          "B": 65,
+          "A": 255
+        },
+        "Role": "None",
+        "Parent": "Right Leg"
+      }
+    ],
+    "Gait": "Hop",
+    "Style": {
+      "HopHeight": 0.12,
+      "HeadBob": 0.12,
+      "StepSwing": 20,
+      "WingSpread": 80,
+      "FlapAngle": 45,
+      "FlapSpeed": 20,
+      "LookAngle": 55,
+      "LookStep": 0.7,
+      "TailFlick": 35
+    }
+  }
+}

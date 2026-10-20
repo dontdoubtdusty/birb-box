@@ -6,11 +6,15 @@ public class World
 
     // The world is a square from -HalfSize to +HalfSize on X and Z. Ground is Y = 0.
     public float HalfSize { get; } = 40f;
+    public const float Gravity = 9.8f;
 
     private readonly List<Entity> entities = new();
     private readonly List<Entity> toAdd = new();
     private readonly List<Entity> toRemove = new();
-    private readonly Random ran = new();
+
+    // Ready-made lists per type (all birds, all food...), so asking for one doesn't build a new list
+    // every call. They're thrown away in FlushChanges() whenever something is added or removed.
+    private readonly Dictionary<Type, object> typeLists = new();
 
     public World()
     {
@@ -24,6 +28,8 @@ public class World
 
     public void FlushChanges()
     {
+        if (toAdd.Count > 0 || toRemove.Count > 0) typeLists.Clear();
+
         foreach (Entity e in toRemove) entities.Remove(e);
         foreach (Entity e in toAdd) entities.Add(e);
         toRemove.Clear();
@@ -33,8 +39,11 @@ public class World
     public IReadOnlyList<Entity> Entities => entities;
     public bool Contains(Entity entity) => entities.Contains(entity);
 
-    public List<T> GetAllEntities<T>()
+    // Read-only: the same list is shared by every caller until the next change.
+    public IReadOnlyList<T> GetAllEntities<T>()
     {
+        if (typeLists.TryGetValue(typeof(T), out object? cached)) return (List<T>)cached;
+
         List<T> result = new List<T>();
         for (int i = 0; i < entities.Count; i++)
         {
@@ -43,6 +52,7 @@ public class World
                 result.Add(match);
             }
         }
+        typeLists[typeof(T)] = result;
         return result;
     }
 
@@ -54,8 +64,6 @@ public class World
     public Vector3 RandomGroundPoint(float edgeMargin = 2f)
     {
         float range = HalfSize - edgeMargin;
-        float x = (float)(ran.NextDouble() * 2 - 1) * range;
-        float z = (float)(ran.NextDouble() * 2 - 1) * range;
-        return new Vector3(x, 0, z);
+        return new Vector3(Rng.Range(-range, range), 0, Rng.Range(-range, range));
     }
 }

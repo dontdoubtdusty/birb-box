@@ -6,10 +6,12 @@ public class Bird : Entity
     // IDENTITY
     public string Name { get; private set; }
     public BirdType Type { get; private set; }
-    public string ModelKey { get; private set; }
+    public BirdInfo Info => Birds.Get(Type);
+    public BirbShape Shape { get; private set; }
+    public BoundingBox Bounds { get; private set; }    // around the shape, before Size is applied
 
     // BODY
-    public float Size { get; private set; }        // model draw scale
+    public float Size { get; private set; }        // birb units to world units
     public float Speed { get; private set; }       // walking speed, units per second
     public float Heading { get; set; }             // radians, 0 = facing +Z
     public float HopPhase { get; set; }
@@ -25,7 +27,10 @@ public class Bird : Entity
 
     // STATE
     public BirdState State { get; set; } = BirdState.Wandering;
+    public BirdPose Pose { get; set; } = BirdPose.Idle;    // set by the mover, drawn by BirbAnimator
+    public Gait Gait => Shape.Gait;
     public Food? TargetFood { get; set; }
+    private Vector3? perchSpot;                     // where it stands while eating at a feeder
     public Vector3 FlightTarget { get; set; }
     public bool ArrivingByAir { get; set; }
     public bool IsFlying => Position.Y > GroundY + 0.05f;
@@ -34,25 +39,32 @@ public class Bird : Entity
     // TIMERS
     private float eatTimer = 0f;
     private const float BiteInterval = 1.5f;
+    private float foodSearchTimer;                  // hungry birds look for food only when this runs out
+    private const float FoodSearchInterval = 0.5f;
 
-    private static readonly Random ran = new();
+    // COINS
+    private const float CoinDropChance = 0.3f;    // chance to drop a coin after a full meal
+
+    private bool removed = false;
 
     public Bird(BirdType type, string name)
     {
         Type = type;
         Name = name;
-        ModelKey = PickModelKey();
-        Size = GetBirdSize();
-        Speed = 0.45f + (float)ran.NextDouble() * 0.55f;
-        Lifespan = 240f + (float)ran.NextDouble() * 360f;    // 4 to 10 minutes
-        Hunger = 0.5f + (float)ran.NextDouble() * 0.5f;
-        Heading = (float)(ran.NextDouble() * Math.PI * 2);
-        HopPhase = (float)ran.NextDouble() * 10f;
+        Size = Info.Size;
+        Speed = Rng.Range(0.45f, 1f);
+        Lifespan = Rng.Range(240f, 600f);    // 4 to 10 minutes
+        Hunger = Rng.Range(0.5f, 1f);
+        Heading = Rng.Range(0f, MathF.PI * 2f);
+        HopPhase = Rng.Range(0f, 10f);
+        foodSearchTimer = Rng.Range(0f, FoodSearchInterval);    // staggered so birds don't all search on one frame
         Mover = new BirdMover(this);
 
-        // Model origins are not always at the feet, so use the bounding box to find the ground offset.
-        BoundingBox box = ModelLibrary.GetBounds(ModelKey);
-        GroundY = -box.Min.Y * Size;
+        Shape = Info.Shapes[Rng.Next(Info.Shapes.Length)];
+        Bounds = Shape.GetBounds();
+
+        // The origin is not at the feet, so the bottom of the box tells how high to lift the bird.
+        GroundY = -Bounds.Min.Y * Size;
     }
 
     public override void Update(float dt)
@@ -81,7 +93,12 @@ public class Bird : Entity
             case BirdState.Wandering:
                 if (IsHungry())
                 {
-                    TryFindFood();
+                    foodSearchTimer -= dt;
+                    if (foodSearchTimer <= 0f)
+                    {
+                        foodSearchTimer = FoodSearchInterval;
+                        TryFindFood();
+                    }
                 }
                 Mover.UpdateWalking(dt);
                 break;
@@ -106,13 +123,31 @@ public class Bird : Entity
             {
                 EventLog.Add($"{Name} wandered off past the edge of the world.");
             }
-            World.Instance.RemoveEntity(this);
+            Remove();
         }
+    }
+
+    // Removes the bird from the world once, even if two things ask in the same frame.
+    public void Remove()
+    {
+        if (removed) return;
+        removed = true;
+        World.Instance.RemoveEntity(this);
+    }
+
+    // Blank names are ignored, so the bird keeps its old one.
+    public void Rename(string newName)
+    {
+        newName = newName.Trim();
+        if (newName.Length == 0 || newName == Name) return;
+
+        EventLog.Add($"{Name} shall henceforth be known as {newName}.");
+        Name = newName;
     }
 
     private void TickDownHunger(float dt)
     {
-        // The slider value is "seconds per 5% hunger", same idea as the old hunger timer.
+        // The slider value is "seconds per 5% hunger".
         float rate = 0.05f / BirdSpawner.Instance.HungerTickdownRate;
         Hunger = MathF.Max(0f, Hunger - rate * dt);
 
@@ -121,6 +156,15 @@ public class Bird : Entity
     }
 
     public bool IsHungry() => Hunger < HungerThreshold;
+
+    // Birds drawn in by seed arrive ready to eat it.
+    public void ArriveHungry()
+    {
+        Hunger = HungerThreshold - Rng.Range(0.05f, 0.15f);
+    }
+
+    // A bird only eats seed it has a taste for (see the seed table in Seeds.cs).
+    public bool CanEat(Food food) => food.FavoriteFor(Type) != null;
 
     private void TryFindFood()
     {
@@ -134,17 +178,21 @@ public class Bird : Entity
 
     private void UpdateSeeking(float dt)
     {
-        if (TargetFood == null || TargetFood.IsFullyEaten)
+        if (TargetFood == null || !CanEat(TargetFood))
         {
             TargetFood = null;
             State = BirdState.Wandering;
             return;
         }
 
-        if (Mover.IsCloseTo(TargetFood.Position, 0.6f))
+        // Close enough to a feeder to flutter up onto it, or to a pile to start pecking
+        Feeder? feeder = TargetFood.Feeder;
+        float reach = feeder != null ? feeder.Info.PerchRadius + 0.5f : 0.6f;
+        if (Mover.IsCloseTo(TargetFood.Position, reach))
         {
             State = BirdState.Eating;
             eatTimer = 0f;
+            perchSpot = feeder?.PerchSpot(Position, GroundY);
             return;
         }
 
@@ -153,28 +201,44 @@ public class Bird : Entity
 
     private void UpdateEating(float dt)
     {
-        if (TargetFood == null || TargetFood.IsFullyEaten)
+        if (TargetFood == null || !CanEat(TargetFood))
         {
             TargetFood = null;
             State = BirdState.Wandering;
             return;
         }
 
-        Mover.PeckAt(TargetFood.Position, dt);
+        // At a feeder, it flies up to its perch before it starts eating
+        if (perchSpot != null && !Mover.FlyToward(perchSpot.Value, dt)) return;
+
+        Mover.PeckAt(TargetFood.Position, dt, perched: perchSpot != null);
 
         eatTimer += dt;
         if (eatTimer >= BiteInterval)
         {
             eatTimer = 0f;
-            TargetFood.TakeBite();
-            Hunger = MathF.Min(1f, Hunger + TargetFood.NutritionPerBite);
+            if (TargetFood.TakeBite(Type))
+            {
+                Hunger = MathF.Min(1f, Hunger + Food.NutritionPerBite);
+            }
 
             if (Hunger >= 0.95f)
             {
                 TargetFood = null;
                 State = BirdState.Wandering;
+                if (Rng.Chance(CoinDropChance))
+                {
+                    World.Instance.AddEntity(new Coin(Position + new Vector3(0, 0.3f, 0)));
+                }
             }
         }
+    }
+
+    // Stops going for its food, e.g. when the feeder it was eating from gets picked up.
+    public void ForgetFood()
+    {
+        TargetFood = null;
+        if (State == BirdState.SeekingFood || State == BirdState.Eating) State = BirdState.Wandering;
     }
 
     public void StartLeaving(string reason)
@@ -187,33 +251,8 @@ public class Bird : Entity
         EventLog.Add(reason);
     }
 
-    private string PickModelKey()
-    {
-        switch (Type)
-        {
-            case BirdType.Cardinal:
-                return ran.Next(0, 10) > 4 ? "cardinal" : "cardinal_f";
-            case BirdType.Dove:
-                return "dove";
-            default:
-                return "finch";
-        }
-    }
-
-    private float GetBirdSize()
-    {
-        switch (Type)
-        {
-            case BirdType.Cardinal: return 0.33f;
-            case BirdType.Dove: return 0.4f;
-            case BirdType.Finch: return 0.2f;
-        }
-        return 0.33f;
-    }
-
-    // Center and radius used for click selection.
-    public Vector3 PickCenter => Position + new Vector3(0, PickRadius * 0.6f, 0);
-    public float PickRadius => MathF.Max(0.3f, Size * 1.1f);
+    // Roughly how far the bird reaches out from its middle when seen from above (for the selection ring).
+    public float FootprintRadius => MathF.Max(Bounds.Max.X - Bounds.Min.X, Bounds.Max.Z - Bounds.Min.Z) * 0.5f * Size;
 
     public string FormatAge()
     {

@@ -19,7 +19,7 @@ out vec3 fragNormal;
 
 void main()
 {
-    // fragPosition is in hologram-local space: the cube is centered at (0, 0, 0)
+    // fragPosition is in scene space: the cube is centered at (0, 0, 0) and turned with the hologram
     fragPosition = vec3(matModel * vec4(vertexPosition, 1.0));
     fragTexCoord = vertexTexCoord;
     fragColor = vertexColor;

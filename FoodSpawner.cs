@@ -1,37 +1,32 @@
 using System.Numerics;
 
-// Creates food: thrown by the player, scattered by buttons, or dropped naturally over time.
+// Creates food: poured by the player from the bucket, scattered by buttons, or dropped naturally over time.
 public class FoodSpawner
 {
-    public static FoodSpawner Instance { get; set; } = null!;
-
     // SETTINGS (changed from the ImGui panel)
     public bool NaturalDrops = true;
     public float DropsPerMinute = 10f;
     public int MaxFood = 200;
 
-    private int foodCounter = 0;
-    private readonly Random ran = new();
+    public const float PileAmount = 2f;        // seed in one poured pile
+    public const float WildPileAmount = 1.5f;  // seed in one natural or scattered pile
 
-    public FoodSpawner()
-    {
-        Instance = this;
-    }
+    public bool HasRoom => World.Instance.GetAllEntities<Food>().Count < MaxFood;
 
     public void Update(float dt)
     {
         if (!NaturalDrops) return;
 
-        if (ran.NextDouble() < DropsPerMinute / 60f * dt)
+        if (Rng.Chance(DropsPerMinute / 60f * dt))
         {
             SpawnFood(World.Instance.RandomGroundPoint());
         }
     }
 
-    // Player click: the food drops in from the top of the hologram.
-    public void ThrowFood(Vector3 groundPoint, float dropHeight)
+    // Poured from the bucket: the pile drops in from the top of the hologram.
+    public void ThrowFood(Vector3 groundPoint, float dropHeight, Dictionary<SeedType, float> contents)
     {
-        SpawnFood(new Vector3(groundPoint.X, dropHeight, groundPoint.Z));
+        SpawnFood(new Vector3(groundPoint.X, dropHeight, groundPoint.Z), contents);
     }
 
     public void ScatterAcrossWorld(int count)
@@ -44,22 +39,36 @@ public class FoodSpawner
 
     public void ScatterInView(int count, ViewWindow view)
     {
-        float r = view.HalfSize * 0.8f;
+        float maxDistance = view.Radius * 0.8f;
         for (int i = 0; i < count; i++)
         {
-            Vector3 local = new Vector3(RandomRange(-r, r), view.Height, RandomRange(-r, r));
-            local.Y += RandomRange(0f, 2f);    // stagger so they don't all land at once
+            // A random spot in the circle. The square root spreads them evenly instead of bunching at the center.
+            float angle = Rng.Range(0f, MathF.PI * 2f);
+            float distance = maxDistance * MathF.Sqrt(Rng.Range(0f, 1f));
+            Vector3 local = new Vector3(MathF.Cos(angle) * distance, view.Height, MathF.Sin(angle) * distance);
+            local.Y += Rng.Range(0f, 2f);    // stagger so they don't all land at once
             SpawnFood(view.ToWorld(local));
         }
     }
 
-    private void SpawnFood(Vector3 position)
+    // Natural drops and scatter buttons always make wild seed. Bagged seed only comes from the bucket.
+    // Seed dropped from above a feeder lands in it.
+    private void SpawnFood(Vector3 position, Dictionary<SeedType, float>? contents = null)
     {
-        if (World.Instance.GetAllEntities<Food>().Count >= MaxFood) return;
+        if (!HasRoom) return;
 
-        foodCounter++;
-        World.Instance.AddEntity(new Food($"Food #{foodCounter}", position));
+        contents ??= new() { [SeedType.Wild] = WildPileAmount };
+        Feeder? below = position.Y > 0f ? FeederBelow(position) : null;
+        World.Instance.AddEntity(new Food(position, contents) { LandOn = below });
     }
 
-    private float RandomRange(float min, float max) => min + (float)ran.NextDouble() * (max - min);
+    private static Feeder? FeederBelow(Vector3 position)
+    {
+        foreach (Feeder feeder in World.Instance.GetAllEntities<Feeder>())
+        {
+            float distance = Vector2.Distance(new Vector2(position.X, position.Z), new Vector2(feeder.Position.X, feeder.Position.Z));
+            if (distance <= feeder.Info.CatchRadius && position.Y > feeder.Info.CatchHeight) return feeder;
+        }
+        return null;
+    }
 }

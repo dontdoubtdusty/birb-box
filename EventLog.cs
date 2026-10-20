@@ -9,10 +9,7 @@ public static class EventLog
 
     public static void Add(string message)
     {
-        float t = GameEngine.Instance.SimTime;
-        int minutes = (int)(t / 60);
-        int seconds = (int)(t % 60);
-        entries.Add($"[{minutes:00}:{seconds:00}] {message}");
+        entries.Add($"[{Clock.Format(GameEngine.Instance.SimTime)}] {message}");
 
         if (entries.Count > MaxEntries)
         {

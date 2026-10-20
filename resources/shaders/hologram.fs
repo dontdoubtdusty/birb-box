@@ -1,6 +1,6 @@
 #version 330
 
-// Used for everything INSIDE the cube: the dirt floor, food and bird models.
+// Used for everything INSIDE the hologram: the dirt floor, food, birbs and the Gilded Granary.
 // It adds simple lighting, the hologram tint, rim glow, scan bands, and the edge fog.
 
 in vec3 fragPosition;
@@ -11,13 +11,19 @@ in vec3 fragNormal;
 uniform sampler2D texture0;
 uniform vec4 colDiffuse;
 
-uniform float cubeHalf;      // half width of the cube
+uniform vec3 holoOrigin;     // middle of this hologram's floor, normally (0,0,0)
+uniform float boxYaw;        // how far the hologram is turned (radians)
+uniform float holoRadius;    // radius of the round hologram
+uniform float fogStart;      // share of the radius that stays clear before the fog begins
+uniform float swallow;       // 0 normally; rises to 1 while switching scenes, rolling the fog in until nothing shows
 uniform float cubeHeight;
-uniform vec2 viewCenter;     // world X,Z at the cube's center (so the dirt pattern pans)
+uniform vec2 viewCenter;     // world X,Z at the hologram's center (so the dirt pattern pans)
+uniform float viewZoom;      // box units per world unit (so the dirt pattern zooms)
 uniform vec3 viewPos;        // camera position, for rim glow
 uniform vec3 holoColor;
 uniform float time;
 uniform int isFloor;
+uniform int flatShade;       // 1 while drawing birbs: each triangle gets one flat shade (the faceted look)
 
 out vec4 finalColor;
 
@@ -58,12 +64,33 @@ vec3 dirtColor(vec2 world)
 
 void main()
 {
-    vec4 base = texture(texture0, fragTexCoord) * colDiffuse * fragColor;
-    vec3 normal = normalize(fragNormal);
+    // fragPosition is in scene space, already turned with the hologram.
+    // boxPos moves it back to this hologram's origin and undoes the turn, so the fog, dirt and bands line up with it.
+    vec3 p = fragPosition - holoOrigin;
+    float c = cos(boxYaw);
+    float s = sin(boxYaw);
+    vec3 boxPos = vec3(c * p.x - s * p.z, p.y,
+                       s * p.x + c * p.z);
+
+    // Color comes from the texture and the material color (colDiffuse).
+    // fragColor is ignored: the meshes have no vertex colors, and some
+    // drivers fill the missing value with zero, which made birds invisible.
+    vec4 base = texture(texture0, fragTexCoord) * colDiffuse;
+
+    // Guard against a zero-length normal, which would turn into NaN
+    vec3 normal = length(fragNormal) > 0.0001 ? normalize(fragNormal) : vec3(0.0, 1.0, 0.0);
+
+    // How fragPosition changes across neighboring pixels gives two lines lying flat on this triangle;
+    // their cross product points straight out of it. Flipped if needed so it faces the camera.
+    if (flatShade == 1)
+    {
+        normal = normalize(cross(dFdx(fragPosition), dFdy(fragPosition)));
+        if (dot(normal, viewPos - fragPosition) < 0.0) normal = -normal;
+    }
 
     if (isFloor == 1)
     {
-        base = vec4(dirtColor(fragPosition.xz + viewCenter), 1.0);
+        base = vec4(dirtColor(boxPos.xz / viewZoom + viewCenter), 1.0);
         normal = vec3(0.0, 1.0, 0.0);
     }
 
@@ -87,18 +114,22 @@ void main()
     }
 
     // Fine horizontal scan bands drifting upward
-    float bands = 0.5 + 0.5 * sin(fragPosition.y * 55.0 - time * 4.0);
+    float bands = 0.5 + 0.5 * sin(boxPos.y * 55.0 - time * 4.0);
     color += holoColor * bands * 0.04;
 
     // A slow bright sweep that rises through the cube every few seconds
     float sweepY = mod(time * 0.9, cubeHeight + 3.0) - 1.5;
-    float sweep = exp(-pow((fragPosition.y - sweepY) * 3.5, 2.0));
+    float sweep = exp(-pow((boxPos.y - sweepY) * 3.5, 2.0));
     color += holoColor * sweep * 0.2;
 
-    // Fog: fade out toward the cube walls and the ceiling
-    float edge = max(abs(fragPosition.x), abs(fragPosition.z)) / cubeHalf;
-    float fade = 1.0 - smoothstep(0.55, 1.0, edge);
-    fade *= 1.0 - smoothstep(cubeHeight * 0.7, cubeHeight, fragPosition.y);
+    // Fog: fade out toward the round edge and the ceiling.
+    // Past the edge fade is 0, so the square floor's corners get discarded.
+    // Swallow moves both ends of the fade inward, past the middle, so the fog closes in from the edge.
+    float edge = length(boxPos.xz) / holoRadius;
+    float clearUntil = mix(fogStart, -0.4, swallow);
+    float goneBy = mix(1.0, 0.0, swallow);
+    float fade = 1.0 - smoothstep(clearUntil, goneBy, edge);
+    fade *= 1.0 - smoothstep(cubeHeight * 0.7, cubeHeight, boxPos.y);
 
     // As things fade, they also shift toward a dim hologram-colored haze
     color = mix(color, holoColor * 0.3, (1.0 - fade) * 0.6);

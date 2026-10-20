@@ -1,13 +1,14 @@
 #version 330
 
-// Runs once over the whole finished frame: glow, faint scanlines, and a soft vignette.
+// Runs once over the finished hologram scene: glow and faint scanlines.
+// The scene was drawn onto a clear background, so its alpha says where something was drawn.
+// The result is laid over the backdrop with premultiplied blending (color + backdrop * (1 - alpha)).
 
 in vec2 fragTexCoord;
 in vec4 fragColor;
 
 uniform sampler2D texture0;
 uniform vec2 resolution;
-uniform vec3 backgroundColor;
 uniform float time;
 uniform float glowStrength;
 uniform float scanlineStrength;
@@ -18,9 +19,11 @@ void main()
 {
     vec2 uv = fragTexCoord;
     vec2 pixel = 1.0 / resolution;
-    vec3 color = texture(texture0, uv).rgb;
+    vec4 scene = texture(texture0, uv);
+    vec3 color = scene.rgb;
 
-    // Glow: sample a ring of nearby pixels and keep only the bright parts
+    // Glow: sample a ring of nearby pixels and keep only the bright parts.
+    // It spreads past the edges of things, so it also brightens the backdrop around them.
     vec3 glow = vec3(0.0);
     for (int i = 0; i < 12; i++)
     {
@@ -31,14 +34,9 @@ void main()
     }
     color += glow / 12.0 * glowStrength;
 
-    // Scanlines only where the hologram is (not on the empty background)
-    float holoMask = clamp(length(color - backgroundColor) * 4.0, 0.0, 1.0);
+    // Scanlines only where something was drawn (not on the backdrop)
     float scan = 0.5 + 0.5 * sin(gl_FragCoord.y * 2.1 - time * 6.0);
-    color *= 1.0 - scanlineStrength * holoMask * (1.0 - scan);
+    color *= 1.0 - scanlineStrength * scene.a * (1.0 - scan);
 
-    // Soft vignette
-    vec2 d = uv - 0.5;
-    color *= 1.0 - dot(d, d) * 0.45;
-
-    finalColor = vec4(color, 1.0);
+    finalColor = vec4(color, scene.a);
 }

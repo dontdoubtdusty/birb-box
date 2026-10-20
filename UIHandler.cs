@@ -1,22 +1,35 @@
 using System.Numerics;
 using ImGuiNET;
+using Raylib_cs;
 
-// The ImGui tool panels: settings, bird tracker, selection controls and the log.
-// Hidden by default; Tab shows and hides them. The always-visible HUD lives in Hud.cs.
+// The ImGui tool panels: settings, bird tracker and the log.
+// Hidden by default; Tab shows and hides them. The always-visible HUD is in Hud.cs and MiniMap.cs.
 public class UIHandler
 {
-    public static UIHandler Instance { get; private set; } = null!;
-
     public bool ShowTools = false;
+
+    // Shown here under "Controls" and on the Esc menu's Controls page.
+    public static readonly string[] ControlLines =
+    {
+        "Drag sideways: turn the box   Drag up/down: tilt",
+        "Wheel on hologram or map: zoom view",
+        "Wheel elsewhere: move closer / farther",
+        "WASD: pan (Shift = faster)",
+        "Hold right mouse: pour bucket",
+        "Click bird: select   Space: pause",
+        "Click name on bird card: rename",
+        "Click minimap: jump view   +/-: zoom levels",
+        "Click gunk: scrape (needs Muck Scraper)",
+        "Click feeder: pick up   Click dirt: set down",
+        "Store: click Zoo Cam to go back",
+        "Tab: show/hide tools   F: fullscreen",
+        "B: Birb Designer",
+        "F9: screenshot   Esc: menu",
+    };
 
     private int scatterCount = 10;
     private bool onlyBirdsInView = true;
     private int lastLogVersion = -1;
-
-    public UIHandler()
-    {
-        Instance = this;
-    }
 
     public void Draw(GameEngine engine)
     {
@@ -25,7 +38,6 @@ public class UIHandler
 
         DrawControlPanel(engine);
         DrawBirdTracker(engine);
-        DrawSelectedBird(engine);
         DrawEventLog();
     }
 
@@ -38,13 +50,15 @@ public class UIHandler
         ImGui.Begin("Birb Box");
 
         ImGui.Text($"Window center: {engine.View.Center.X:0.0}, {engine.View.Center.Y:0.0}");
+        ImGui.Text($"FPS {Raylib.GetFPS()}   frame {Raylib.GetFrameTime() * 1000f:0.0} ms   update {engine.UpdateMs:0.00} ms");
+        ImGui.Text($"Birds {World.Instance.GetAllEntities<Bird>().Count}   food {World.Instance.GetAllEntities<Food>().Count}");
 
         if (ImGui.Button(engine.Paused ? "Play" : "Pause", new Vector2(80, 0)))
         {
             engine.Paused = !engine.Paused;
         }
         ImGui.SameLine();
-        if (ImGui.Button("Fullscreen (F11)"))
+        if (ImGui.Button("Fullscreen (F)"))
         {
             engine.ToggleFullscreen();
         }
@@ -52,9 +66,10 @@ public class UIHandler
 
         ImGui.SeparatorText("Birds");
         BirdSpawner birds = engine.BirdSpawner;
-        ImGui.SliderFloat("Hunger rate", ref birds.HungerTickdownRate, 0.5f, 5f, "%.1f s per 5%%");
+        ImGui.SliderFloat("Hunger rate", ref birds.HungerTickdownRate, 0.5f, 20f, "%.1f s per 5%%");
         ImGui.SliderFloat("Arrivals", ref birds.ArrivalsPerFoodPerMinute, 0f, 3f, "%.2f per food/min");
         ImGui.SliderInt("Max birds", ref birds.MaxBirds, 5, 150);
+        ImGui.SliderFloat("Gunk penalty", ref birds.GunkPenalty, 0f, 0.5f, "%.2f per pile");
         if (ImGui.Button("Call a bird"))
         {
             birds.SpawnArrival();
@@ -70,6 +85,7 @@ public class UIHandler
         if (ImGui.Button("Scatter in view")) food.ScatterInView(scatterCount, engine.View);
         ImGui.SameLine();
         if (ImGui.Button("Scatter across world")) food.ScatterAcrossWorld(scatterCount);
+        if (ImGui.Button("Cheat: +10 coins")) engine.Coins += 10;
 
         if (ImGui.CollapsingHeader("Hologram"))
         {
@@ -77,17 +93,15 @@ public class UIHandler
             ImGui.ColorEdit3("Color", ref r.HoloColor);
             ImGui.SliderFloat("Glow", ref r.GlowStrength, 0f, 3f);
             ImGui.SliderFloat("Scanlines", ref r.ScanlineStrength, 0f, 0.5f);
+            ImGui.Checkbox("Smooth edges", ref r.SmoothEdges);
+            ImGui.SliderFloat("Width", ref engine.View.RadiusScale, 0.6f, ViewWindow.MaxRadiusScale, "%.2f");
+            ImGui.SliderFloat("Fog start", ref engine.View.FogStart, 0.3f, 0.95f, "%.2f");
             ImGui.Checkbox("Projector base", ref r.ShowProjector);
         }
 
         if (ImGui.CollapsingHeader("Controls"))
         {
-            ImGui.TextDisabled("Drag: orbit   Wheel: zoom");
-            ImGui.TextDisabled("WASD: pan (Shift = faster)");
-            ImGui.TextDisabled("Click floor: throw food");
-            ImGui.TextDisabled("Click bird: select   Space: pause");
-            ImGui.TextDisabled("Click minimap: jump view");
-            ImGui.TextDisabled("Tab: show/hide tools   F11: fullscreen");
+            foreach (string line in ControlLines) ImGui.TextDisabled(line);
         }
 
         ImGui.End();
@@ -124,31 +138,6 @@ public class UIHandler
         ImGui.End();
     }
 
-    // ---------------- SELECTED BIRD ----------------
-
-    // The bird's stats are on the HUD card; this window only holds the buttons.
-    private void DrawSelectedBird(GameEngine engine)
-    {
-        Bird? bird = engine.SelectedBird;
-        if (bird == null) return;
-
-        ImGui.SetNextWindowPos(new Vector2(284, ImGui.GetIO().DisplaySize.Y - 110), ImGuiCond.FirstUseEver);
-        ImGui.SetNextWindowSize(new Vector2(220, 0), ImGuiCond.FirstUseEver);
-        ImGui.Begin("Selected Birb");
-
-        ImGui.Text(bird.Name);
-        ImGui.Checkbox("Follow with view", ref engine.FollowSelected);
-        if (ImGui.Button("Center view")) engine.JumpToBird(bird);
-        ImGui.SameLine();
-        if (ImGui.Button("Deselect"))
-        {
-            engine.SelectedBird = null;
-            engine.FollowSelected = false;
-        }
-
-        ImGui.End();
-    }
-
     // ---------------- EVENT LOG ----------------
 
     private void DrawEventLog()
@@ -174,6 +163,12 @@ public class UIHandler
     }
 
     // ---------------- STYLE ----------------
+
+    // The panels use Chakra Petch, a squared-off sci-fi font. The in-box text stays Quicksand (see UiText).
+    public static void LoadFont()
+    {
+        ImGui.GetIO().Fonts.AddFontFromFileTTF(Assets.PathTo("fonts/ChakraPetch-Medium.ttf"), 16f);
+    }
 
     // Dark panels with teal accents to match the hologram.
     public void ApplyStyle()
