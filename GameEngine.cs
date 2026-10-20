@@ -8,13 +8,14 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Box 4.32 Alpha";
+    public const string Version = "Birb Box 4.35 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
     public BirdSpawner BirdSpawner { get; private set; }
     public FoodSpawner FoodSpawner { get; private set; }
     public HoloCamera Camera { get; private set; }
+    public Dial Dial { get; private set; }
     public ViewWindow View { get; private set; }
     public HologramRenderer Renderer { get; private set; }
     public Hud Hud { get; private set; }
@@ -89,6 +90,7 @@ public class GameEngine
         BirdSpawner = new BirdSpawner();
         FoodSpawner = new FoodSpawner();
         Camera = new HoloCamera();
+        Dial = new Dial();
         View = new ViewWindow();
         Renderer = new HologramRenderer();
         Hud = new Hud();
@@ -115,6 +117,7 @@ public class GameEngine
         Raylib.SetWindowIcon(icon);
         Raylib.UnloadImage(icon);
 
+        Sounds.Load();
         Renderer.Load(View);
         BirbBuilder.Load(Renderer.HoloShader);
 
@@ -139,6 +142,7 @@ public class GameEngine
         Renderer.Unload();
         BirbBuilder.Unload();
         UiText.Unload();
+        Sounds.Unload();
         Raylib.CloseWindow();
     }
 
@@ -221,9 +225,9 @@ public class GameEngine
         Camera.Update(mouseBlocked, mouseOverHologram);
         if (mouseOverHologram) View.ZoomBy(Raylib.GetMouseWheelMove());
 
-        // A sideways drag turns whatever the box is showing
-        if (inStore) Store.Yaw += Camera.TurnThisFrame;
-        else View.Yaw += Camera.TurnThisFrame;
+        // A sideways drag turns the bezel ring, and with it whatever the box is showing (see Dial)
+        if (inStore) Dial.Turn(ref Store.Yaw, dt, Camera.TurnThisFrame, Camera.IsHolding);
+        else Dial.Turn(ref View.Yaw, dt, Camera.TurnThisFrame, Camera.IsHolding);
 
         if (!keyboardBlocked && birdsShowing && View.HandlePanInput(dt))
         {
@@ -279,7 +283,7 @@ public class GameEngine
     private void UpdateDesigning(float dt, bool mouseBlocked)
     {
         Camera.Update(mouseBlocked, wheelUsedElsewhere: false);
-        View.Yaw += Camera.TurnThisFrame;
+        Dial.Turn(ref View.Yaw, dt, Camera.TurnThisFrame, Camera.IsHolding);
         Designer.Update(dt);
     }
 

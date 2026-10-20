@@ -15,6 +15,7 @@ public class HoloCamera
     public Camera3D Camera;
     public bool ClickedThisFrame { get; private set; }
     public float TurnThisFrame { get; private set; }    // radians of sideways drag this frame
+    public bool IsHolding => mouseHeld;                 // the left button was pressed on the box and is still down
 
     private const float DragSensitivity = 0.006f;
     private const float TiltSensitivity = 0.003f;

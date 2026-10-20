@@ -22,11 +22,13 @@ public class HologramRenderer
     public float ScanlineStrength = 0.12f;
     public bool ShowProjector = true;
     public bool SmoothEdges = true;
+    public float WallStrength = 1f;    // the scanline walls of the field; 0 hides them
 
     private const int MaxSceneSize = 8192;    // biggest texture to ask the graphics card for
 
     public Shader HoloShader { get; private set; }
     private Shader postShader;
+    private Shader wallShader;
     private RenderTexture2D sceneTarget;
 
     // ZOO CAMERA: a fixed camera looking down into the bird world, used while the box shows the store
@@ -57,6 +59,7 @@ public class HologramRenderer
     // Shader uniform locations
     private int locHoloOrigin, locBoxYaw, locHoloRadius, locFogStart, locSwallow, locCubeHeight, locViewCenter, locViewZoom, locViewPos, locHoloColor, locTime, locIsFloor;
     private int locResolution, locPostTime, locGlow, locScanlines;
+    private int locWallViewPos, locWallHeight, locWallTime;
 
     public void Load(ViewWindow view)
     {
@@ -79,6 +82,11 @@ public class HologramRenderer
         locPostTime = Raylib.GetShaderLocation(postShader, "time");
         locGlow = Raylib.GetShaderLocation(postShader, "glowStrength");
         locScanlines = Raylib.GetShaderLocation(postShader, "scanlineStrength");
+
+        wallShader = Raylib.LoadShader(Assets.PathTo("shaders/fieldwall.vs"), Assets.PathTo("shaders/fieldwall.fs"));
+        locWallViewPos = Raylib.GetShaderLocation(wallShader, "viewPos");
+        locWallHeight = Raylib.GetShaderLocation(wallShader, "wallHeight");
+        locWallTime = Raylib.GetShaderLocation(wallShader, "time");
 
         // A square floor big enough for the widest the circle can be; the shader's fog cuts off the rest.
         float floorSize = view.HalfSize * ViewWindow.MaxRadiusScale * 2f;
@@ -115,6 +123,7 @@ public class HologramRenderer
         JoinMessages.Unload();
         Raylib.UnloadShader(HoloShader);
         Raylib.UnloadShader(postShader);
+        Raylib.UnloadShader(wallShader);
         if (sceneTarget.Id != 0) Raylib.UnloadRenderTexture(sceneTarget);
     }
 
@@ -134,12 +143,14 @@ public class HologramRenderer
         if (mode.InStore) DrawZooCamera(view, selected);
 
         SetHologramUniforms(camera, view, mode.Swallow);
+        SetWallUniforms(camera, view.Height);
 
         Raylib.BeginTextureMode(sceneTarget);
             Raylib.ClearBackground(Color.Blank);
             Rlgl.SetLineWidth(scale);    // so wire outlines aren't thinner when the scene is drawn bigger
             Raylib.BeginMode3D(camera);
-                if (ShowProjector) pedestal.Draw(view, Palette.ToColor(HoloColor));
+                float ringYaw = mode.InStore ? store.Yaw : view.Yaw;
+                if (ShowProjector) pedestal.Draw(view, ringYaw, Palette.ToColor(HoloColor));
                 if (mode.InStore)
                 {
                     storeRenderer.Draw(store, view);
@@ -350,30 +361,59 @@ public class HologramRenderer
         animator.ForgetUnseen();
     }
 
-    // The glowing edges of a hologram whose floor middle is at 'origin': two rings, one at the floor and one
-    // at the ceiling, each a thin bright core plus a wider faint halo, and a curtain of light rising from the floor.
-    // Brightness 1 is normal; higher makes it glow more.
+    // The glowing edges of a hologram whose floor middle is at 'origin', drawn back to front:
+    //  - scanline walls (fieldwall.fs): faint lines drifting up, fading toward the top and on the side facing the camera
+    //  - a curtain of light rising from the floor
+    //  - two rings, floor and ceiling, each a bright core, a softer middle and a wide faint halo
     // A circle looks the same however it's turned, so no yaw is needed.
+    // Brightness 1 is normal; higher makes it glow more.
     private const int EdgeSegments = 72;
 
     public void DrawFieldEdges(Vector3 origin, float radius, float height, float curtainHeight, float brightness)
     {
         Color core = Palette.ToColor(HoloColor, Palette.GlowAlpha(200, brightness));
-        Color halo = Palette.ToColor(HoloColor, Palette.GlowAlpha(16, brightness));
+        Color middle = Palette.ToColor(HoloColor, Palette.GlowAlpha(60, brightness));
+        Color halo = Palette.ToColor(HoloColor, Palette.GlowAlpha(24, brightness));
 
         BeginGlowDrawing();
+        if (WallStrength > 0f) DrawFieldWalls(origin, radius, height, Palette.GlowAlpha((int)(110 * WallStrength), brightness));
+        DrawFieldCurtain(origin, radius, curtainHeight, Palette.GlowAlpha(40, brightness));
         foreach (float y in new[] { 0f, height })
         {
             for (int i = 0; i < EdgeSegments; i++)
             {
                 Vector3 a = origin + PointOnCircle(radius, i, y);
                 Vector3 b = origin + PointOnCircle(radius, i + 1, y);
-                Raylib.DrawCylinderEx(a, b, 0.08f, 0.08f, 8, halo);
-                Raylib.DrawCylinderEx(a, b, 0.018f, 0.018f, 6, core);
+                Raylib.DrawCylinderEx(a, b, 0.09f, 0.09f, 8, halo);
+                Raylib.DrawCylinderEx(a, b, 0.04f, 0.04f, 6, middle);
+                Raylib.DrawCylinderEx(a, b, 0.025f, 0.025f, 6, core);
             }
         }
-        DrawFieldCurtain(origin, radius, curtainHeight, Palette.GlowAlpha(40, brightness));
         EndGlowDrawing();
+    }
+
+    // The see-through wall of the field, drawn with fieldwall.fs, which adds the scanlines and the fading.
+    private void DrawFieldWalls(Vector3 origin, float radius, float height, int alpha)
+    {
+        Color color = Palette.ToColor(HoloColor, alpha);
+
+        Raylib.BeginShaderMode(wallShader);
+        Rlgl.DisableBackfaceCulling();
+        Rlgl.Begin(DrawMode.Quads);
+        Rlgl.Color4ub(color.R, color.G, color.B, color.A);
+        for (int i = 0; i < EdgeSegments; i++)
+        {
+            Vector3 a = origin + PointOnCircle(radius, i, 0f);
+            Vector3 b = origin + PointOnCircle(radius, i + 1, 0f);
+            Rlgl.Vertex3f(a.X, a.Y, a.Z);
+            Rlgl.Vertex3f(b.X, b.Y, b.Z);
+            Rlgl.Vertex3f(b.X, b.Y + height, b.Z);
+            Rlgl.Vertex3f(a.X, a.Y + height, a.Z);
+        }
+        Rlgl.End();
+        Rlgl.DrawRenderBatchActive();
+        Rlgl.EnableBackfaceCulling();
+        Raylib.EndShaderMode();
     }
 
     // A faint sheet of light rising from the bottom ring, like the edge of a projected field.
@@ -441,6 +481,13 @@ public class HologramRenderer
         Raylib.SetShaderValue(HoloShader, locHoloColor, HoloColor, ShaderUniformDataType.Vec3);
         Raylib.SetShaderValue(HoloShader, locTime, time, ShaderUniformDataType.Float);
         Raylib.SetShaderValue(HoloShader, locIsFloor, 0, ShaderUniformDataType.Int);
+    }
+
+    private void SetWallUniforms(Camera3D camera, float wallHeight)
+    {
+        Raylib.SetShaderValue(wallShader, locWallViewPos, camera.Position, ShaderUniformDataType.Vec3);
+        Raylib.SetShaderValue(wallShader, locWallHeight, wallHeight, ShaderUniformDataType.Float);
+        Raylib.SetShaderValue(wallShader, locWallTime, (float)Raylib.GetTime(), ShaderUniformDataType.Float);
     }
 
     private void SetPostUniforms(int width, int height)

@@ -193,8 +193,9 @@ public class Pedestal
 
     // ---------------- DRAW (inside the 3D scene) ----------------
 
+    // ringYaw: how far the bezel ring is turned (the birds' or the store's turn, whichever the box is showing).
     // glowColor: the hologram color, for the windows and the emitter well.
-    public void Draw(ViewWindow view, Color glowColor)
+    public void Draw(ViewWindow view, float ringYaw, Color glowColor)
     {
         float r = view.HalfSize;          // pedestal body radius
         float bezelRadius = r * 1.05f;
@@ -204,7 +205,7 @@ public class Pedestal
         DrawBody(r, bezelRadius, wellRadius);
         DrawButtons(r);
         DrawLogoPlaque(r, brassLight);
-        DrawBezelMarkings(bezelRadius, wellRadius, view.Yaw);
+        DrawBezelMarkings(bezelRadius, wellRadius, ringYaw);
 
         // The body is a slight cone; this is its radius at the window height, same as the logo plaque uses.
         float windowRadius = r * 1.015f + 0.04f;
