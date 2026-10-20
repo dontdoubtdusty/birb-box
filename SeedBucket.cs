@@ -83,6 +83,38 @@ public class SeedBucket
         return scoop;
     }
 
+    // Takes seed back out of the highest unstirred layer of that seed. Stirred seed can't be separated.
+    // Returns how much came out.
+    public float TakeBack(SeedType seed, float amount)
+    {
+        for (int i = Layers.Count - 1; i >= 0; i--)
+        {
+            Layer layer = Layers[i];
+            if (layer.Seed != seed) continue;
+
+            float taken = MathF.Min(amount, layer.Amount);
+            layer.Amount -= taken;
+            if (layer.Amount <= 0.01f)
+            {
+                Layers.RemoveAt(i);
+                MergeLayersAt(i);
+            }
+            Version++;
+            return taken;
+        }
+        return 0f;
+    }
+
+    // After a layer is removed, the layers that were above and below it may be the same seed. If so, they become one.
+    private void MergeLayersAt(int i)
+    {
+        if (i <= 0 || i >= Layers.Count) return;
+        if (Layers[i - 1].Seed != Layers[i].Seed) return;
+
+        Layers[i - 1].Amount += Layers[i].Amount;
+        Layers.RemoveAt(i);
+    }
+
     public void Stir()
     {
         foreach (Layer layer in Layers)

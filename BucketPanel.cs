@@ -1,8 +1,8 @@
 using System.Numerics;
 using Raylib_cs;
 
-// The seed bucket screen in the left side column. Top to bottom: seed bags (hold to pour),
-// Stir and Empty, the bucket, then the hovered bag's label and which birds the current mix would attract.
+// The seed bucket screen in the left side column. Top to bottom: seed bags (click for a scoop,
+// Shift-click to fill, right-click to put a scoop back), Stir and Empty, the bucket, then the hovered bag's label and which birds the current mix would attract.
 // Each bag holds a limited supply of seed. Pouring uses it up; buying at the seed store adds more.
 public class BucketPanel
 {
@@ -22,17 +22,15 @@ public class BucketPanel
     public static readonly int PanelHeight = Pad * 3 + HeaderSize + BagsHeight + ButtonHeight
                                              + BucketHeight + InfoHeight + SectionGap * 3;
 
-    private const float PourRate = 25f;    // seed per second while a bag is held
+    private const float ScoopSize = 10f;    // seed per click on a bag
 
     private Rectangle panelRect, bucketRect, infoRect, stirRect, emptyRect;
     private readonly Rectangle[] bagRects = new Rectangle[Seeds.Bags.Length];
 
     private SeedType? hoveredSeed;
-    private SeedType? pouringSeed;    // the bag the mouse was pressed on, while it's held
 
     // How much seed is left in each bag
     public Dictionary<SeedType, float> BagSupply { get; } = new();
-    private bool warnedEmptyBag = false;
 
     // The speckles and the ATTRACTS list only change when the bucket does, so they're worked out once per change.
     private RenderTexture2D speckleTexture;
@@ -61,7 +59,8 @@ public class BucketPanel
         hoveredSeed = null;
         Layout();
         Vector2 mouse = Raylib.GetMousePosition();
-        bool pressed = Raylib.IsMouseButtonPressed(MouseButton.Left) && !mouseBlockedByImGui;
+        bool leftClick = Raylib.IsMouseButtonPressed(MouseButton.Left) && !mouseBlockedByImGui;
+        bool rightClick = Raylib.IsMouseButtonPressed(MouseButton.Right) && !mouseBlockedByImGui;
 
         if (!mouseBlockedByImGui)
         {
@@ -71,33 +70,43 @@ public class BucketPanel
             }
         }
 
-        if (pressed && hoveredSeed != null) pouringSeed = hoveredSeed;
-        if (!Raylib.IsMouseButtonDown(MouseButton.Left))
+        if (hoveredSeed != null)
         {
-            pouringSeed = null;
-            warnedEmptyBag = false;
+            SeedType seed = hoveredSeed.Value;
+            bool shift = Raylib.IsKeyDown(KeyboardKey.LeftShift) || Raylib.IsKeyDown(KeyboardKey.RightShift);
+
+            if (leftClick) PourFromBag(seed, shift ? SeedBucket.Capacity : ScoopSize);
+            if (rightClick) ReturnToBag(seed, ScoopSize);
         }
 
-        // Pours only while the mouse stays on the bag it pressed
-        if (pouringSeed != null && pouringSeed == hoveredSeed)
-        {
-            PourFromBag(pouringSeed.Value, PourRate * dt);
-        }
-
-        if (pressed && Raylib.CheckCollisionPointRec(mouse, stirRect)) Bucket.Stir();
-        if (pressed && Raylib.CheckCollisionPointRec(mouse, emptyRect)) Bucket.Empty();
+        if (leftClick && Raylib.CheckCollisionPointRec(mouse, stirRect)) Bucket.Stir();
+        if (leftClick && Raylib.CheckCollisionPointRec(mouse, emptyRect)) Bucket.Empty();
     }
 
-    // Pours from the bag's supply. When the bag runs dry, it says so once per press.
+    // Pours from the bag's supply, as much as the bag has and the bucket has room for.
     private void PourFromBag(SeedType seed, float amount)
     {
-        float poured = Bucket.Pour(seed, MathF.Min(amount, BagSupply[seed]));
-        BagSupply[seed] = MathF.Max(0f, BagSupply[seed] - poured);
-
-        if (BagSupply[seed] <= 0.01f && !warnedEmptyBag)
+        if (BagSupply[seed] <= 0.01f)
         {
             EventLog.Add($"The {Seeds.Get(seed).Name} bag is empty. {SeedStore.Name} sells more.");
-            warnedEmptyBag = true;
+            return;
+        }
+
+        float poured = Bucket.Pour(seed, MathF.Min(amount, BagSupply[seed]));
+        BagSupply[seed] = MathF.Max(0f, BagSupply[seed] - poured);
+    }
+
+    // Takes unstirred seed back out of the bucket and returns it to its bag.
+    private void ReturnToBag(SeedType seed, float amount)
+    {
+        float returned = Bucket.TakeBack(seed, amount);
+        if (returned > 0f)
+        {
+            BagSupply[seed] += returned;
+        }
+        else if (Bucket.AmountOf(seed) > 0f)
+        {
+            EventLog.Add($"The {Seeds.Get(seed).Name} is stirred in. Stirred seed can't be picked back out.");
         }
     }
 
@@ -151,8 +160,7 @@ public class BucketPanel
             Rectangle r = bagRects[i];
 
             Color fill = Palette.PanelDark;
-            if (pouringSeed == seed && hoveredSeed == seed) fill = Raylib.Fade(accent, 0.35f);
-            else if (hoveredSeed == seed) fill = Raylib.Fade(accent, 0.25f);
+            if (hoveredSeed == seed) fill = Raylib.Fade(accent, 0.25f);
 
             // An empty bag's name goes dim; the amount left sits on the right
             float supply = BagSupply[seed];

@@ -8,7 +8,7 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Box 4.31 Alpha";
+    public const string Version = "Birb Box 4.32 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
@@ -407,7 +407,7 @@ public class GameEngine
 
         if (Bucket.Bucket.IsEmpty)
         {
-            if (!warnedEmptyBucket) EventLog.Add("The seed bucket is empty. Hold a seed bag on the bucket panel to fill it.");
+            if (!warnedEmptyBucket) EventLog.Add("The seed bucket is empty. Click a seed bag on the bucket panel to fill it.");
             warnedEmptyBucket = true;
             return;
         }
