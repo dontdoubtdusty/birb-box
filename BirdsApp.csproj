@@ -12,6 +12,10 @@
 
   <ItemGroup>
     <PackageReference Include="ImGui.NET" Version="1.91.6.1" />
+    <!-- NAudio decodes the radio's songs and web streams (Windows Media Foundation, plus Vorbis for .ogg).
+         Kept on the 2.x line: the 3.x packages changed their API. -->
+    <PackageReference Include="NAudio.Wasapi" Version="2.2.1" />
+    <PackageReference Include="NAudio.Vorbis" Version="1.5.0" />
     <PackageReference Include="Raylib-cs" Version="8.0.0" />
     <PackageReference Include="rlImgui-cs" Version="3.2.0" />
   </ItemGroup>

@@ -2,7 +2,7 @@ using System.Numerics;
 using Raylib_cs;
 
 // The world map screen at the bottom of the right side column (SidePanels gives it MapSlot).
-// It shows food, feeders, gunk, birds and the view circle. Click or drag on it to move the view,
+// It shows food, feeders, gunk, birds and the view square. Click or drag on it to move the view,
 // scroll on it to zoom, or use the +/- buttons to jump between the fixed zoom levels.
 // While the box shows the store, it becomes a zoo camera: a live look at the birds. Clicking it goes back to them.
 public class MiniMap
@@ -113,7 +113,7 @@ public class MiniMap
         SetMapZoom(HologramToMapZoom(engine.View), underCursor);
     }
 
-    // When the hologram zoomed some other way (scrolling on it, or the buttons), the map zooms toward the view circle.
+    // When the hologram zoomed some other way (scrolling on it, or the buttons), the map zooms toward the view square.
     private void FollowHologramZoom(GameEngine engine)
     {
         float target = HologramToMapZoom(engine.View);
@@ -124,7 +124,7 @@ public class MiniMap
     private static float HologramToMapZoom(ViewWindow view)
     {
         float worldWidth = World.Instance.HalfSize * 2f;
-        float shownWidth = view.WorldRadius * 2f * MapSpan;
+        float shownWidth = view.WorldHalfWidth * 2f * MapSpan;
         return MathF.Max(1f, worldWidth / shownWidth);
     }
 
@@ -137,11 +137,11 @@ public class MiniMap
         ClampMapFocus();
     }
 
-    // When zoomed in, slide the map only as far as needed to keep the whole view circle on it.
+    // When zoomed in, slide the map only as far as needed to keep the whole view square on it.
     private void KeepViewOnMap(ViewWindow view)
     {
         float visibleHalf = World.Instance.HalfSize / mapZoom;
-        Vector2 slack = new Vector2(MathF.Max(0f, visibleHalf - view.WorldRadius));
+        Vector2 slack = new Vector2(MathF.Max(0f, visibleHalf - view.WorldHalfWidth));
         mapFocus = Vector2.Clamp(mapFocus, view.Center - slack, view.Center + slack);
         ClampMapFocus();
     }
@@ -179,7 +179,7 @@ public class MiniMap
         // World X maps to map X, world Z maps to map Y.
         Vector2 ToMap(Vector3 worldPos) => WorldToMap(new Vector2(worldPos.X, worldPos.Z));
 
-        // Scissor mode clips drawing to the map area, so the view circle can't spill past the edge.
+        // Scissor mode clips drawing to the map area, so the view square can't spill past the edge.
         Raylib.BeginScissorMode((int)mapArea.X, (int)mapArea.Y, MapSize, MapSize);
         Raylib.DrawRectangleRec(mapArea, new Color(51, 38, 26, 255));
 
@@ -211,12 +211,13 @@ public class MiniMap
             Raylib.DrawCircleLines((int)p.X, (int)p.Y, 5f, accent);
         }
 
-        // The view window
+        // The view window: the cube's sides run along world X and Z, so it's a plain square on the map
         ViewWindow view = engine.View;
         Vector2 mapCenter = ToMap(new Vector3(view.Center.X, 0, view.Center.Y));
-        float mapRadius = view.WorldRadius * MapScale;
-        Raylib.DrawRing(mapCenter, mapRadius - 0.75f, mapRadius + 0.75f, 0f, 360f, 48, accent);
-        DrawLookNotch(mapCenter, mapRadius, view.LookDirection, accent);
+        float mapHalf = view.WorldHalfWidth * MapScale;
+        Rectangle square = new Rectangle(mapCenter.X - mapHalf, mapCenter.Y - mapHalf, mapHalf * 2f, mapHalf * 2f);
+        Raylib.DrawRectangleLinesEx(square, 1.5f, accent);
+        DrawLookNotch(mapCenter, mapHalf, view.LookDirection, accent);
         Raylib.EndScissorMode();
     }
 
@@ -248,11 +249,13 @@ public class MiniMap
         }
     }
 
-    // A small triangle on the view circle's edge, pointing the way the camera is looking.
+    // A small triangle on the view square's edge, pointing the way the camera is looking.
     // World X, Z map straight to map X, Y, so the world direction works on the map as-is.
-    private static void DrawLookNotch(Vector2 center, float radius, Vector2 direction, Color accent)
+    private static void DrawLookNotch(Vector2 center, float halfSide, Vector2 direction, Color accent)
     {
         const float Length = 7f, HalfWidth = 4.5f;
+        // How far from the middle the square's edge is in this direction
+        float radius = halfSide / MathF.Max(MathF.Abs(direction.X), MathF.Abs(direction.Y));
         Vector2 side = new Vector2(-direction.Y, direction.X);
         Vector2 tip = center + direction * (radius + Length);
         Vector2 baseMid = center + direction * (radius - 1f);

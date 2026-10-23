@@ -46,6 +46,7 @@ public static class BirbBuilder
             Color color = Palette.Multiply(part.Color, tint);
             if (part == highlight) color = Palette.Lighten(color, pulse);
             Raylib.DrawModel(model, Vector3.Zero, 1f, color);
+            DrawStats.CountModel();
         }
         Raylib.SetShaderValue(shader, locFlatShade, 0, ShaderUniformDataType.Int);
     }

@@ -14,7 +14,7 @@ out vec4 finalColor;
 
 const float LineSpacing = 0.14;    // distance between lines, in box units
 const float DriftSpeed = 0.25;     // lines per second
-const float BaseGlow = 0.12;       // faint fill between the lines so the wall reads as a surface
+const float BaseGlow = 0.15;       // faint fill between the lines, a light haze so the cube reads as one projected volume
 const float NearSideDim = 0.12;    // how much of the wall is left on the side facing the camera
 
 void main()

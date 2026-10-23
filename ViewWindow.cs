@@ -1,7 +1,7 @@
 using System.Numerics;
 using Raylib_cs;
 
-// The patch of the world currently shown inside the round hologram.
+// The patch of the world currently shown inside the hologram cube.
 // Everything is drawn relative to Center, so the hologram itself always sits at (0, 0, 0).
 //
 // Three kinds of position:
@@ -9,26 +9,33 @@ using Raylib_cs;
 //  - box:   relative to the cube's center and shrunk by Zoom, before the hologram is turned (ToLocal / ToWorld)
 //  - scene: what the camera sees, after the hologram is turned by Yaw (BoxToScene / SceneToBox)
 //
-// Radius and Height are the hologram's size in box units (it never changes size on the pedestal).
-// WorldRadius and WorldHeight are how much of the world fits inside it at the current zoom.
+// The cube turns with its contents like a turntable, so in box space (and in the world) its sides
+// always run along X and Z. Its corners are rounded off by the fog (see EdgeAmount).
+// HalfWidth and Height are the cube's size in box units (it never changes size on the pedestal).
+// WorldHalfWidth and WorldHeight are how much of the world fits inside it at the current zoom.
 public class ViewWindow
 {
     public Vector2 Center = Vector2.Zero;   // world X, Z
-    public float HalfSize = 6f;             // sets the pedestal's size; the hologram sits on its emitter well
-    public float Height = 6f;               // hologram spans 0..Height on Y
+    public float HalfSize = 7.2f;           // sets the pedestal's size; the cube floats above its well
+    public float Height = 7.2f;             // hologram spans 0..Height on Y
 
     // SHAPE (Width and Fog start sliders in the Tab tools)
-    public float RadiusScale = 0.95f;       // hologram radius as a share of the pedestal; 0.95 = inner edge of the bezel ring, 1.05 = outer rim
-    public const float MaxRadiusScale = 1.05f;
-    public float FogStart = 0.9f;         // share of the radius that stays clear; fog fills the rest
-    public float Radius => HalfSize * RadiusScale;    // hologram is a cylinder this wide; the emitter well matches it
+    public float CubeScale = 0.7f;          // half the cube's width as a share of the pedestal; 0.7 puts its corners over the bezel ring
+    public const float MaxCubeScale = 0.74f;
+    public float FogStart = 0.9f;           // share of the way to the sides that stays clear; fog fills the rest
+    public float HalfWidth => HalfSize * CubeScale;          // the cube spans -HalfWidth..HalfWidth on X and Z
+    public float CornerReach => HalfWidth * MathF.Sqrt(2f);  // from the middle out to a corner
     public float PanSpeed = 8f;
     public float Yaw = 0f;                  // how far the hologram is turned around its vertical axis, in radians
+
+    // How round the fog makes the corners. Must match CornerPower in hologram.fs.
+    // Lower is rounder (2 is a circle); higher is closer to a sharp square.
+    public const float CornerPower = 6f;
 
     // ZOOM: box units per world unit. 1 = Close, smaller shows more of the world with smaller birds, bigger shows less.
     public static readonly float[] ZoomLevels = { 0.25f, 0.5f, 1f, 3f };    // Wide, Field, Close, Perch
     public float Zoom = 1f;
-    public float WorldRadius => Radius / Zoom;
+    public float WorldHalfWidth => HalfWidth / Zoom;
     public float WorldHeight => Height / Zoom;
 
     private Vector3 Offset => new Vector3(Center.X, 0, Center.Y);
@@ -50,34 +57,30 @@ public class ViewWindow
         }
     }
 
-    // Is this world position inside the hologram's circle (plus an optional margin, in world units)?
-    public bool Contains(Vector3 worldPos, float margin = 0f)
+    // How far out toward the cube's sides a point is (x, z measured from the middle): 0 in the middle, 1 at a side.
+    // The corners count as further out than a plain square would say, which rounds them off.
+    // Same math as the fog in hologram.fs, so anything here lines up with what you see.
+    public static float EdgeAmount(float x, float z, float halfWidth)
     {
-        float distance = new Vector2(worldPos.X - Center.X, worldPos.Z - Center.Y).Length();
-        return distance <= WorldRadius + margin && worldPos.Y <= WorldHeight + margin;
+        float ax = MathF.Abs(x) / halfWidth;
+        float az = MathF.Abs(z) / halfWidth;
+        return MathF.Pow(MathF.Pow(ax, CornerPower) + MathF.Pow(az, CornerPower), 1f / CornerPower);
     }
 
-    // Does this box-space ray pass through the hologram's cylinder somewhere between floor and ceiling?
+    // Is this world position inside the cube, rounded corners included (plus an optional margin, in world units)?
+    public bool Contains(Vector3 worldPos, float margin = 0f)
+    {
+        float reach = WorldHalfWidth + margin;
+        float dx = worldPos.X - Center.X, dz = worldPos.Z - Center.Y;
+        if (reach <= 0f || MathF.Abs(dx) > reach || MathF.Abs(dz) > reach) return false;    // quick miss
+        return EdgeAmount(dx, dz, reach) <= 1f && worldPos.Y <= WorldHeight + margin;
+    }
+
+    // Does this box-space ray pass through the cube somewhere between floor and ceiling?
     public bool RayHitsHologram(Ray boxRay)
     {
-        // Where the ray enters and leaves the circle when seen from above (a quadratic in t)
-        Vector2 o = new Vector2(boxRay.Position.X, boxRay.Position.Z);
-        Vector2 d = new Vector2(boxRay.Direction.X, boxRay.Direction.Z);
-        float a = Vector2.Dot(d, d);
-        float b = 2f * Vector2.Dot(o, d);
-        float c = Vector2.Dot(o, o) - Radius * Radius;
-        float disc = b * b - 4f * a * c;
-        if (a < 0.000001f || disc < 0f) return false;
-
-        float root = MathF.Sqrt(disc);
-        float tIn = (-b - root) / (2f * a);
-        float tOut = (-b + root) / (2f * a);
-        if (tOut < 0f) return false;
-
-        // Inside the circle, does the ray's height overlap 0..Height?
-        float yIn = boxRay.Position.Y + boxRay.Direction.Y * tIn;
-        float yOut = boxRay.Position.Y + boxRay.Direction.Y * tOut;
-        return MathF.Max(yIn, yOut) >= 0f && MathF.Min(yIn, yOut) <= Height;
+        BoundingBox cube = new BoundingBox(new Vector3(-HalfWidth, 0f, -HalfWidth), new Vector3(HalfWidth, Height, HalfWidth));
+        return Raylib.GetRayCollisionBox(boxRay, cube).Hit;
     }
 
     // Smooth zoom from the scroll wheel, kept between the widest and closest fixed levels.

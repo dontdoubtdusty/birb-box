@@ -1,11 +1,13 @@
 using System.Numerics;
 using Raylib_cs;
 
-// "<name> has entered the chat" labels that float inside the hologram, above the bird that arrived.
-// A label drifts up and fades out, and dims near the hologram's edge like everything else in the fog.
+// Chat-style labels that float inside the hologram:
+//  - "<name> has entered the chat" above a bird that arrived; it follows the bird and drifts up.
+//  - "<name> has left the chat" where a bird took off to leave for good; it stays put, sinks, and is dimmer.
+// Labels fade out, and dim near the hologram's edge like everything else in the fog.
 // Each label's text is drawn once into its own small texture, then shown on a flat rectangle
 // that always faces the camera.
-public class JoinMessages
+public class ChatMessages
 {
     private const float Lifetime = 5f;
     private const float FadeIn = 0.3f;
@@ -15,19 +17,22 @@ public class JoinMessages
     private const float LabelWidth = 3.6f;        // in world units
     private const int MaxMessages = 6;
     private const string JoinText = " has entered the chat";
+    private const string LeaveText = " has left the chat";
 
     private const int TextureWidth = 512, TextureHeight = 48;
 
     private class Message
     {
         public Bird Bird;
+        public bool Leaving;              // a "left the chat" label
         public Vector3 LastPosition;      // kept so the label can finish fading if the bird is gone
         public float Age;
         public RenderTexture2D Texture;   // Id 0 until PrepareTextures draws it
 
-        public Message(Bird bird)
+        public Message(Bird bird, bool leaving)
         {
             Bird = bird;
+            Leaving = leaving;
             LastPosition = bird.Position;
         }
     }
@@ -35,11 +40,13 @@ public class JoinMessages
     private readonly List<Message> messages = new();
     private readonly List<Message> finished = new();     // waiting for their textures to be freed
     private readonly HashSet<int> announcedBirds = new();
+    private readonly HashSet<int> departedBirds = new();
     private bool firstUpdate = true;
 
     // ---------------- UPDATE (no drawing) ----------------
 
-    // Announce birds that arrived after the game started, the first time they enter the view.
+    // Announce birds that arrived after the game started, the first time they enter the view,
+    // and birds that start leaving while in view.
     public void Update(ViewWindow view, float dt)
     {
         IReadOnlyList<Bird> birds = World.Instance.GetAllEntities<Bird>();
@@ -47,7 +54,11 @@ public class JoinMessages
         // Birds already here on the first frame are residents: mark them as seen without a message.
         if (firstUpdate)
         {
-            foreach (Bird bird in birds) announcedBirds.Add(bird.EntityID);
+            foreach (Bird bird in birds)
+            {
+                announcedBirds.Add(bird.EntityID);
+                if (bird.State == BirdState.Leaving) departedBirds.Add(bird.EntityID);
+            }
             firstUpdate = false;
         }
 
@@ -57,13 +68,22 @@ public class JoinMessages
             if (!view.Contains(bird.Position)) continue;
 
             announcedBirds.Add(bird.EntityID);
-            messages.Add(new Message(bird));
+            messages.Add(new Message(bird, leaving: false));
+        }
+
+        // Checked the moment a bird starts leaving, so one that is already on its way out never gets a label later
+        foreach (Bird bird in birds)
+        {
+            if (bird.State != BirdState.Leaving || departedBirds.Contains(bird.EntityID)) continue;
+
+            departedBirds.Add(bird.EntityID);
+            if (view.Contains(bird.Position)) messages.Add(new Message(bird, leaving: true));
         }
 
         foreach (Message msg in messages)
         {
             msg.Age += dt;
-            if (World.Instance.Contains(msg.Bird)) msg.LastPosition = msg.Bird.Position;
+            if (!msg.Leaving && World.Instance.Contains(msg.Bird)) msg.LastPosition = msg.Bird.Position;
         }
 
         while (messages.Count > MaxMessages) Finish(messages[0]);
@@ -96,23 +116,28 @@ public class JoinMessages
             if (msg.Texture.Id != 0) continue;
             msg.Texture = Raylib.LoadRenderTexture(TextureWidth, TextureHeight);
             Raylib.SetTextureFilter(msg.Texture.Texture, TextureFilter.Bilinear);
-            RenderLabel(msg.Texture, msg.Bird.Name, msg.Bird.Info.Color);
+            RenderLabel(msg.Texture, msg.Bird.Name, msg.Bird.Info.Color, msg.Leaving);
         }
     }
 
     // The name in the bird's color, the rest in white, centered and shrunk to fit.
-    private static void RenderLabel(RenderTexture2D target, string name, Color nameColor)
+    // Leaving labels use a darker name color and gray text.
+    private static void RenderLabel(RenderTexture2D target, string name, Color nameColor, bool leaving)
     {
+        string text = leaving ? LeaveText : JoinText;
+        if (leaving) nameColor = Raylib.ColorBrightness(nameColor, -0.35f);
+        Color textColor = leaving ? Palette.DimText : Palette.Text;
+
         int size = 36;
-        while (size > 10 && UiText.Measure(name + JoinText, size) > TextureWidth - 16) size -= 2;
+        while (size > 10 && UiText.Measure(name + text, size) > TextureWidth - 16) size -= 2;
         int nameWidth = UiText.Measure(name, size);
-        int x = (TextureWidth - UiText.Measure(name + JoinText, size)) / 2;
+        int x = (TextureWidth - UiText.Measure(name + text, size)) / 2;
         int y = (TextureHeight - size) / 2;
 
         Raylib.BeginTextureMode(target);
             Raylib.ClearBackground(Color.Blank);
             UiText.Draw(name, x, y, size, nameColor);
-            UiText.Draw(JoinText, x + nameWidth, y, size, Palette.Text);
+            UiText.Draw(text, x + nameWidth, y, size, textColor);
         Raylib.EndTextureMode();
     }
 
@@ -137,7 +162,8 @@ public class JoinMessages
             if (msg.Age < FadeIn) alpha = msg.Age / FadeIn;
             else if (msg.Age > Lifetime - FadeOut) alpha = (Lifetime - msg.Age) / FadeOut;
 
-            Vector3 local = view.ToLocal(msg.LastPosition) + new Vector3(0, StartHeight + msg.Age * RiseSpeed, 0);
+            float drift = msg.Leaving ? -msg.Age * RiseSpeed : msg.Age * RiseSpeed;    // leaving labels sink
+            Vector3 local = view.ToLocal(msg.LastPosition) + new Vector3(0, StartHeight + drift, 0);
             alpha *= EdgeFade(local, view);
             if (alpha <= 0.01f) continue;
 
@@ -167,7 +193,7 @@ public class JoinMessages
     // Same fade as the fog in hologram.fs: full strength in the middle, gone at the walls.
     private static float EdgeFade(Vector3 local, ViewWindow view)
     {
-        float edge = new Vector2(local.X, local.Z).Length() / view.Radius;
+        float edge = ViewWindow.EdgeAmount(local.X, local.Z, view.HalfWidth);
         float t = Math.Clamp((edge - view.FogStart) / (1f - view.FogStart), 0f, 1f);
         return 1f - t * t * (3f - 2f * t);
     }

@@ -94,7 +94,7 @@ public static class Seeds
             "Whatever the wind brings. Common birds pick at it.",
             new() { [BirdType.Emberwing] = 0.4f, [BirdType.DuskDove] = 0.4f, [BirdType.Glintfinch] = 0.4f },
             new GrainLook(GrainMesh.Round, new Vector3(0.06f, 0.045f, 0.07f), Spread: 0.25f),
-            spoilTime: null, jarPrice: 0, startingSupply: 0f),
+            spoilTime: 180f, jarPrice: 0, startingSupply: 0f),
     };
 
     public static SeedInfo Get(SeedType type) => info[type];

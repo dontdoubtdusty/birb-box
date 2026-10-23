@@ -6,6 +6,7 @@ using System.Numerics;
 //
 // Seed left on the dirt goes bad. After its seed's SpoilTime (Seeds.cs) birds won't eat it,
 // and once everything left has sat there GunkAfter times that long, the pile turns into Gunk.
+// Wild seed is the exception: once spoiled, it just disappears.
 //
 // Seed falling onto a feeder is caught by it (LandOn) instead of reaching the dirt.
 // The seed a feeder holds is a Food too (Feeder is set): it never spoils, and birds perch to eat it.
@@ -62,7 +63,13 @@ public class Food : Entity
         else if (Feeder == null)
         {
             Age += dt;
-            if (!removed && HasTurnedToGunk())
+            if (!removed && IsSpoiledWildSeed())
+            {
+                // Wild seed fades back into the dirt instead of leaving gunk.
+                removed = true;
+                World.Instance.RemoveEntity(this);
+            }
+            else if (!removed && HasTurnedToGunk())
             {
                 World.Instance.AddEntity(new Gunk(Position, Total));
                 removed = true;
@@ -113,6 +120,11 @@ public class Food : Entity
     public float AppealFor(BirdType bird) => Feeder?.Info.AppealFor(bird) ?? 1f;
 
     public bool IsSpoiled(SeedType seed) => Rot(seed) >= 1f;
+
+    private bool IsSpoiledWildSeed()
+    {
+        return Contents.Count > 0 && Contents.Keys.All(seed => seed == SeedType.Wild) && IsSpoiled(SeedType.Wild);
+    }
 
     private bool HasTurnedToGunk()
     {

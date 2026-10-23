@@ -8,13 +8,15 @@ public class BirdSpawner
 
     // SETTINGS (changed from the ImGui panel)
     public float HungerTickdownRate = 6f;            // seconds per 5% hunger lost (about 2 minutes from full to empty)
-    public float ArrivalsPerFoodPerMinute = 0.6f;
-    public int MaxBirds = 80;
+    public float ArrivalsPerFoodPerMinute = 0.4f;
+    public int MaxBirds = 15;
+    public float MinArrivalGap = 5f;                 // seconds; at most one new bird this often, however much food is down
     public float AirArrivalChance = 0.35f;           // the rest walk in from the edge
     public float GunkPenalty = 0.08f;                // each gunk pile in the world cuts arrivals by about this much
 
     private const float ArrivalCheckInterval = 1f;    // seconds between arrival rolls
     private float arrivalTimer = 0f;
+    private float sinceLastArrival = 0f;
 
     private readonly Dictionary<BirdType, int> nameCounters = new();
 
@@ -30,6 +32,7 @@ public class BirdSpawner
         if (arrivalTimer < ArrivalCheckInterval) return;
         float elapsed = arrivalTimer;
         arrivalTimer = 0f;
+        sinceLastArrival += elapsed;
 
         // Every pile pulls on the birds that like its seed. Amounts are measured in
         // poured piles, so one pile of a seed a bird loves pulls about 1.
@@ -47,16 +50,18 @@ public class BirdSpawner
         float totalPull = pull.Values.Sum();
         if (totalPull <= 0f) return;
 
-        // Expected arrivals this check, e.g. 1.3 means one bird plus a 30% chance of a second.
+        if (sinceLastArrival < MinArrivalGap) return;
+        if (World.Instance.GetAllEntities<Bird>().Count >= MaxBirds) return;
+
+        // The square root gives diminishing returns: 30 piles pull about 5x as hard as one, not 30x.
         // Gunk puts birds off: 10 piles of it cuts arrivals almost in half.
         int gunkCount = World.Instance.GetAllEntities<Gunk>().Count;
-        float expected = totalPull * ArrivalsPerFoodPerMinute / 60f * elapsed / (1f + gunkCount * GunkPenalty);
-        int arrivals = (int)expected + (Rng.Chance(expected % 1f) ? 1 : 0);
+        float chance = MathF.Sqrt(totalPull) * ArrivalsPerFoodPerMinute / 60f * elapsed / (1f + gunkCount * GunkPenalty);
 
-        int birdCount = World.Instance.GetAllEntities<Bird>().Count;
-        for (int i = 0; i < arrivals && birdCount + i < MaxBirds; i++)
+        if (Rng.Chance(chance))
         {
             SpawnArrival(PickByPull(pull, totalPull));
+            sinceLastArrival = 0f;
         }
     }
 

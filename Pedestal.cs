@@ -2,14 +2,19 @@ using System.Numerics;
 using Raylib_cs;
 
 // The brass pedestal under the hologram, and everything built into it:
-//  - a wide plinth, a body ringed with buttons, a bright lip with the bezel ring, and a dark emitter well
-//  - the Birb Box logo on a brass plaque at the front
+//  - a wide plinth, a body ringed with buttons, and a bright lip with the bezel ring
+//  - inside the bezel it's hollow: a deep well, lit by the hologram floating above it
+//  - the projector lens inside the well, right behind the logo, throwing the beams up to the cube (see FieldEdges)
+//  - the Birb Box logo on a brass plaque at the front. It's the power button, and it glows with the lens.
 //  - two glowing windows on either side of the logo: Birbs in the cube (left) and Coins (right)
 //  - a row of LEDs on the plinth below the logo, one per bird type, lit while that type is in the cube
-//  - on the bezel ring, turning with the hologram: notches around its side, and the
-//    compass letters and build name printed on its top
+//  - on the bezel ring, turning with the hologram: notches around its side, the compass letters and
+//    build name printed on its top
 // The pedestal itself never turns, so the windows and LEDs always face the player.
 // Angles are measured around the pedestal; PI/2 is straight out the front (+Z), where the logo is.
+//
+// It's a real object in the room: drawn right after the Backdrop, lit by room.fs with a bit of metal shine,
+// and the hologram is laid over it afterward. The lights built into it (windows, LEDs, lens, logo) follow the power.
 public class Pedestal
 {
     // BODY LAYOUT
@@ -18,18 +23,20 @@ public class Pedestal
     private const int ButtonCount = 18;
     private const float ButtonY = -1.4f;
 
-    // LIP LAYOUT: plain band from LipBottom to LipSplit, bezel ring from LipSplit to LipTop.
-    // LipTop is 0 so the bezel is flush with the hologram floor and the field rises straight out of it.
+    // LIP LAYOUT: plain band from LipBottom to LipSplit, bezel ring from LipSplit to LipTop (the rim).
+    // The hologram floats HoloCamera.HoloLift above the rim.
     private const float LipBottom = -0.6f;
     private const float LipSplit = -0.25f;
     private const float LipTop = 0f;
+    private const float WellShare = 0.95f;       // the well's radius as a share of the body's; the bezel's top runs from here out
+    private const float WellFloorY = -2.0f;      // the well goes almost down to the plinth
 
     // LOGO PLAQUE
     private const float PlateWidth = 1.3f, PlateHeight = 1.4f, PlateDepth = 0.08f;
     private const float PlateY = -1.4f;
 
     // WINDOW LAYOUT
-    private const float WindowAngle = 0.32f;      // how far each window sits from the logo, in radians
+    private const float WindowAngle = 0.27f;      // how far each window sits from the logo, in radians
     private const float WindowY = -1.4f;          // same height as the logo
     private const float WindowWidth = 1.3f;
     private const float WindowHeight = 0.85f;
@@ -41,11 +48,27 @@ public class Pedestal
     private const float LedSpacing = 0.5f;
     private const float LedSize = 0.11f;
 
+    // PROJECTOR LENS: in a brass housing against the well's front wall, at the logo's height
+    private const float LensRadius = 0.26f;
+    private const float LensInset = 0.45f;       // how far in from the well's wall the lens sits
+
+    // BRASS: brighter than the flat Palette colors, since the room light takes some away. Shine is how polished it looks.
+    private static readonly Color PlinthBrass = new Color(128, 96, 62, 255);
+    private static readonly Color BodyBrass = new Color(214, 170, 104, 255);
+    private static readonly Color LipBrass = new Color(240, 200, 124, 255);
+    private const float BrassShine = 0.35f;
+    // Inside the well: darker, duller brass, so the hologram's light on it stands out
+    private static readonly Color InnerBrass = new Color(104, 80, 54, 255);
+    private const float InnerShine = 0.2f;
+
     private static readonly Color Glass = new Color(16, 24, 28, 255);
-    private static readonly Color Well = new Color(22, 30, 38, 255);
     private static readonly Color Engraving = Palette.BrassDark;
 
-    private Texture2D logoTexture;
+    private Texture2D logoTexture;       // black, stamped into the plate
+    private Texture2D logoGlowTexture;   // white, tinted the hologram color and added on top while the lens is lit
+
+    // The plinth, body, lip and well are each one mesh, built once at load (see LatheMesh).
+    private Model plinthModel, bodyModel, lipModel, wellModel;
 
     // Each number is drawn into a small texture, which is then laid on its window like a sticker.
     // The textures are only redrawn when the number changes.
@@ -70,11 +93,14 @@ public class Pedestal
         typeInCube = new bool[birdTypes.Length];
     }
 
-    public void Load()
+    public void Load(Shader roomShader, ViewWindow view)
     {
         logoTexture = Raylib.LoadTexture(Assets.PathTo("birbbox_logo_black.png"));
         Raylib.GenTextureMipmaps(ref logoTexture);
         Raylib.SetTextureFilter(logoTexture, TextureFilter.Trilinear);
+        logoGlowTexture = Raylib.LoadTexture(Assets.PathTo("birbbox_logo_white.png"));
+        Raylib.GenTextureMipmaps(ref logoGlowTexture);
+        Raylib.SetTextureFilter(logoGlowTexture, TextureFilter.Trilinear);
 
         birbTexture = Raylib.LoadRenderTexture(TextureWidth, TextureHeight);
         coinTexture = Raylib.LoadRenderTexture(TextureWidth, TextureHeight);
@@ -89,15 +115,63 @@ public class Pedestal
         Raylib.SetTextureWrap(topTexture.Texture, TextureWrap.Repeat);
         RenderNotches(bezelTexture);
         RenderTop(topTexture, GameEngine.Version.ToUpper());
+
+        BuildBody(roomShader, view.HalfSize);
     }
 
     public void Unload()
     {
         Raylib.UnloadTexture(logoTexture);
+        Raylib.UnloadTexture(logoGlowTexture);
         Raylib.UnloadRenderTexture(birbTexture);
         Raylib.UnloadRenderTexture(coinTexture);
         Raylib.UnloadRenderTexture(bezelTexture);
         Raylib.UnloadRenderTexture(topTexture);
+        Raylib.UnloadModel(plinthModel);
+        Raylib.UnloadModel(bodyModel);
+        Raylib.UnloadModel(lipModel);
+        Raylib.UnloadModel(wellModel);
+    }
+
+    // The four brass pieces as side profiles (radius, height), spun into meshes.
+    // r is the body's radius at the top; the body and plinth flare out slightly toward the table.
+    private void BuildBody(Shader roomShader, float r)
+    {
+        const int Segments = 128;
+        float table = Backdrop.TableY;
+        float bodyBottom = table + PlinthHeight;
+        float bezelRadius = r * 1.05f;
+        float wellRadius = r * WellShare;
+
+        plinthModel = LatheMesh.Build(new[]
+        {
+            new Vector2(r * 1.1f, table),
+            new Vector2(r * 1.03f, bodyBottom),
+        }, Segments, roomShader);
+
+        bodyModel = LatheMesh.Build(new[]
+        {
+            new Vector2(r * 1.03f, bodyBottom),
+            new Vector2(r, LipBottom),
+        }, Segments, roomShader);
+
+        // Up the plain band, out under the bezel, up the bezel's side, and in across its top to the well's edge
+        lipModel = LatheMesh.Build(new[]
+        {
+            new Vector2(r * 1.03f, LipBottom),
+            new Vector2(r * 1.03f, LipSplit),
+            new Vector2(bezelRadius, LipSplit),
+            new Vector2(bezelRadius, LipTop),
+            new Vector2(wellRadius, LipTop),
+        }, Segments, roomShader);
+
+        // Down the well's wall and in across its floor, facing into the well
+        wellModel = LatheMesh.Build(new[]
+        {
+            new Vector2(wellRadius, LipTop),
+            new Vector2(wellRadius, WellFloorY),
+            new Vector2(0f, WellFloorY),
+        }, Segments, roomShader);
     }
 
     // Notches every 10 degrees, taller every 30, tallest at the four compass points.
@@ -191,106 +265,130 @@ public class Pedestal
         UiText.Draw(text, (TextureWidth - width) / 2, y, size, Color.White);
     }
 
-    // ---------------- DRAW (inside the 3D scene) ----------------
+    // Where the projector lens sits, in room space: inside the well, right behind the logo.
+    public static Vector3 LensSpot(ViewWindow view) => new Vector3(0f, PlateY, view.HalfSize * WellShare - LensInset);
 
-    // ringYaw: how far the bezel ring is turned (the birds' or the store's turn, whichever the box is showing).
-    // glowColor: the hologram color, for the windows and the emitter well.
-    public void Draw(ViewWindow view, float ringYaw, Color glowColor)
+    public static float WellRadius(ViewWindow view) => view.HalfSize * WellShare;
+
+    // Is this room-space ray pointing at the logo plate (the power button)?
+    public static bool RayHitsLogo(Ray roomRay, ViewWindow view)
     {
+        Vector3 center = new Vector3(0f, PlateY, view.HalfSize * 1.015f + PlateDepth / 2f);
+        Vector3 half = new Vector3(PlateWidth, PlateHeight, PlateDepth) / 2f;
+        return Raylib.GetRayCollisionBox(roomRay, new BoundingBox(center - half, center + half)).Hit;
+    }
+
+    // ---------------- DRAW (in the room pass, inside BeginMode3D) ----------------
+
+    // shapes: the Backdrop's room-lit shapes. ringYaw: how far the bezel ring is turned (the birds' or the
+    // store's turn, whichever the box is showing). glowColor: the hologram color, for everything that lights up.
+    // projector: how far the box is switched on; the built-in lights follow its Lens level.
+    public void Draw(Backdrop backdrop, ViewWindow view, float ringYaw, Color glowColor, Projector projector)
+    {
+        UnitShapes shapes = backdrop.Shapes;
         float r = view.HalfSize;          // pedestal body radius
         float bezelRadius = r * 1.05f;
-        float wellRadius = view.Radius;   // the emitter well matches the hologram
-        Color brassLight = Palette.BrassLight;
-
-        DrawBody(r, bezelRadius, wellRadius);
-        DrawButtons(r);
-        DrawLogoPlaque(r, brassLight);
-        DrawBezelMarkings(bezelRadius, wellRadius, ringYaw);
-
+        float wellRadius = r * WellShare;
         // The body is a slight cone; this is its radius at the window height, same as the logo plaque uses.
         float windowRadius = r * 1.015f + 0.04f;
-        DrawWindow(birbTexture, MathF.PI / 2f + WindowAngle, windowRadius, glowColor, brassLight);
-        DrawWindow(coinTexture, MathF.PI / 2f - WindowAngle, windowRadius, glowColor, brassLight);
+        Vector3 lens = LensSpot(view);
+        float power = projector.Lens;
 
-        DrawLeds(r, brassLight);
+        // Lit, polished brass
+        backdrop.SetShine(BrassShine);
+            Raylib.DrawModel(plinthModel, Vector3.Zero, 1f, PlinthBrass);
+            Raylib.DrawModel(bodyModel, Vector3.Zero, 1f, BodyBrass);
+            Raylib.DrawModel(lipModel, Vector3.Zero, 1f, LipBrass);
+            DrawStats.CountModel();
+            DrawStats.CountModel();
+            DrawStats.CountModel();
+            DrawButtons(shapes, r);
+            DrawLogoPlate(shapes, r);
+            DrawWindowFrame(shapes, MathF.PI / 2f + WindowAngle, windowRadius);
+            DrawWindowFrame(shapes, MathF.PI / 2f - WindowAngle, windowRadius);
+            DrawLedRims(shapes, r);
+        // The inside of the well, lit mostly by the hologram (see room.fs)
+        backdrop.SetShine(InnerShine);
+            Raylib.DrawModel(wellModel, Vector3.Zero, 1f, InnerBrass);
+            DrawStats.CountModel();
+            DrawLensHousing(shapes, lens);
+        backdrop.SetShine(0f);
 
-        Vector3 wellTop = new Vector3(0, LipTop - 0.02f, 0);
+        // Unlit details: seams, printed markings, glass, bulbs, the logo and the lens
+        Raylib.DrawCylinderWires(new Vector3(0, LipSplit, 0), bezelRadius, bezelRadius, 0.001f, 64, PlinthBrass);
+        Raylib.DrawCylinderWires(new Vector3(0, LipTop, 0), bezelRadius, bezelRadius, 0.01f, 64, PlinthBrass);
+        DrawLogo(logoTexture, r, 1f, 0.005f, Color.White);
+        DrawBezelMarkings(bezelRadius, wellRadius, ringYaw);
+        DrawWindowGlass(MathF.PI / 2f + WindowAngle, windowRadius);
+        DrawWindowGlass(MathF.PI / 2f - WindowAngle, windowRadius);
+        DrawLedBulbs(r, power);
+        Raylib.DrawSphereEx(lens, LensRadius, 14, 14, Palette.Mix(Glass, glowColor, power));
+
+        // Glow: the numbers on the windows, the LEDs' halos, the logo, the lens's halo and the rings on the well floor.
+        // Hovering the logo lights it a little even while off, so it reads as a button.
+        float logoGlow = MathF.Min(1f, power + (projector.LogoHovered ? 0.35f : 0f));
         HologramRenderer.BeginGlowDrawing();
-            Raylib.DrawCylinderWires(wellTop, wellRadius, wellRadius, 0.01f, 64, new Color(glowColor.R, glowColor.G, glowColor.B, (byte)160));
-            Raylib.DrawCylinderWires(wellTop, r * 0.55f, r * 0.55f, 0.01f, 64, new Color(glowColor.R, glowColor.G, glowColor.B, (byte)70));
+            if (power > 0f)
+            {
+                DrawReadout(birbTexture, MathF.PI / 2f + WindowAngle, windowRadius, Raylib.Fade(glowColor, power));
+                DrawReadout(coinTexture, MathF.PI / 2f - WindowAngle, windowRadius, Raylib.Fade(glowColor, power));
+                DrawLedHalos(r, power);
+                Raylib.DrawSphereEx(lens, LensRadius * 2.4f, 12, 12, Raylib.Fade(glowColor, 0.4f * power));
+            }
+            if (logoGlow > 0f)
+            {
+                DrawLogo(logoGlowTexture, r, 1f, 0.009f, Raylib.Fade(glowColor, logoGlow));
+                DrawLogo(logoGlowTexture, r, 1.2f, 0.012f, Raylib.Fade(glowColor, logoGlow * 0.25f));
+            }
+            if (projector.Beams > 0f)
+            {
+                Vector3 floor = new Vector3(0, WellFloorY + 0.02f, 0);
+                Raylib.DrawCylinderWires(floor, wellRadius * 0.8f, wellRadius * 0.8f, 0.01f, 64, Raylib.Fade(glowColor, 0.35f * projector.Beams));
+                Raylib.DrawCylinderWires(floor, wellRadius * 0.45f, wellRadius * 0.45f, 0.01f, 64, Raylib.Fade(glowColor, 0.2f * projector.Beams));
+            }
         HologramRenderer.EndGlowDrawing();
     }
 
-    // Plinth, body, the lip (a plain band with the bezel ring on top), and the dark well just under the hologram floor.
-    private static void DrawBody(float r, float bezelRadius, float wellRadius)
+    // A brass block against the well's front wall holding the lens, with a collar around the lens aimed at the cube.
+    private static void DrawLensHousing(UnitShapes shapes, Vector3 lens)
     {
-        float table = Backdrop.TableY;
-        Raylib.DrawCylinder(new Vector3(0, table, 0), r * 1.03f, r * 1.1f, PlinthHeight, 64, Palette.BrassPlinth);
-        Raylib.DrawCylinder(new Vector3(0, table + PlinthHeight, 0), r, r * 1.03f, BodyHeight, 64, Palette.Brass);
-        Raylib.DrawCylinder(new Vector3(0, LipBottom, 0), r * 1.03f, r * 1.03f, LipSplit - LipBottom, 64, Palette.BrassLight);
-        DrawBezelRing(LipSplit, LipTop, wellRadius, bezelRadius, Palette.BrassLight);
-        Raylib.DrawCylinderWires(new Vector3(0, LipSplit, 0), bezelRadius, bezelRadius, 0.001f, 64, Palette.BrassPlinth);
-        Raylib.DrawCylinder(new Vector3(0, LipTop - 0.04f, 0), wellRadius, wellRadius, 0.02f, 64, Well);
-        Raylib.DrawCylinderWires(new Vector3(0, LipTop, 0), bezelRadius, bezelRadius, 0.01f, 64, Palette.BrassPlinth);
+        shapes.Box(lens + new Vector3(0f, 0f, 0.3f), new Vector3(1.1f, 1.0f, 0.5f), InnerBrass);
+        Vector3 aim = Vector3.Normalize(new Vector3(0f, HoloCamera.HoloLift, 0f) - lens);
+        shapes.CylinderAlong(lens - aim * 0.12f, aim, LensRadius * 1.3f, 0.16f, LipBrass);
     }
 
-    // The bezel ring is drawn as an outer wall and a flat top, with no lid over the middle.
-    // A solid lid would sit at the same height as the dirt floor and the two would flicker
-    // through each other (z-fighting). Open in the middle, the floor floats over the dark well.
-    private static void DrawBezelRing(float bottom, float top, float innerRadius, float outerRadius, Color color)
-    {
-        const int Segments = 64;
-        float step = MathF.PI * 2f / Segments;
-
-        Rlgl.Begin(DrawMode.Quads);
-        Rlgl.Color4ub(color.R, color.G, color.B, color.A);
-        for (int i = 0; i < Segments; i++)
-        {
-            float c0 = MathF.Cos(i * step), s0 = MathF.Sin(i * step);
-            float c1 = MathF.Cos((i + 1) * step), s1 = MathF.Sin((i + 1) * step);
-
-            // Outer wall, corners counter-clockwise as seen from outside so it faces out
-            Rlgl.Vertex3f(c1 * outerRadius, top, s1 * outerRadius);
-            Rlgl.Vertex3f(c1 * outerRadius, bottom, s1 * outerRadius);
-            Rlgl.Vertex3f(c0 * outerRadius, bottom, s0 * outerRadius);
-            Rlgl.Vertex3f(c0 * outerRadius, top, s0 * outerRadius);
-
-            // Flat top from the well's edge to the outer rim, counter-clockwise from above so it faces up
-            Rlgl.Vertex3f(c0 * outerRadius, top, s0 * outerRadius);
-            Rlgl.Vertex3f(c0 * innerRadius, top, s0 * innerRadius);
-            Rlgl.Vertex3f(c1 * innerRadius, top, s1 * innerRadius);
-            Rlgl.Vertex3f(c1 * outerRadius, top, s1 * outerRadius);
-        }
-        Rlgl.End();
-    }
-
-    // Round buttons around the body, in the colors of the seed bags, with a gap at the front for the logo.
-    private static void DrawButtons(float r)
+    // Round buttons around the body, in the colors of the seed bags, with a gap at the front for the logo and windows.
+    private static void DrawButtons(UnitShapes shapes, float r)
     {
         Color[] buttonColors = { Palette.BrassLight, new Color(122, 166, 217, 255), new Color(217, 119, 74, 255) };
         for (int i = 0; i < ButtonCount; i++)
         {
             float angle = i * MathF.PI * 2f / ButtonCount;
-            if (MathF.Abs(angle - MathF.PI / 2f) < 0.3f) continue;    // leave room for the logo plaque
+            if (MathF.Abs(angle - MathF.PI / 2f) < 0.45f) continue;    // leave room for the logo plaque and windows
             Vector3 p = new Vector3(MathF.Cos(angle) * r * 1.01f, ButtonY, MathF.Sin(angle) * r * 1.01f);
-            Raylib.DrawSphereEx(p, 0.22f, 8, 8, buttonColors[i % buttonColors.Length]);
+            shapes.Ball(p, new Vector3(0.22f, 0.22f, 0.22f), buttonColors[i % buttonColors.Length]);
         }
     }
 
-    // The Birb Box logo stamped dark into a brass plate on the front (+Z side) of the pedestal.
-    private void DrawLogoPlaque(float r, Color plateColor)
+    // The brass plate on the front (+Z side) of the pedestal that the logo is stamped into.
+    private static void DrawLogoPlate(UnitShapes shapes, float r)
     {
         float z = r * 1.015f + PlateDepth / 2f;    // body radius at this height, plus half the plate
-        Raylib.DrawCube(new Vector3(0, PlateY, z), PlateWidth, PlateHeight, PlateDepth, plateColor);
+        shapes.Box(new Vector3(0, PlateY, z), new Vector3(PlateWidth, PlateHeight, PlateDepth), LipBrass);
+    }
 
-        // The logo is a textured square laid on the plate's front face, keeping the image's shape.
-        float halfHeight = PlateHeight * 0.4f;
-        float halfWidth = halfHeight * logoTexture.Width / logoTexture.Height;
-        float front = z + PlateDepth / 2f + 0.005f;
+    // The Birb Box logo, a textured square laid on the plate's front face, keeping the image's shape.
+    // grow: 1 is its normal size. lift: how far in front of the plate it floats, so layers don't flicker.
+    private static void DrawLogo(Texture2D texture, float r, float grow, float lift, Color tint)
+    {
+        float z = r * 1.015f + PlateDepth / 2f;
+        float halfHeight = PlateHeight * 0.4f * grow;
+        float halfWidth = halfHeight * texture.Width / texture.Height;
+        float front = z + PlateDepth / 2f + lift;
 
-        Rlgl.SetTexture(logoTexture.Id);
+        Rlgl.SetTexture(texture.Id);
         Rlgl.Begin(DrawMode.Quads);
-            Rlgl.Color4ub(255, 255, 255, 255);
+            Rlgl.Color4ub(tint.R, tint.G, tint.B, tint.A);
             Rlgl.Normal3f(0, 0, 1);
             Rlgl.TexCoord2f(0, 0); Rlgl.Vertex3f(-halfWidth, PlateY + halfHeight, front);
             Rlgl.TexCoord2f(0, 1); Rlgl.Vertex3f(-halfWidth, PlateY - halfHeight, front);
@@ -300,26 +398,39 @@ public class Pedestal
         Rlgl.SetTexture(0);
     }
 
-    // A brass frame with dark glass in front, and the glowing number laid on the glass.
-    private static void DrawWindow(RenderTexture2D texture, float angle, float radius, Color glow, Color frame)
+    // ---------------- WINDOWS ----------------
+    // Each window is a brass frame with dark glass in front and the glowing number laid on the glass.
+    // 'angle' is where it sits around the pedestal; it's turned to face straight out from there.
+
+    private static Vector3 WindowCenter(float angle, float radius) =>
+        new Vector3(MathF.Cos(angle) * radius, WindowY, MathF.Sin(angle) * radius);
+
+    private static float WindowTurnDegrees(float angle) => (MathF.PI / 2f - angle) * Raylib.RAD2DEG;
+
+    private static void DrawWindowFrame(UnitShapes shapes, float angle, float radius)
     {
-        Vector3 position = new Vector3(MathF.Cos(angle) * radius, WindowY, MathF.Sin(angle) * radius);
-        float turnDegrees = (MathF.PI / 2f - angle) * Raylib.RAD2DEG;    // turns the window to face outward
+        Vector3 size = new Vector3(WindowWidth + FrameBorder * 2, WindowHeight + FrameBorder * 2, FrameDepth);
+        shapes.Box(WindowCenter(angle, radius), size, LipBrass, Vector3.UnitY, WindowTurnDegrees(angle));
+    }
 
-        // Everything between Push and Pop is in the window's own space:
-        // +X is the window's right, +Y is up, +Z points out of the pedestal.
+    private static void DrawWindowGlass(float angle, float radius)
+    {
+        Vector3 c = WindowCenter(angle, radius);
         Rlgl.PushMatrix();
-        Rlgl.Translatef(position.X, position.Y, position.Z);
-        Rlgl.Rotatef(turnDegrees, 0, 1, 0);
+        Rlgl.Translatef(c.X, c.Y, c.Z);
+        Rlgl.Rotatef(WindowTurnDegrees(angle), 0, 1, 0);
+            Raylib.DrawCube(new Vector3(0, 0, FrameDepth / 2f), WindowWidth, WindowHeight, 0.02f, Glass);
+        Rlgl.PopMatrix();
+    }
 
-            Raylib.DrawCube(Vector3.Zero, WindowWidth + FrameBorder * 2, WindowHeight + FrameBorder * 2, FrameDepth, frame);
-            float glassFront = FrameDepth / 2f + 0.01f;
-            Raylib.DrawCube(new Vector3(0, 0, glassFront - 0.01f), WindowWidth, WindowHeight, 0.02f, Glass);
-
-            HologramRenderer.BeginGlowDrawing();
-            DrawTextureQuad(texture.Texture, glassFront + 0.005f, glow);
-            HologramRenderer.EndGlowDrawing();
-
+    // The number texture on the glass. Between Push and Pop, +X is the window's right, +Y up, +Z out of the pedestal.
+    private static void DrawReadout(RenderTexture2D texture, float angle, float radius, Color glow)
+    {
+        Vector3 c = WindowCenter(angle, radius);
+        Rlgl.PushMatrix();
+        Rlgl.Translatef(c.X, c.Y, c.Z);
+        Rlgl.Rotatef(WindowTurnDegrees(angle), 0, 1, 0);
+            DrawTextureQuad(texture.Texture, FrameDepth / 2f + 0.015f, glow);
         Rlgl.PopMatrix();
     }
 
@@ -341,6 +452,8 @@ public class Pedestal
         Rlgl.End();
         Rlgl.SetTexture(0);
     }
+
+    // ---------------- BEZEL MARKINGS ----------------
 
     // Both strips slide around together as the hologram turns.
     private void DrawBezelMarkings(float bezelRadius, float wellRadius, float yaw)
@@ -415,35 +528,49 @@ public class Pedestal
         Rlgl.SetTexture(0);
     }
 
+    // ---------------- LEDS ----------------
     // One LED per bird type, left to right in enum order. Lit LEDs shine in the bird's color with a
-    // soft halo; unlit ones are dark glass with just a hint of their color.
-    private void DrawLeds(float r, Color bezelColor)
+    // soft halo; unlit ones are dark glass with just a hint of their color. All go dark with the power.
+
+    // Where LED i sits, and which way is straight out from the pedestal there.
+    private Vector3 LedSpot(float r, int i, out Vector3 outward)
     {
         float radius = r * 1.065f + 0.04f;     // plinth surface at LedY, plus a little
         float step = LedSpacing / radius;      // spacing as an angle around the pedestal
-        Vector3[] positions = new Vector3[birdTypes.Length];
+        // Bigger angles are further left when facing the front, so count down from the left end.
+        float angle = MathF.PI / 2f + step * ((birdTypes.Length - 1) / 2f - i);
+        outward = new Vector3(MathF.Cos(angle), 0, MathF.Sin(angle));
+        return new Vector3(outward.X * radius, LedY, outward.Z * radius);
+    }
 
+    // The brass ring around each bulb. It sits further in than the bulb, so only a rim shows.
+    private void DrawLedRims(UnitShapes shapes, float r)
+    {
+        float size = LedSize * 1.4f;
         for (int i = 0; i < birdTypes.Length; i++)
         {
-            // Bigger angles are further left when facing the front, so count down from the left end.
-            float angle = MathF.PI / 2f + step * ((birdTypes.Length - 1) / 2f - i);
-            positions[i] = new Vector3(MathF.Cos(angle) * radius, LedY, MathF.Sin(angle) * radius);
-
-            Color c = Birds.Get(birdTypes[i]).Color;
-            Color bulb = typeInCube[i] ? c : new Color(c.R / 3, c.G / 3, c.B / 3, 255);
-            // The bezel sits further in than the bulb, so only a brass ring shows around it.
-            Vector3 inward = new Vector3(MathF.Cos(angle), 0, MathF.Sin(angle)) * -0.08f;
-
-            Raylib.DrawSphereEx(positions[i] + inward, LedSize * 1.4f, 10, 10, bezelColor);
-            Raylib.DrawSphereEx(positions[i], LedSize, 10, 10, bulb);
+            Vector3 spot = LedSpot(r, i, out Vector3 outward);
+            shapes.Ball(spot - outward * 0.08f, new Vector3(size, size, size), LipBrass);
         }
+    }
 
-        HologramRenderer.BeginGlowDrawing();
+    private void DrawLedBulbs(float r, float power)
+    {
+        for (int i = 0; i < birdTypes.Length; i++)
+        {
+            Color c = Birds.Get(birdTypes[i]).Color;
+            Color dark = new Color(c.R / 3, c.G / 3, c.B / 3, 255);
+            Color bulb = typeInCube[i] ? Palette.Mix(dark, c, power) : dark;
+            Raylib.DrawSphereEx(LedSpot(r, i, out _), LedSize, 10, 10, bulb);
+        }
+    }
+
+    private void DrawLedHalos(float r, float power)
+    {
         for (int i = 0; i < birdTypes.Length; i++)
         {
             if (!typeInCube[i]) continue;
-            Raylib.DrawSphereEx(positions[i], LedSize * 2f, 10, 10, Raylib.Fade(Birds.Get(birdTypes[i]).Color, 0.45f));
+            Raylib.DrawSphereEx(LedSpot(r, i, out _), LedSize * 2f, 10, 10, Raylib.Fade(Birds.Get(birdTypes[i]).Color, 0.45f * power));
         }
-        HologramRenderer.EndGlowDrawing();
     }
 }

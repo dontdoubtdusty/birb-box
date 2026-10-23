@@ -80,7 +80,7 @@ public class BirdMover
         {
             pauseTimer -= dt;
             ParentBird.Pose = pausePose;
-            if (pausePose == BirdPose.Peck) ParentBird.HopPhase += dt * PeckRate;
+            if (pausePose == BirdPose.Peck) AdvancePeck(dt);
             PutOnGround();
             return true;
         }
@@ -107,10 +107,22 @@ public class BirdMover
     public void PeckAt(Vector3 foodPos, float dt, bool perched)
     {
         TurnToward(DirectionTo(foodPos), dt);
-        ParentBird.HopPhase += dt * PeckRate;
+        AdvancePeck(dt);
         ParentBird.Pose = BirdPose.Peck;
         if (!perched) PutOnGround();
     }
+
+    // Moves the peck rhythm along, with a tap sound each time the beak reaches the ground.
+    // BirbAnimator draws the head lowest when sin(HopPhase) is at its peak or trough,
+    // which is once every half turn (PI), starting a quarter turn in.
+    private void AdvancePeck(float dt)
+    {
+        float before = ParentBird.HopPhase;
+        ParentBird.HopPhase += dt * PeckRate;
+        if (BeakTaps(before) != BeakTaps(ParentBird.HopPhase)) Sounds.PlayPeck(ParentBird.Position);
+    }
+
+    private static int BeakTaps(float phase) => (int)MathF.Floor((phase - MathF.PI / 2f) / MathF.PI);
 
     // The bird stays on the ground; the hop you see is added when it's drawn (BirbAnimator).
     private void StepForward(float speed, float dt)

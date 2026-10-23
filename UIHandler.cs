@@ -11,6 +11,7 @@ public class UIHandler
     // Shown here under "Controls" and on the Esc menu's Controls page.
     public static readonly string[] ControlLines =
     {
+        "Click the Birb Box logo: power on/off",
         "Drag sideways: turn the box   Drag up/down: tilt",
         "Wheel on hologram or map: zoom view",
         "Wheel elsewhere: move closer / farther",
@@ -22,6 +23,7 @@ public class UIHandler
         "Click gunk: scrape (needs Muck Scraper)",
         "Click feeder: pick up   Click dirt: set down",
         "Store: click Zoo Cam to go back",
+        "Radio: click buttons, drag or scroll knobs",
         "Tab: show/hide tools   F: fullscreen",
         "B: Birb Designer",
         "F9: screenshot   Esc: menu",
@@ -51,6 +53,7 @@ public class UIHandler
 
         ImGui.Text($"Window center: {engine.View.Center.X:0.0}, {engine.View.Center.Y:0.0}");
         ImGui.Text($"FPS {Raylib.GetFPS()}   frame {Raylib.GetFrameTime() * 1000f:0.0} ms   update {engine.UpdateMs:0.00} ms");
+        ImGui.Text($"draw {engine.DrawMs:0.00} ms   model draws {DrawStats.ModelDraws}");
         ImGui.Text($"Birds {World.Instance.GetAllEntities<Bird>().Count}   food {World.Instance.GetAllEntities<Food>().Count}");
 
         if (ImGui.Button(engine.Paused ? "Play" : "Pause", new Vector2(80, 0)))
@@ -94,7 +97,7 @@ public class UIHandler
             ImGui.SliderFloat("Glow", ref r.GlowStrength, 0f, 3f);
             ImGui.SliderFloat("Scanlines", ref r.ScanlineStrength, 0f, 0.5f);
             ImGui.Checkbox("Smooth edges", ref r.SmoothEdges);
-            ImGui.SliderFloat("Width", ref engine.View.RadiusScale, 0.6f, ViewWindow.MaxRadiusScale, "%.2f");
+            ImGui.SliderFloat("Width", ref engine.View.CubeScale, 0.5f, ViewWindow.MaxCubeScale, "%.2f");
             ImGui.SliderFloat("Fog start", ref engine.View.FogStart, 0.3f, 0.95f, "%.2f");
             ImGui.Checkbox("Projector base", ref r.ShowProjector);
         }

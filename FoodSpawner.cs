@@ -39,13 +39,11 @@ public class FoodSpawner
 
     public void ScatterInView(int count, ViewWindow view)
     {
-        float maxDistance = view.Radius * 0.8f;
+        float reach = view.HalfWidth * 0.8f;
         for (int i = 0; i < count; i++)
         {
-            // A random spot in the circle. The square root spreads them evenly instead of bunching at the center.
-            float angle = Rng.Range(0f, MathF.PI * 2f);
-            float distance = maxDistance * MathF.Sqrt(Rng.Range(0f, 1f));
-            Vector3 local = new Vector3(MathF.Cos(angle) * distance, view.Height, MathF.Sin(angle) * distance);
+            // A random spot in the clear middle of the cube
+            Vector3 local = new Vector3(Rng.Range(-reach, reach), view.Height, Rng.Range(-reach, reach));
             local.Y += Rng.Range(0f, 2f);    // stagger so they don't all land at once
             SpawnFood(view.ToWorld(local));
         }

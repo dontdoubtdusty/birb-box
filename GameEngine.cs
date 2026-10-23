@@ -8,7 +8,7 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Box 4.35 Alpha";
+    public const string Version = "Birb Box 4.48 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
@@ -29,6 +29,8 @@ public class GameEngine
     public PriceTag Tag { get; private set; }
     public BirbDesigner Designer { get; private set; }
     public FeederPlacer Placer { get; private set; }
+    public Radio Radio { get; private set; }
+    public Projector Projector { get; private set; }
 
     // SIMULATION STATE
     public bool Paused = false;
@@ -42,7 +44,9 @@ public class GameEngine
 
     // PERFORMANCE (shown in the tools panel)
     public float UpdateMs { get; private set; }    // time spent in Update(), smoothed
+    public float DrawMs { get; private set; }      // time spent issuing Draw() on the CPU, smoothed (the wait for the screen is left out)
     private readonly System.Diagnostics.Stopwatch updateClock = new();
+    private readonly System.Diagnostics.Stopwatch drawClock = new();
 
     // ECONOMY
     public int Coins = 0;
@@ -76,6 +80,9 @@ public class GameEngine
     private const int StartWidth = 1280;
     private const int StartHeight = 720;
     public bool IsFullscreen { get; private set; }
+    // True fullscreen takes over the monitor, which keeps Windows popups (like the volume bar) off the game.
+    // Off means a borderless window the size of the monitor, which Alt-Tabs faster.
+    public bool TrueFullscreen { get; private set; } = false;
     private Vector2 windowedPos;     // where the window was before going fullscreen,
     private Vector2 windowedSize;    // so it can go back there
 
@@ -104,6 +111,8 @@ public class GameEngine
         Tag = new PriceTag();
         Designer = new BirbDesigner();
         Placer = new FeederPlacer();
+        Radio = new Radio();
+        Projector = new Projector();
     }
 
     public void Run()
@@ -118,6 +127,7 @@ public class GameEngine
         Raylib.UnloadImage(icon);
 
         Sounds.Load();
+        Radio.Load();
         Renderer.Load(View);
         BirbBuilder.Load(Renderer.HoloShader);
 
@@ -142,6 +152,7 @@ public class GameEngine
         Renderer.Unload();
         BirbBuilder.Unload();
         UiText.Unload();
+        Radio.Unload();
         Sounds.Unload();
         Raylib.CloseWindow();
     }
@@ -159,6 +170,12 @@ public class GameEngine
     private void Update(float dt)
     {
         updateClock.Restart();
+
+        // The hum runs even while paused; it just ducks quieter behind the menu or the Designer, and follows the power.
+        // Bird sounds fade out while the store is showing or the box is off.
+        Sounds.Update(dt, Menu.IsOpen || Designer.IsOpen, Mode.Showing == BoxScene.Birds && Projector.IsOn, Projector.Lens);
+        Radio.Update(dt, ducked: Menu.IsOpen);    // keeps playing, quieter, behind the Esc menu
+        Projector.Update(dt);                     // keeps starting up or shutting down behind the menu too
 
         // The mouse is "blocked" for the hologram when it's over an ImGui window, the bird card, or a side column.
         // The keyboard is blocked while typing, either a bird's name or in an ImGui box.
@@ -185,6 +202,14 @@ public class GameEngine
         if (!typingName) Menu.Update(this);
         if (Menu.IsOpen) return;
 
+        // The radio on the table has the mouse while it's over the radio or turning one of its knobs
+        Radio.HandleInput(MouseRayInRoom(), mouseBlocked);
+        mouseBlocked |= Radio.UsingMouse;
+
+        // The logo on the pedestal's front is the power button
+        bool mouseOverLogo = !mouseBlocked && Pedestal.RayHitsLogo(MouseRayInRoom(), View);
+        Projector.LogoHovered = mouseOverLogo;
+
         // The Birb Designer takes over the hologram while it's open (see BirbDesigner.cs).
         // Its birb is shown in the bird scene, so if it's opened from the store (B or the Esc menu),
         // the box fogs back to the birbs first.
@@ -194,6 +219,7 @@ public class GameEngine
         }
         if (Designer.IsOpen)
         {
+            Projector.TurnOn();    // the Designer shows its birb in the box, so the box has to be on
             Mode.SwitchTo(BoxScene.Birds);
             if (Mode.Update(dt)) OnSceneSwapped();
             UpdateDesigning(dt, mouseBlocked);
@@ -210,14 +236,17 @@ public class GameEngine
         }
         // The box shows either the bird world or the store; the sign floating above it switches.
         // While the store is showing, the birds ignore the mouse and WASD (see ClickInStore for its clicks).
-        bool mouseOverSign = !mouseBlocked && BoxMode.RayHitsSign(MouseRayInScene(), View);
+        // Nothing in the box takes the mouse or WASD until the projector is fully on.
+        bool boxReady = Projector.Ready;
+        bool mouseOverSign = !mouseBlocked && boxReady && BoxMode.RayHitsSign(MouseRayInHologram(), View);
         Mode.SignHovered = mouseOverSign;
         if (Mode.Update(dt)) OnSceneSwapped();
         bool inStore = Mode.InStore;
-        bool birdsShowing = Mode.Showing == BoxScene.Birds && !Mode.IsSwitching;
+        bool birdsShowing = Mode.Showing == BoxScene.Birds && !Mode.IsSwitching && boxReady;
+        if (!Projector.IsOn) Store.SelectedItem = null;    // no price tag hanging off a switched-off box
 
         Store.Update(dt, showing: inStore);
-        Store.UpdateHover(MouseRayInScene(), active: inStore && !Mode.IsSwitching && !mouseBlocked && !mouseOverSign);
+        Store.UpdateHover(MouseRayInHologram(), active: inStore && boxReady && !Mode.IsSwitching && !mouseBlocked && !mouseOverSign);
         Tag.Update(Store);
 
         // The wheel zooms the hologram (and map) when the mouse is over the birds, otherwise the outer camera.
@@ -239,8 +268,9 @@ public class GameEngine
 
         if (Camera.ClickedThisFrame && !mouseBlocked)
         {
-            if (mouseOverSign) Mode.Toggle();
-            else if (inStore) ClickInStore();
+            if (mouseOverLogo) Projector.Toggle();
+            else if (mouseOverSign) Mode.Toggle();
+            else if (inStore && boxReady) ClickInStore();
             else if (birdsShowing) HandleClick();
         }
         UpdatePouring(dt, mouseBlocked || !birdsShowing || mouseOverSign);
@@ -265,7 +295,7 @@ public class GameEngine
         Sides.Update(this, mouseOverImGui);
         Hud.Update(this, mouseOverImGui);
         Map.Update(this, mouseOverImGui);
-        Renderer.JoinMessages.Update(View, dt);
+        Renderer.ChatMessages.Update(View, dt);
         Bucket.Update(dt, mouseOverImGui);
 
         if (FollowSelected && SelectedBird != null && !inStore)
@@ -367,6 +397,7 @@ public class GameEngine
         if (hitBird != null)
         {
             SelectedBird = hitBird;
+            hitBird.Call();
             return;
         }
 
@@ -422,7 +453,7 @@ public class GameEngine
     }
 
     // Where the mouse ray hits the floor, in box space.
-    // Only the clear middle of the circle counts, not the foggy edges.
+    // Only the clear middle of the cube counts, not the foggy edges and corners.
     private Vector3? FloorPointUnderMouse()
     {
         Ray ray = MouseRayInBox();
@@ -432,8 +463,8 @@ public class GameEngine
         if (t < 0) return null;
         Vector3 localPoint = ray.Position + ray.Direction * t;
 
-        float limit = View.Radius * MathF.Max(0.85f, View.FogStart);
-        if (new Vector2(localPoint.X, localPoint.Z).Length() > limit) return null;
+        float limit = MathF.Max(0.85f, View.FogStart);
+        if (ViewWindow.EdgeAmount(localPoint.X, localPoint.Z, View.HalfWidth) > limit) return null;
         return localPoint;
     }
 
@@ -441,14 +472,20 @@ public class GameEngine
     // so it can be tested against things where they sit in the un-turned cube.
     private Ray MouseRayInBox()
     {
-        Ray sceneRay = MouseRayInScene();
+        Ray sceneRay = MouseRayInHologram();
         return new Ray(View.SceneToBox(sceneRay.Position), View.SceneToBox(sceneRay.Direction));
     }
 
-    // The ray from the camera through the mouse, in the scene as the camera sees it.
-    private Ray MouseRayInScene()
+    // The ray from the camera through the mouse, among the things in the room (the radio, the pedestal).
+    private Ray MouseRayInRoom()
     {
         return Raylib.GetScreenToWorldRay(Raylib.GetMousePosition(), Camera.Camera);
+    }
+
+    // The same ray in the hologram's own space, where its floor is at height 0 (see HoloCamera.HoloLift).
+    private Ray MouseRayInHologram()
+    {
+        return Raylib.GetScreenToWorldRay(Raylib.GetMousePosition(), Camera.HologramCamera);
     }
 
     private Coin? PickCoin(Ray ray)
@@ -548,20 +585,27 @@ public class GameEngine
 
     private void Draw()
     {
+        drawClock.Restart();
         Raylib.BeginDrawing();
             Color accent = Palette.ToColor(Renderer.HoloColor);
-            Renderer.Draw(Camera, View, Mode, Store, SelectedBird, HoveredBird, Designer);
+            Renderer.Draw(Camera, View, Mode, Store, SelectedBird, HoveredBird, Designer, Radio, Projector);
             Sides.Draw(this, accent);
             Hud.Draw(this, accent);
             Map.Draw(this, accent);
             Bucket.Draw(accent);
-            Tag.Draw(Store, Camera.Camera, accent);
+            Tag.Draw(Store, Camera.HologramCamera, accent);    // the tag's string runs to an item in the hologram
+            Radio.DrawLabel(Camera.Camera, accent);
 
             rlImGui.Begin();
                 if (!Menu.IsOpen && !Designer.IsOpen) UI.Draw(this);
                 if (!Menu.IsOpen) Designer.DrawWindow(this);
             rlImGui.End();
             Menu.Draw(this, accent);
+
+            // Measured before EndDrawing, which waits for the screen to be ready.
+            float ms = (float)drawClock.Elapsed.TotalMilliseconds;
+            DrawMs += (ms - DrawMs) * 0.05f;
+            DrawStats.EndFrame();
 
             if (screenshotRequested)
             {
@@ -600,18 +644,38 @@ public class GameEngine
             windowedSize = new Vector2(Raylib.GetScreenWidth(), Raylib.GetScreenHeight());
 
             int monitor = Raylib.GetCurrentMonitor();
-            Vector2 monitorPos = Raylib.GetMonitorPosition(monitor);
-            Raylib.SetWindowState(ConfigFlags.UndecoratedWindow);
-            Raylib.SetWindowPosition((int)monitorPos.X, (int)monitorPos.Y);
-            Raylib.SetWindowSize(Raylib.GetMonitorWidth(monitor), Raylib.GetMonitorHeight(monitor));
+            if (TrueFullscreen)
+            {
+                // Raylib's fullscreen uses the window's size as the screen resolution, so grow it to the monitor first
+                Raylib.SetWindowSize(Raylib.GetMonitorWidth(monitor), Raylib.GetMonitorHeight(monitor));
+                Raylib.ToggleFullscreen();
+            }
+            else
+            {
+                Vector2 monitorPos = Raylib.GetMonitorPosition(monitor);
+                Raylib.SetWindowState(ConfigFlags.UndecoratedWindow);
+                Raylib.SetWindowPosition((int)monitorPos.X, (int)monitorPos.Y);
+                Raylib.SetWindowSize(Raylib.GetMonitorWidth(monitor), Raylib.GetMonitorHeight(monitor));
+            }
         }
         else
         {
-            Raylib.ClearWindowState(ConfigFlags.UndecoratedWindow);
+            if (Raylib.IsWindowFullscreen()) Raylib.ToggleFullscreen();
+            else Raylib.ClearWindowState(ConfigFlags.UndecoratedWindow);
             Raylib.SetWindowSize((int)windowedSize.X, (int)windowedSize.Y);
             Raylib.SetWindowPosition((int)windowedPos.X, (int)windowedPos.Y);
         }
         IsFullscreen = !IsFullscreen;
+    }
+
+    // Switching type while fullscreen steps out to a window and back in the new way.
+    public void SetTrueFullscreen(bool on)
+    {
+        if (on == TrueFullscreen) return;
+        bool wasFullscreen = IsFullscreen;
+        if (wasFullscreen) ToggleFullscreen();
+        TrueFullscreen = on;
+        if (wasFullscreen) ToggleFullscreen();
     }
 
     public void JumpToBird(Bird bird)

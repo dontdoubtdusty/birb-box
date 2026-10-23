@@ -13,9 +13,10 @@ uniform vec4 colDiffuse;
 
 uniform vec3 holoOrigin;     // middle of this hologram's floor, normally (0,0,0)
 uniform float boxYaw;        // how far the hologram is turned (radians)
-uniform float holoRadius;    // radius of the round hologram
-uniform float fogStart;      // share of the radius that stays clear before the fog begins
+uniform float holoHalfWidth; // half the width of the hologram cube
+uniform float fogStart;      // share of the way to the sides that stays clear before the fog begins
 uniform float swallow;       // 0 normally; rises to 1 while switching scenes, rolling the fog in until nothing shows
+uniform float reveal;        // 1 normally; while the projector starts it rises from 0 and the picture grows up from the floor
 uniform float cubeHeight;
 uniform vec2 viewCenter;     // world X,Z at the hologram's center (so the dirt pattern pans)
 uniform float viewZoom;      // box units per world unit (so the dirt pattern zooms)
@@ -26,6 +27,8 @@ uniform int isFloor;
 uniform int flatShade;       // 1 while drawing birbs: each triangle gets one flat shade (the faceted look)
 
 out vec4 finalColor;
+
+const float CornerPower = 6.0;    // how round the fog makes the corners; must match ViewWindow.CornerPower
 
 float hash(vec2 p)
 {
@@ -122,14 +125,21 @@ void main()
     float sweep = exp(-pow((boxPos.y - sweepY) * 3.5, 2.0));
     color += holoColor * sweep * 0.2;
 
-    // Fog: fade out toward the round edge and the ceiling.
-    // Past the edge fade is 0, so the square floor's corners get discarded.
-    // Swallow moves both ends of the fade inward, past the middle, so the fog closes in from the edge.
-    float edge = length(boxPos.xz) / holoRadius;
+    // Fog: fade out toward the cube's sides and the ceiling.
+    // 'edge' is 0 in the middle and 1 at a side; the corners count as further out, which rounds them off
+    // (same math as ViewWindow.EdgeAmount). Past 1 fade is 0, so the floor's leftover corners get discarded.
+    // Swallow moves both ends of the fade inward, past the middle, so the fog closes in from the sides.
+    vec2 q = abs(boxPos.xz) / holoHalfWidth;
+    float edge = pow(pow(q.x, CornerPower) + pow(q.y, CornerPower), 1.0 / CornerPower);
     float clearUntil = mix(fogStart, -0.4, swallow);
     float goneBy = mix(1.0, 0.0, swallow);
     float fade = 1.0 - smoothstep(clearUntil, goneBy, edge);
     fade *= 1.0 - smoothstep(cubeHeight * 0.7, cubeHeight, boxPos.y);
+
+    // Starting up: only what's below the rising edge shows, softly, and the whole picture brightens as it rises
+    float revealY = reveal * (cubeHeight + 1.0) - 0.5;
+    fade *= 1.0 - smoothstep(revealY - 0.6, revealY, boxPos.y);
+    fade *= smoothstep(0.0, 0.4, reveal);
 
     // As things fade, they also shift toward a dim hologram-colored haze
     color = mix(color, holoColor * 0.3, (1.0 - fade) * 0.6);

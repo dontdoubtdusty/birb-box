@@ -40,6 +40,7 @@ public class Coin : Entity
             {
                 Position = new Vector3(Position.X, Radius, Position.Z);
                 velocity = Vector3.Zero;
+                if (onScreen) Sounds.PlayCoinLand();
             }
         }
 
@@ -50,6 +51,7 @@ public class Coin : Entity
     {
         if (removed) return;
         GameEngine.Instance.Coins++;
+        Sounds.PlayCoinPickup();
         Remove();
     }
 

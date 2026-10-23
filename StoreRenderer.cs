@@ -43,7 +43,7 @@ public class StoreRenderer
     // Set at the start of each Draw so the shape helpers below can use them
     private SeedStore store = null!;
     private float yawDegrees;
-    private float roomRadius;    // the box's radius in store units; the floor reaches this far, into the fog
+    private float roomRadius;    // middle to the cube's corners, in store units; the floor reaches this far, into the fog
 
     public void Load(Shader holoShader)
     {
@@ -62,7 +62,7 @@ public class StoreRenderer
     {
         this.store = store;
         yawDegrees = store.Yaw * Raylib.RAD2DEG;
-        roomRadius = view.Radius / SeedStore.Scale;
+        roomRadius = view.CornerReach / SeedStore.Scale;    // out to the cube's corners
         Raylib.SetShaderValue(shader, locBoxYaw, store.Yaw, ShaderUniformDataType.Float);
 
         DrawFloor();

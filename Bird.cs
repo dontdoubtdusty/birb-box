@@ -43,7 +43,12 @@ public class Bird : Entity
     private const float FoodSearchInterval = 0.5f;
 
     // COINS
-    private const float CoinDropChance = 0.3f;    // chance to drop a coin after a full meal
+    private const float CoinDropChance = 0.66f;    // chance to drop a coin after a full meal
+
+    // VOICE
+    public float VoicePitch { get; private set; }  // each bird sounds a little higher or lower than the rest
+    private float callTimer;                        // seconds until it calls out on its own
+    private bool? wasFlying;                        // null until the first update, so a bird spawned in the air doesn't flap
 
     private bool removed = false;
 
@@ -58,6 +63,8 @@ public class Bird : Entity
         Heading = Rng.Range(0f, MathF.PI * 2f);
         HopPhase = Rng.Range(0f, 10f);
         foodSearchTimer = Rng.Range(0f, FoodSearchInterval);    // staggered so birds don't all search on one frame
+        VoicePitch = Rng.Range(0.92f, 1.08f);
+        callTimer = NextCallDelay();
         Mover = new BirdMover(this);
 
         Shape = Info.Shapes[Rng.Next(Info.Shapes.Length)];
@@ -116,6 +123,8 @@ public class Bird : Entity
                 break;
         }
 
+        UpdateVoice(dt);
+
         // A bird that walks past the world edge has wandered off to somewhere else.
         if (State != BirdState.Arriving && !World.Instance.IsInside(Position, 3f))
         {
@@ -134,6 +143,26 @@ public class Bird : Entity
         removed = true;
         World.Instance.RemoveEntity(this);
     }
+
+    // Calls out now and then, and flaps when it leaves or touches the ground.
+    private void UpdateVoice(float dt)
+    {
+        callTimer -= dt;
+        if (callTimer <= 0f) Call();
+
+        bool flying = IsFlying;
+        if (wasFlying != null && flying != wasFlying) Sounds.PlayFlap(Position, takeoff: flying);
+        wasFlying = flying;
+    }
+
+    // Also used when the player clicks the bird.
+    public void Call()
+    {
+        Sounds.PlayCall(this);
+        callTimer = NextCallDelay();
+    }
+
+    private static float NextCallDelay() => Rng.Range(8f, 25f);
 
     // Blank names are ignored, so the bird keeps its old one.
     public void Rename(string newName)

@@ -4,20 +4,22 @@ using Raylib_cs;
 // The room the Birb Box sits in: a cabin on a space station during the night cycle.
 // A dark dining table with a woven runner, a chair at each end, and a panelled back wall
 // with a wide window, two warm lamps and the Royal Guild of Fowlers' crest.
-// The things sitting on the table (mug, books, candle holder...) are in TableProps.
+// The things sitting on the table (mug, books, candle holder...) are in TableProps; the radio is in Radio.
 //
 // It's drawn straight to the screen first; the hologram scene is laid over it afterward,
 // so nothing in here can appear in front of the pedestals. It never turns with the hologram.
 //
-// Scale: 1 unit is about 7.5 cm. The table is 30 x 16 units (about 2.25 m x 1.2 m).
+// The Birb Box's pedestal is drawn right after this, in the same pass, by HologramRenderer.
+//
+// Scale: 1 unit is about 7.5 cm. The table is 30 x 19 units (about 2.25 m x 1.4 m).
 public class Backdrop
 {
-    public const float TableY = -2.7f;              // the tabletop, where both pedestals stand
+    public const float TableY = -2.7f;              // the tabletop, where the pedestal stands
 
-    // TABLE (scene units). Centered a little right of the Birb Box so the Granary fits too.
-    public static readonly Vector3 TableCenter = new Vector3(2.5f, TableY, 1f);
+    // TABLE (scene units). Centered a little right of the Birb Box, and deep enough for the pedestal's plinth.
+    public static readonly Vector3 TableCenter = new Vector3(2.5f, TableY, -0.5f);
     public const float TableLength = 30f;           // along X
-    public const float TableDepth = 16f;            // along Z
+    public const float TableDepth = 19f;            // along Z
     private const float TableThickness = 0.6f;
     private const float TableHeight = 10f;          // tabletop to floor
     public const float FloorY = TableY - TableHeight;
@@ -43,6 +45,9 @@ public class Backdrop
 
     // Everything in the room is lit by room.fs: a dim fixed light from above plus the two warm wall lamps.
     private Shader roomShader;
+    public Shader RoomShader => roomShader;
+    private int locViewPos, locShine;
+    private int locHoloLight, locHoloLightColor, locLensLight, locLensLightColor, locWellRadius;
     public UnitShapes Shapes { get; } = new UnitShapes();
     public TableProps Props { get; } = new TableProps();
     private Texture2D windowView;
@@ -53,6 +58,14 @@ public class Backdrop
         SetRoomUniform("lampA", LampLeft);
         SetRoomUniform("lampB", LampRight);
         SetRoomUniform("roomCenter", TableCenter);
+        locViewPos = Raylib.GetShaderLocation(roomShader, "viewPos");
+        locShine = Raylib.GetShaderLocation(roomShader, "shine");
+        locHoloLight = Raylib.GetShaderLocation(roomShader, "holoLight");
+        locHoloLightColor = Raylib.GetShaderLocation(roomShader, "holoLightColor");
+        locLensLight = Raylib.GetShaderLocation(roomShader, "lensLight");
+        locLensLightColor = Raylib.GetShaderLocation(roomShader, "lensLightColor");
+        locWellRadius = Raylib.GetShaderLocation(roomShader, "wellRadius");
+        SetShine(0f);
 
         Shapes.Load(roomShader);
         Props.Load();
@@ -72,9 +85,28 @@ public class Backdrop
         Raylib.SetShaderValue(roomShader, Raylib.GetShaderLocation(roomShader, name), value, ShaderUniformDataType.Vec3);
     }
 
-    public void Draw(Camera3D camera, float pedestalRadius)
+    // How polished the next things drawn with the room shader are: 0 is matte, the default for the room.
+    // Whoever turns it up turns it back to 0 when done.
+    public void SetShine(float shine)
+    {
+        Raylib.SetShaderValue(roomShader, locShine, shine, ShaderUniformDataType.Float);
+    }
+
+    // The Birb Box's own light on the room: where it comes from and how bright (color times power; black when off).
+    // Set once a frame, before the room and the pedestal are drawn (see room.fs).
+    public void SetProjectorLights(Vector3 holoLight, Vector3 holoColor, Vector3 lensLight, Vector3 lensColor, float wellRadius)
+    {
+        Raylib.SetShaderValue(roomShader, locHoloLight, holoLight, ShaderUniformDataType.Vec3);
+        Raylib.SetShaderValue(roomShader, locHoloLightColor, holoColor, ShaderUniformDataType.Vec3);
+        Raylib.SetShaderValue(roomShader, locLensLight, lensLight, ShaderUniformDataType.Vec3);
+        Raylib.SetShaderValue(roomShader, locLensLightColor, lensColor, ShaderUniformDataType.Vec3);
+        Raylib.SetShaderValue(roomShader, locWellRadius, wellRadius, ShaderUniformDataType.Float);
+    }
+
+    public void Draw(Camera3D camera, float pedestalRadius, Radio radio)
     {
         Raylib.ClearBackground(new Color(8, 10, 16, 255));    // also clears depth, so the room sorts itself correctly
+        Raylib.SetShaderValue(roomShader, locViewPos, camera.Position, ShaderUniformDataType.Vec3);
 
         Raylib.BeginMode3D(camera);
             DrawFloorAndWall();
@@ -84,18 +116,21 @@ public class Backdrop
             DrawRunner();
             DrawChairs();
             Props.Draw(Shapes);
+            radio.Draw(Shapes);
 
-            // Soft shadow on the table under the pedestal
+            // Soft shadows on the table under the pedestal and the radio
             Rlgl.DrawRenderBatchActive();
             Rlgl.DisableDepthMask();
             Rlgl.DisableBackfaceCulling();
             Color shadow = new Color(0, 0, 0, 255);
             DrawSoftDisc(new Vector3(0, TableY + 0.02f, 0), pedestalRadius * 1.1f, pedestalRadius * 1.6f, shadow, 0.55f);
+            DrawSoftDisc(Radio.Spot + new Vector3(0, 0.02f, 0), 1.5f, 2.6f, shadow, 0.4f);
 
-            // Warm glow on the wall around each lamp
+            // Warm glow on the wall around each lamp, and around the radio's dial
             Raylib.BeginBlendMode(BlendMode.Additive);
                 DrawWallGlow(LampLeft, 5f, LampGlow);
                 DrawWallGlow(LampRight, 5f, LampGlow);
+                radio.DrawGlow();
             Raylib.EndBlendMode();
             Rlgl.DrawRenderBatchActive();
             Rlgl.EnableBackfaceCulling();
