@@ -8,7 +8,9 @@ using Raylib_cs;
 //  - name tags: just the name, floating over a bird for as long as it's in view (which birds: NameLabels setting).
 // Labels fade out, and dim near the hologram's edge like everything else in the fog.
 // Each label's text is drawn once into its own small texture, then shown on a flat rectangle
-// that always faces the camera.
+// that always faces the camera. To stay readable over grass, dirt and birds, every label sits on a
+// faint dark plate, its letters have a thin dark outline, the bird's color is lightened, and labels
+// grow a little as the camera pulls back.
 public enum NameLabelMode { Off, Named, All }
 
 public class ChatMessages
@@ -41,6 +43,17 @@ public class ChatMessages
     private const string LeaveText = " has left the chat";
 
     private const int TextureWidth = 512, TextureHeight = 48;
+
+    // READABILITY (all labels)
+    private const float NameLighten = 0.45f;          // how far a bird's color is mixed toward white for its name
+    private const int OutlineWidth = 2;               // pixels in the label texture
+    private static readonly Color OutlineColor = new Color(6, 9, 14, 255);
+    private static readonly Color PlateColor = new Color(6, 9, 14, 100);    // the faint plate behind the text
+    private const int PlatePadding = 12;              // plate reaches this far past the text on each side
+    private const int PlateMargin = 4;                // gap above and below the plate inside the texture
+    private const float NearDistance = 14f;           // closer than this, labels keep their base size
+    private const float DistanceGrowth = 0.5f;        // 0: fixed in the box, 1: same size on screen at any distance
+    private const float MaxGrowth = 1.8f;
 
     private class Message
     {
@@ -191,40 +204,73 @@ public class ChatMessages
         }
     }
 
-    // Just the name, in the bird's color, centered and shrunk to fit.
+    // Just the name, in a lightened bird color, on its plate, centered and shrunk to fit.
     private static void RenderName(RenderTexture2D target, string name, Color color)
     {
         int size = 34;
-        while (size > 10 && UiText.Measure(name, size) > NameTextureWidth - 12) size -= 2;
-        int x = (NameTextureWidth - UiText.Measure(name, size)) / 2;
+        while (size > 10 && UiText.Measure(name, size) > NameTextureWidth - PlatePadding * 2 - 4) size -= 2;
+        int width = UiText.Measure(name, size);
+        int x = (NameTextureWidth - width) / 2;
         int y = (TextureHeight - size) / 2;
 
         Raylib.BeginTextureMode(target);
             Raylib.ClearBackground(Color.Blank);
-            UiText.Draw(name, x, y, size, color);
+            DrawPlate(x, width);
+            DrawOutlined(name, x, y, size, Lighten(color));
         Raylib.EndTextureMode();
     }
 
-    // The name in the bird's color, the rest in white, centered and shrunk to fit.
+    // The name in a lightened bird color, the rest in white, on one plate, centered and shrunk to fit.
     // Leaving labels use a darker name color and gray text.
     private static void RenderLabel(RenderTexture2D target, string name, Color nameColor, bool leaving, bool returning)
     {
         string text = leaving ? LeaveText : returning ? RejoinText : JoinText;
-        if (leaving) nameColor = Raylib.ColorBrightness(nameColor, -0.35f);
+        nameColor = Lighten(nameColor);
+        if (leaving) nameColor = Raylib.ColorBrightness(nameColor, -0.3f);
         Color textColor = leaving ? Palette.DimText : Palette.Text;
 
         int size = 36;
-        while (size > 10 && UiText.Measure(name + text, size) > TextureWidth - 16) size -= 2;
+        while (size > 10 && UiText.Measure(name + text, size) > TextureWidth - PlatePadding * 2 - 4) size -= 2;
         int nameWidth = UiText.Measure(name, size);
-        int x = (TextureWidth - UiText.Measure(name + text, size)) / 2;
+        int width = UiText.Measure(name + text, size);
+        int x = (TextureWidth - width) / 2;
         int y = (TextureHeight - size) / 2;
 
         Raylib.BeginTextureMode(target);
             Raylib.ClearBackground(Color.Blank);
-            UiText.Draw(name, x, y, size, nameColor);
-            UiText.Draw(text, x + nameWidth, y, size, textColor);
+            DrawPlate(x, width);
+            DrawOutlined(name, x, y, size, nameColor);
+            DrawOutlined(text, x + nameWidth, y, size, textColor);
         Raylib.EndTextureMode();
     }
+
+    // A faint dark rounded plate behind a line of text, a little wider than the text.
+    // Drawn with premultiplied blending so the texture keeps the plate's alpha as given
+    // (normal blending onto a clear texture would square it and leave the plate fainter).
+    private static void DrawPlate(int textX, int textWidth)
+    {
+        Rectangle plate = new Rectangle(textX - PlatePadding, PlateMargin, textWidth + PlatePadding * 2, TextureHeight - PlateMargin * 2);
+        Raylib.BeginBlendMode(BlendMode.AlphaPremultiply);
+            Raylib.DrawRectangleRounded(plate, 1f, 12, PlateColor);
+        Raylib.EndBlendMode();
+    }
+
+    // Text with a thin dark outline around every letter: the text is stamped in the outline color
+    // at eight small offsets, then once on top in its own color.
+    private static void DrawOutlined(string text, int x, int y, int size, Color color)
+    {
+        for (int dx = -OutlineWidth; dx <= OutlineWidth; dx += OutlineWidth)
+        {
+            for (int dy = -OutlineWidth; dy <= OutlineWidth; dy += OutlineWidth)
+            {
+                if (dx != 0 || dy != 0) UiText.Draw(text, x + dx, y + dy, size, OutlineColor);
+            }
+        }
+        UiText.Draw(text, x, y, size, color);
+    }
+
+    // The bird's color moved toward white, so the hue stays but it stands out from the hologram's tint.
+    private static Color Lighten(Color color) => Palette.Mix(color, Color.White, NameLighten);
 
     // Called inside the 3D scene. Positions are turned with the hologram by hand (BoxToScene),
     // so the label can be built facing the camera in scene space.
@@ -239,7 +285,7 @@ public class ChatMessages
 
         Rlgl.DrawRenderBatchActive();
         Rlgl.DisableDepthMask();
-        DrawNameTags(view, right, up);
+        DrawNameTags(camera, view, right, up);
         foreach (Message msg in messages)
         {
             if (msg.Texture.Id == 0) continue;
@@ -253,14 +299,17 @@ public class ChatMessages
             alpha *= EdgeFade(local, view);
             if (alpha <= 0.01f) continue;
 
-            DrawFacingQuad(msg.Texture.Texture, view.BoxToScene(local), right * halfWidth, up * halfHeight, alpha);
+            Vector3 center = view.BoxToScene(local);
+            float grow = DistanceScale(camera, center);
+            DrawFacingQuad(msg.Texture.Texture, center, right * halfWidth * grow, up * halfHeight * grow, alpha);
         }
         Rlgl.DrawRenderBatchActive();
         Rlgl.EnableDepthMask();
     }
 
     // Each tag floats a little above the top of its bird's head and follows it.
-    private void DrawNameTags(ViewWindow view, Vector3 right, Vector3 up)
+    // A grown tag rises by its extra height so its bottom edge stays the same gap above the head.
+    private void DrawNameTags(Camera3D camera, ViewWindow view, Vector3 right, Vector3 up)
     {
         float halfWidth = NameLabelWidth / 2f;
         float halfHeight = halfWidth * TextureHeight / NameTextureWidth;
@@ -270,12 +319,22 @@ public class ChatMessages
             if (!nameTags.TryGetValue(bird.EntityID, out NameTag? tag)) continue;
 
             Vector3 head = new Vector3(bird.Position.X, bird.Position.Y + bird.Bounds.Max.Y * bird.Size, bird.Position.Z);
-            Vector3 local = view.ToLocal(head) + new Vector3(0, NameLift + halfHeight, 0);
+            Vector3 headLocal = view.ToLocal(head);
+            float grow = DistanceScale(camera, view.BoxToScene(headLocal));
+            Vector3 local = headLocal + new Vector3(0, NameLift + halfHeight * grow, 0);
             float alpha = NameAlpha * EdgeFade(local, view);
             if (alpha <= 0.01f) continue;
 
-            DrawFacingQuad(tag.Texture.Texture, view.BoxToScene(local), right * halfWidth, up * halfHeight, alpha);
+            DrawFacingQuad(tag.Texture.Texture, view.BoxToScene(local), right * halfWidth * grow, up * halfHeight * grow, alpha);
         }
+    }
+
+    // How much bigger a label is drawn at this distance from the camera: 1 up close, growing as the
+    // camera pulls back so labels shrink on screen more slowly than the birds do.
+    private static float DistanceScale(Camera3D camera, Vector3 center)
+    {
+        float distance = Vector3.Distance(camera.Position, center);
+        return Math.Clamp(MathF.Pow(distance / NearDistance, DistanceGrowth), 1f, MaxGrowth);
     }
 
     // Render textures are stored upside down, so the top of the quad uses v = 1.

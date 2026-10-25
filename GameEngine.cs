@@ -8,7 +8,7 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Box 4.72 Alpha";
+    public const string Version = "Birb Box 4.75 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
@@ -340,7 +340,7 @@ public class GameEngine
         {
             if (mouseOverLogo)
             {
-                Projector.Toggle();
+                Projector.PressButton();
                 Hands.Tap(HandSide.Right);
             }
             else if (rockerHalf != null)

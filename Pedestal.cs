@@ -23,23 +23,25 @@ public class Pedestal
     private const float BodyHeight = 1.6f;
     private const float PlinthHeight = 0.5f;
     private const int ButtonCount = 18;
-    private const float ButtonY = -1.4f;
+    private const float ButtonY = -1.5f;
 
     // LIP LAYOUT: plain band from LipBottom to LipSplit, bezel ring from LipSplit to LipTop (the rim).
+    // The band is tall enough to give the rocker room above and below (see Rocker.CenterY).
     // The hologram floats HoloCamera.HoloLift above the rim.
-    private const float LipBottom = -0.6f;
+    private const float LipBottom = -0.8f;
     private const float LipSplit = -0.25f;
     private const float LipTop = 0f;
     private const float WellShare = 0.95f;       // the well's radius as a share of the body's; the bezel's top runs from here out
     private const float WellFloorY = -2.0f;      // the well goes almost down to the plinth
 
     // LOGO PLAQUE
-    private const float PlateWidth = 1.3f, PlateHeight = 1.4f, PlateDepth = 0.08f;
-    private const float PlateY = -1.4f;
+    private const float PlateWidth = 1.3f, PlateHeight = 1.3f, PlateDepth = 0.08f;
+    private const float PlateY = -1.5f;
+    private const float PushDepth = 0.05f;        // how far the plate sinks into the wood when pressed (see Projector.ButtonPush)
 
     // WINDOW LAYOUT
     private const float WindowAngle = 0.27f;      // how far each window sits from the logo, in radians
-    private const float WindowY = -1.4f;          // same height as the logo
+    private const float WindowY = -1.5f;          // same height as the logo
     private const float WindowWidth = 1.3f;
     private const float WindowHeight = 0.85f;
     private const float FrameBorder = 0.06f;
@@ -320,6 +322,7 @@ public class Pedestal
         float windowRadius = r * 1.015f + 0.04f;
         Vector3 lens = LensSpot(view);
         float power = projector.Lens;
+        float push = projector.ButtonPush * PushDepth;    // the power button sinking in after a press
 
         // The varnished wood cabinet
         backdrop.SetShine(WoodShine);
@@ -336,7 +339,7 @@ public class Pedestal
         // Brass fittings set into the wood
         backdrop.SetShine(BrassShine);
             DrawButtons(shapes, r);
-            DrawLogoPlate(shapes, r);
+            DrawLogoPlate(shapes, r, push);
             DrawWindowFrame(shapes, MathF.PI / 2f + WindowAngle, windowRadius);
             DrawWindowFrame(shapes, MathF.PI / 2f - WindowAngle, windowRadius);
             DrawLedRims(shapes, r);
@@ -350,7 +353,7 @@ public class Pedestal
         // Unlit details: seams, printed markings, glass, bulbs, the logo and the lens
         Raylib.DrawCylinderWires(new Vector3(0, LipSplit, 0), bezelRadius, bezelRadius, 0.001f, 64, Seam);
         Raylib.DrawCylinderWires(new Vector3(0, LipTop, 0), bezelRadius, bezelRadius, 0.01f, 64, Seam);
-        DrawLogo(logoTexture, r, 1f, 0.005f, Color.White);
+        DrawLogo(logoTexture, r, 1f, 0.005f - push, Color.White);
         DrawBezelMarkings(bezelRadius, wellRadius, ringYaw);
         DrawWindowGlass(MathF.PI / 2f + WindowAngle, windowRadius);
         DrawWindowGlass(MathF.PI / 2f - WindowAngle, windowRadius);
@@ -370,8 +373,8 @@ public class Pedestal
             }
             if (logoGlow > 0f)
             {
-                DrawLogo(logoGlowTexture, r, 1f, 0.009f, Raylib.Fade(glowColor, logoGlow));
-                DrawLogo(logoGlowTexture, r, 1.2f, 0.012f, Raylib.Fade(glowColor, logoGlow * 0.25f));
+                DrawLogo(logoGlowTexture, r, 1f, 0.009f - push, Raylib.Fade(glowColor, logoGlow));
+                DrawLogo(logoGlowTexture, r, 1.2f, 0.012f - push, Raylib.Fade(glowColor, logoGlow * 0.25f));
             }
             if (projector.Beams > 0f)
             {
@@ -404,14 +407,16 @@ public class Pedestal
     }
 
     // The brass plate on the front (+Z side) of the pedestal that the logo is stamped into.
-    private static void DrawLogoPlate(UnitShapes shapes, float r)
+    // push: how far it's sunk into the wood right now.
+    private static void DrawLogoPlate(UnitShapes shapes, float r, float push)
     {
-        float z = r * 1.015f + PlateDepth / 2f;    // body radius at this height, plus half the plate
+        float z = r * 1.015f + PlateDepth / 2f - push;    // body radius at this height, plus half the plate
         shapes.Box(new Vector3(0, PlateY, z), new Vector3(PlateWidth, PlateHeight, PlateDepth), LipBrass);
     }
 
     // The Birb Box logo, a textured square laid on the plate's front face, keeping the image's shape.
-    // grow: 1 is its normal size. lift: how far in front of the plate it floats, so layers don't flicker.
+    // grow: 1 is its normal size. lift: how far in front of the plate's resting face it floats, so layers don't
+    // flicker (less while the plate is pushed in).
     private static void DrawLogo(Texture2D texture, float r, float grow, float lift, Color tint)
     {
         float z = r * 1.015f + PlateDepth / 2f;

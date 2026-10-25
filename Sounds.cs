@@ -17,6 +17,15 @@ public static class Sounds
     private static Sound projectorStart;
     private static Sound projectorStop;
     private const float ProjectorVolume = 0.5f;
+    private static float projectorWait = -1f;      // seconds until a delayed projector sound starts; below 0 when none is waiting
+    private static bool projectorWaitingOn;        // which one is waiting: start (true) or stop
+
+    // The power button (the logo). Your own sounds/power_click.wav if it's there, otherwise the radio's button click.
+    // The projector's whir starts PowerClickLead seconds after it, so the click is heard on its own first.
+    private static Sound powerClick;
+    private static bool hasPowerClick;
+    private const float PowerClickVolume = 0.8f;
+    public const float PowerClickLead = 0.1f;
 
     // The BIRBS / SHOP rocker. Your own sounds/rocker_click.wav if it's there, otherwise the radio's button click.
     private static Sound rockerClick;
@@ -64,6 +73,9 @@ public static class Sounds
         string rockerFile = Assets.PathTo("sounds/rocker_click.wav");
         hasRockerClick = File.Exists(rockerFile);
         if (hasRockerClick) rockerClick = Raylib.LoadSound(rockerFile);
+        string powerFile = Assets.PathTo("sounds/power_click.wav");
+        hasPowerClick = File.Exists(powerFile);
+        if (hasPowerClick) powerClick = Raylib.LoadSound(powerFile);
 
         holoHum = Raylib.LoadMusicStream(Assets.PathTo("sounds/holo_hum.wav"));
         Raylib.SetMusicVolume(holoHum, 0f);
@@ -100,6 +112,7 @@ public static class Sounds
         Raylib.UnloadSound(projectorStart);
         Raylib.UnloadSound(projectorStop);
         if (hasRockerClick) Raylib.UnloadSound(rockerClick);
+        if (hasPowerClick) Raylib.UnloadSound(powerClick);
         Raylib.UnloadMusicStream(holoHum);
 
         foreach (SoundPool[] pools in calls.Values)
@@ -127,6 +140,13 @@ public static class Sounds
 
         float birdTarget = birdsShowing ? 1f : 0f;
         birdVolume += (birdTarget - birdVolume) * MathF.Min(1f, HumFadeRate * dt);
+
+        // A projector sound waiting behind the power button's click
+        if (projectorWait >= 0f)
+        {
+            projectorWait -= dt;
+            if (projectorWait < 0f) StartProjectorSound(projectorWaitingOn);
+        }
     }
 
     // The bezel ring passing a notch (see Dial)
@@ -137,14 +157,33 @@ public static class Sounds
     }
 
     // The Birb Box switching on (a click and a rising whir) or off (a click and a falling one).
-    // Whichever is playing stops, so switching quickly never stacks them.
-    public static void PlayProjector(bool on)
+    // Whichever is playing (or waiting) stops, so switching quickly never stacks them.
+    // delay: seconds before it starts (the power button's click goes first).
+    public static void PlayProjector(bool on, float delay = 0f)
     {
         Raylib.StopSound(projectorStart);
         Raylib.StopSound(projectorStop);
+        projectorWait = -1f;
+        if (delay > 0f)
+        {
+            projectorWait = delay;
+            projectorWaitingOn = on;
+        }
+        else StartProjectorSound(on);
+    }
+
+    private static void StartProjectorSound(bool on)
+    {
         Sound sound = on ? projectorStart : projectorStop;
         Raylib.SetSoundVolume(sound, ProjectorVolume * EffectsLevel);
         Raylib.PlaySound(sound);
+    }
+
+    // The power button (the logo) going in
+    public static void PlayPowerClick()
+    {
+        if (hasPowerClick) PlayVaried(powerClick, PowerClickVolume);
+        else PlayVaried(radioButton, 0.7f);
     }
 
     // A push button on the radio going down

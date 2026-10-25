@@ -16,10 +16,10 @@ public class Rocker
 {
     // PLACEMENT around the pedestal (PI/2 is straight out the front)
     public const float Angle = MathF.PI / 2f;
-    private const float CenterY = -0.425f;          // the middle of the wood band (see Pedestal's LipBottom and LipSplit)
+    private const float CenterY = -0.525f;          // the middle of the wood band (see Pedestal's LipBottom and LipSplit)
     private const float SurfaceShare = 1.03f;       // the band's radius, as a share of view.HalfSize
 
-    // SIZES (rocker space units), low enough to fit the band's 0.35 height
+    // SIZES (rocker space units), leaving a margin inside the band's 0.55 height
     private const float BezelWidth = 1.2f, BezelHeight = 0.32f, BezelDepth = 0.06f;
     private const float HousingWidth = 1.06f, HousingHeight = 0.23f, HousingDepth = 0.08f;
     private const float CapWidth = 0.96f, CapHeight = 0.17f, CapDepth = 0.06f;
