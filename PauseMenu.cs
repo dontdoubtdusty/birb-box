@@ -5,11 +5,12 @@ using Raylib_cs;
 // Drawn with plain Raylib in the same panel style as the HUD.
 public class PauseMenu
 {
-    private enum Page { Main, Settings, Controls, ConfirmQuit }
-    private enum Choice { Resume, Designer, Fullscreen, Settings, FullscreenType, Controls, Quit, Back, YesQuit }
+    private enum Page { Main, Settings, Controls, ConfirmQuit, ConfirmNewWorld }
+    private enum Choice { Resume, Designer, Fullscreen, Settings, FullscreenType, NameTags, HandYellow, Controls, NewWorld, Quit, Back, YesQuit, YesNewWorld }
 
     public bool IsOpen { get; private set; }
     public bool QuitRequested { get; private set; }
+    public bool ShowingSettings => IsOpen && page == Page.Settings;    // the right hand is held up to show its color
 
     private Page page = Page.Main;
     private bool wasPaused;    // the pause state from before the menu opened
@@ -26,16 +27,25 @@ public class PauseMenu
     private const int SliderRowHeight = 38;    // label line plus the track under it
     private const int TrackHeight = 6;
 
-    // VOLUME SLIDERS (Settings page). Each one reads and writes a level in Sounds;
+    // SLIDERS (Settings page). The volume ones read and write a level in Sounds; the last sets the hands' shade.
     // Func is "a bit of code that returns a value", Action is "a bit of code that takes one".
-    private record VolumeSlider(string Label, Func<float> Get, Action<float> Set);
-    private static readonly VolumeSlider[] sliders =
+    // IsHandColor: drawn as a strip of the hand shades instead of a percent bar.
+    private record Slider(string Label, Func<float> Get, Action<float> Set, bool IsHandColor = false);
+    private static readonly Slider[] sliders =
     {
         new("Master", () => Sounds.Master, v => Sounds.Master = v),
         new("Hologram hum", () => Sounds.HumLevel, v => Sounds.HumLevel = v),
         new("Birds", () => Sounds.BirdLevel, v => Sounds.BirdLevel = v),
         new("Effects", () => Sounds.EffectsLevel, v => Sounds.EffectsLevel = v),
+        new("Hand color", () => GameEngine.Instance.Hands.Tone, SetHandTone, IsHandColor: true),
     };
+
+    // Moving the shade slider also leaves Groening yellow.
+    private static void SetHandTone(float tone)
+    {
+        GameEngine.Instance.Hands.Tone = tone;
+        GameEngine.Instance.Hands.Yellow = false;
+    }
     private int draggingSlider = -1;    // which slider the mouse is holding, -1 for none
 
     // ---------------- UPDATE (no drawing) ----------------
@@ -101,10 +111,12 @@ public class PauseMenu
         engine.HoveredBird = null;
     }
 
+    // Settings are only changed in here (or by the F key and the radio knob, caught on quit), so they're saved on the way out.
     private void Close(GameEngine engine)
     {
         IsOpen = false;
         engine.Paused = wasPaused;
+        Settings.Save(engine);
     }
 
     private void Pick(Choice choice, GameEngine engine)
@@ -119,7 +131,16 @@ public class PauseMenu
             case Choice.Fullscreen: engine.ToggleFullscreen(); break;
             case Choice.Settings: page = Page.Settings; break;
             case Choice.FullscreenType: engine.SetTrueFullscreen(!engine.TrueFullscreen); break;
+            case Choice.NameTags: CycleNameTags(engine.Renderer.ChatMessages); break;
+            case Choice.HandYellow: engine.Hands.Yellow = !engine.Hands.Yellow; break;
             case Choice.Controls: page = Page.Controls; break;
+            case Choice.NewWorld: page = Page.ConfirmNewWorld; break;
+            case Choice.YesNewWorld:
+                engine.Saves.StartNewWorld(engine);
+                engine.Saves.Save(engine);
+                EventLog.Add("The old patch fades into the fog. A new one flickers into view.");
+                Close(engine);
+                break;
             case Choice.Quit: page = Page.ConfirmQuit; break;
             case Choice.Back: page = Page.Main; break;
             case Choice.YesQuit: QuitRequested = true; break;
@@ -138,10 +159,14 @@ public class PauseMenu
                 return new()
                 {
                     (Choice.FullscreenType, engine.TrueFullscreen ? "Fullscreen type: True" : "Fullscreen type: Window"),
+                    (Choice.NameTags, NameTagsLabel(engine.Renderer.ChatMessages.NameLabels)),
+                    (Choice.HandYellow, engine.Hands.Yellow ? "Hands: Groening yellow (on)" : "Hands: Groening yellow"),
                     (Choice.Back, "Back"),
                 };
             case Page.ConfirmQuit:
                 return new() { (Choice.YesQuit, "Yes, quit"), (Choice.Back, "Cancel") };
+            case Page.ConfirmNewWorld:
+                return new() { (Choice.YesNewWorld, "Yes, start over"), (Choice.Back, "Cancel") };
             default:
                 return new()
                 {
@@ -150,10 +175,29 @@ public class PauseMenu
                     (Choice.Fullscreen, engine.IsFullscreen ? "Windowed" : "Fullscreen"),
                     (Choice.Settings, "Settings"),
                     (Choice.Controls, "Controls"),
+                    (Choice.NewWorld, "New world"),
                     (Choice.Quit, "Quit"),
                 };
         }
     }
+
+    // Named birds, then all birds, then off, then back around.
+    private static void CycleNameTags(ChatMessages chat)
+    {
+        chat.NameLabels = chat.NameLabels switch
+        {
+            NameLabelMode.Named => NameLabelMode.All,
+            NameLabelMode.All => NameLabelMode.Off,
+            _ => NameLabelMode.Named,
+        };
+    }
+
+    private static string NameTagsLabel(NameLabelMode mode) => mode switch
+    {
+        NameLabelMode.Named => "Name tags: Birds you named",
+        NameLabelMode.All => "Name tags: All birds",
+        _ => "Name tags: Off",
+    };
 
     private string PageTitle()
     {
@@ -162,6 +206,7 @@ public class PauseMenu
             case Page.Controls: return "CONTROLS";
             case Page.Settings: return "SETTINGS";
             case Page.ConfirmQuit: return "QUIT BIRB BOX?";
+            case Page.ConfirmNewWorld: return "START A NEW WORLD?";
             default: return "PAUSED";
         }
     }
@@ -171,8 +216,9 @@ public class PauseMenu
         switch (page)
         {
             case Page.Controls: return UIHandler.ControlLines;
-            case Page.Settings: return new[] { "True fullscreen keeps Windows popups,", "like the volume bar, off the game." };
-            case Page.ConfirmQuit: return new[] { "The world is not saved. The birds will be gone." };
+            case Page.Settings: return new[] { "True fullscreen keeps Windows popups,", "like the volume bar, off the game.", "Settings are kept between runs." };
+            case Page.ConfirmQuit: return new[] { "Your terrarium is saved and will be here next time." };
+            case Page.ConfirmNewWorld: return new[] { "The birds, seed, feeders, coins and bags here", "will be gone for good." };
             default: return new[] { GameEngine.Version };
         }
     }
@@ -246,8 +292,14 @@ public class PauseMenu
     }
 
     // Label and percent on top, then a track filled up to the value, with a small knob at the end of the fill.
-    private static void DrawSlider(Rectangle row, VolumeSlider slider, Color accent, bool held)
+    private static void DrawSlider(Rectangle row, Slider slider, Color accent, bool held)
     {
+        if (slider.IsHandColor)
+        {
+            DrawHandColorSlider(row, slider, accent, held);
+            return;
+        }
+
         float value = slider.Get();
         bool hovered = held || Raylib.CheckCollisionPointRec(Raylib.GetMousePosition(), row);
 
@@ -262,6 +314,36 @@ public class PauseMenu
 
         Vector2 knob = new Vector2(track.X + track.Width * value, track.Y + track.Height / 2f);
         Raylib.DrawCircleV(knob, hovered ? 7f : 6f, accent);
+    }
+
+    // The track is a strip of every shade the slider can pick; the knob is filled with the hands' color right now.
+    // While Groening yellow is on, the strip dims and the label says so.
+    private static void DrawHandColorSlider(Rectangle row, Slider slider, Color accent, bool held)
+    {
+        Hands hands = GameEngine.Instance.Hands;
+        bool hovered = held || Raylib.CheckCollisionPointRec(Raylib.GetMousePosition(), row);
+
+        UiText.Draw(slider.Label, (int)row.X, (int)row.Y + 4, TextSize, Palette.Text);
+        if (hands.Yellow)
+        {
+            const string Note = "Groening yellow";
+            UiText.Draw(Note, (int)(row.X + row.Width) - UiText.Measure(Note, TextSize), (int)row.Y + 4, TextSize, Palette.DimText);
+        }
+
+        Rectangle track = TrackRect(row);
+        const int Steps = 32;
+        float stepWidth = track.Width / Steps;
+        float strength = hands.Yellow ? 0.35f : 1f;
+        for (int i = 0; i < Steps; i++)
+        {
+            Color shade = Raylib.Fade(Hands.ToneColor((i + 0.5f) / Steps), strength);
+            Raylib.DrawRectangleRec(new Rectangle(track.X + i * stepWidth, track.Y, stepWidth + 1f, track.Height), shade);
+        }
+
+        Vector2 knob = new Vector2(track.X + track.Width * slider.Get(), track.Y + track.Height / 2f);
+        float radius = hovered ? 8f : 7f;
+        Raylib.DrawCircleV(knob, radius + 1.5f, accent);
+        Raylib.DrawCircleV(knob, radius, hands.SkinColor);
     }
 
     // The shared flat button plus a border, so the choices stand out over the shaded screen.

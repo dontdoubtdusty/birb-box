@@ -19,7 +19,7 @@ public class SeedStore
     public const string Name = "The Gilded Granary";
 
     public const float Scale = 2.4f;     // scene units per store unit
-    public float Yaw = 0f;               // how far the store is turned, in radians (separate from the birds' turn)
+    public float Yaw = 0f;               // how far the store is turned, in radians (always the same as the birds' turn, see GameEngine)
 
     // ROOM LAYOUT (store units)
     public const float WallRadius = 1.75f;
@@ -47,7 +47,7 @@ public class SeedStore
     public float FanAngle { get; private set; }
     private const float FanSpeed = 1.2f;    // radians per second
 
-    private bool visitedBefore = false;
+    public bool VisitedBefore { get; set; } = false;    // the welcome line is only said on the first visit
 
     public SeedStore()
     {
@@ -76,10 +76,10 @@ public class SeedStore
     public void OnEnter()
     {
         SelectedItem = null;
-        if (!visitedBefore)
+        if (!VisitedBefore)
         {
             EventLog.Add($"Welcome to {Name}, purveyors of fine seed since the year 1312. Click a jar or sack to see its price.");
-            visitedBefore = true;
+            VisitedBefore = true;
         }
         EventLog.Add($"{Keeper.Name} is minding the counter today.");
     }
@@ -88,6 +88,17 @@ public class SeedStore
     {
         SelectedItem = null;
         HoveredItem = null;
+    }
+
+    // From a save: how long until each item is back on the shelf, in shelf order. The scraper stays sold once owned.
+    public void RestoreTimers(List<float> timers, bool scraperOwned)
+    {
+        SelectedItem = null;
+        for (int i = 0; i < Stock.Count; i++)
+        {
+            Stock[i].RestockTimer = i < timers.Count ? timers[i] : 0f;
+            if (Stock[i].IsTool) Stock[i].RestockTimer = scraperOwned ? float.PositiveInfinity : 0f;
+        }
     }
 
     // Finds the jar or sack under the mouse, only items still on the shelf.

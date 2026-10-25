@@ -3,19 +3,20 @@ using Raylib_cs;
 
 // Draws the whole scene. Nothing in here changes the simulation.
 //
-// Three steps:
+// Four steps:
 //  1. The hologram is drawn into an off-screen texture (sceneTarget) with a clear background, through the
-//     lifted HologramCamera so it floats above the pedestal (see HoloCamera.HoloLift).
+//     lifted HologramCamera so it floats above the pedestal, and grows in the Hologram View (see HoloCamera).
 //     Things inside it use hologram.fs for tint, fog and scan bands. Its contents and the cube's edges
 //     are turned by view.Yaw (or the store's Yaw). Nothing is drawn while the projector is off,
 //     and while it starts up the picture rises from the floor ('reveal' in hologram.fs).
 //     The box shows either the bird world or the store (see BoxMode). While it shows the store,
 //     the bird world is also drawn into a small "zoo camera" texture for the world map panel.
 //  2. The room is drawn straight to the screen: the backdrop (the cabin, the table, the radio and the other
-//     things on it), then the pedestal and the projector's beams. They're lit by room.fs, which also gets
+//     things on it), then the pedestal, its rocker switch and the projector's beams. They're lit by room.fs, which also gets
 //     the box's own light while it's on. No glow or scanlines here.
 //  3. The hologram texture is laid over the room through post.fs for glow and scanlines.
 //     The camera always looks down on the pedestal, so nothing of the pedestal is ever in front of the hologram.
+//  4. The player's hands (see Hands), in the room's 3D space again, on top of the hologram.
 //
 // The pieces live in their own files: WorldDrawer (birds, food, floor...), FieldEdges (the cube's glowing edges and beams),
 // StoreRenderer, Pedestal and Backdrop. This file sets up the passes and the shaders they share.
@@ -52,7 +53,6 @@ public class HologramRenderer
         Projection = CameraProjection.Perspective
     };
 
-    private readonly HoloSign sign = new HoloSign();
     private readonly Pedestal pedestal = new Pedestal();
     private readonly StoreRenderer storeRenderer = new StoreRenderer();
     private readonly WorldDrawer worldDrawer = new WorldDrawer();
@@ -93,7 +93,6 @@ public class HologramRenderer
         Backdrop.Load();
         pedestal.Load(Backdrop.RoomShader, view);    // after the Backdrop, whose room shader it uses
         FeedTexture = Raylib.LoadRenderTexture(FeedSize, FeedSize);
-        sign.Load();
     }
 
     public void Unload()
@@ -104,7 +103,6 @@ public class HologramRenderer
         storeRenderer.Unload();
         Backdrop.Unload();
         Raylib.UnloadRenderTexture(FeedTexture);
-        sign.Unload();
         ChatMessages.Unload();
         Raylib.UnloadShader(HoloShader);
         Raylib.UnloadShader(postShader);
@@ -113,7 +111,7 @@ public class HologramRenderer
 
     // While the Birb Designer is open, its birb is drawn in place of the world's food, coins and birds.
     public void Draw(HoloCamera holoCamera, ViewWindow view, BoxMode mode, SeedStore store, Bird? selected, Bird? hovered,
-                     BirbDesigner designer, Radio radio, Projector projector)
+                     BirbDesigner designer, Radio radio, Projector projector, Hands hands, Rocker rocker)
     {
         int width = Raylib.GetRenderWidth();
         int height = Raylib.GetRenderHeight();
@@ -131,8 +129,8 @@ public class HologramRenderer
         SetHologramUniforms(camera, view, mode.Swallow, projector.Cube);
         fieldEdges.SetUniforms(camera, view.Height);
 
-        // The bezel ring, the cube and its beams all turn with whatever the box is showing
-        float ringYaw = mode.InStore ? store.Yaw : view.Yaw;
+        // The bezel ring, the cube and its beams all turn with the box (the birds and the store share one turn)
+        float ringYaw = view.Yaw;
 
         Raylib.BeginTextureMode(sceneTarget);
             Raylib.ClearBackground(Color.Blank);
@@ -152,7 +150,6 @@ public class HologramRenderer
                         else worldDrawer.DrawContents(view, selected, hovered, Palette.ToColor(HoloColor));
                     }
                     fieldEdges.Draw(view.HalfWidth, view.Height, ringYaw, CurtainHeight, projector.Cube, HoloColor, WallStrength, camera.Position);
-                    if (!designer.IsOpen && projector.Ready) sign.Draw(view, mode, HoloColor);
                     if (!designer.IsOpen && !mode.InStore) ChatMessages.Draw(camera, view);
                 Raylib.EndMode3D();
                 Rlgl.SetLineWidth(1f);
@@ -161,7 +158,7 @@ public class HologramRenderer
 
         // The box's light on the room: from the hologram (as far as the cube is up) and from the lens
         Vector3 lens = Pedestal.LensSpot(view);
-        Vector3 holoLight = new Vector3(0f, HoloCamera.HoloLift + HoloLightHeight, 0f);
+        Vector3 holoLight = new Vector3(0f, holoCamera.HoloFloorY + HoloLightHeight * holoCamera.HoloScale, 0f);
         Backdrop.SetProjectorLights(holoLight, HoloColor * projector.Cube, lens, HoloColor * projector.Beams, Pedestal.WellRadius(view));
 
         Backdrop.Draw(roomCamera, view.HalfSize, radio);
@@ -169,9 +166,12 @@ public class HologramRenderer
         {
             Raylib.BeginMode3D(roomCamera);
                 pedestal.Draw(Backdrop, view, ringYaw, Palette.ToColor(HoloColor), projector);
+                rocker.Draw(Backdrop, view, mode.Heading, projector.Lens);
                 if (projector.Beams > 0f)
                 {
-                    FieldEdges.DrawProjection(lens, view.HalfWidth, ringYaw, HoloCamera.HoloLift, HoloColor, projector.Beams, roomCamera.Position);
+                    // The beams reach the cube's floor corners as it is right now, grown or on the pedestal
+                    FieldEdges.DrawProjection(lens, view.HalfWidth * holoCamera.HoloScale, ringYaw, holoCamera.HoloFloorY,
+                                              HoloColor, projector.Beams, roomCamera.Position);
                 }
             Raylib.EndMode3D();
         }
@@ -188,6 +188,12 @@ public class HologramRenderer
             Raylib.DrawTexturePro(sceneTarget.Texture, source, dest, Vector2.Zero, 0f, Color.White);
         Raylib.EndShaderMode();
         Raylib.EndBlendMode();
+
+        // 4. The hands, in front of the hologram. Laying the hologram over the room didn't touch the room's depth,
+        //    so the radio and the pedestal still hide whatever part of a hand is behind them.
+        Raylib.BeginMode3D(roomCamera);
+            hands.Draw(Backdrop);
+        Raylib.EndMode3D();
     }
 
     // The bird world as seen by the fixed zoo camera, drawn into FeedTexture.

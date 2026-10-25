@@ -18,3 +18,11 @@ Thumbs.db
 
 # Your own music for the radio (also holds web-stations.txt and its cache)
 Radio/
+
+# Your saved terrarium (and a save set aside because it couldn't be read)
+birbbox-save*.json
+birbbox-save*.json.tmp
+
+# Your settings (volumes, fullscreen, name tags, hand color)
+birbbox-settings.json
+birbbox-settings.json.tmp

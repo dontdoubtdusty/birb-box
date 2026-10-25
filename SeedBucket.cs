@@ -133,6 +133,23 @@ public class SeedBucket
         Version++;
     }
 
+    // ---------------- SAVING (see SaveGame.cs) ----------------
+
+    public BucketSave ToSave() => new()
+    {
+        Layers = Layers.Select(layer => new LayerSave { Seed = layer.Seed, Amount = layer.Amount }).ToList(),
+        Mixed = new(Mixed),
+    };
+
+    public void Restore(BucketSave save)
+    {
+        Layers.Clear();
+        Mixed.Clear();
+        foreach (LayerSave layer in save.Layers) Layers.Add(new Layer(layer.Seed, layer.Amount));
+        foreach ((SeedType seed, float amount) in save.Mixed) Mixed[seed] = amount;
+        Version++;
+    }
+
     public float AmountOf(SeedType seed)
     {
         Mixed.TryGetValue(seed, out float amount);

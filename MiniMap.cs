@@ -183,6 +183,14 @@ public class MiniMap
         Raylib.BeginScissorMode((int)mapArea.X, (int)mapArea.Y, MapSize, MapSize);
         Raylib.DrawRectangleRec(mapArea, new Color(51, 38, 26, 255));
 
+        // Rocks at their real size, under everything else
+        foreach (Rock rock in World.Instance.GetAllEntities<Rock>())
+        {
+            Vector2 center = ToMap(rock.Position);
+            float radius = MathF.Max(1.5f, Vector2.Distance(center, ToMap(rock.Position + new Vector3(rock.Radius, 0f, 0f))));
+            Raylib.DrawCircleV(center, radius, new Color(120, 114, 104, 255));
+        }
+
         foreach (Food food in World.Instance.GetAllEntities<Food>())
         {
             Color c = Seeds.Get(food.MainSeed).Color;

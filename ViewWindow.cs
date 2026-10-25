@@ -10,7 +10,7 @@ using Raylib_cs;
 //  - scene: what the camera sees, after the hologram is turned by Yaw (BoxToScene / SceneToBox)
 //
 // The cube turns with its contents like a turntable, so in box space (and in the world) its sides
-// always run along X and Z. Its corners are rounded off by the fog (see EdgeAmount).
+// always run along X and Z. The ground reaches its square sides; a thin fog at the walls (FogStart) fades things out.
 // HalfWidth and Height are the cube's size in box units (it never changes size on the pedestal).
 // WorldHalfWidth and WorldHeight are how much of the world fits inside it at the current zoom.
 public class ViewWindow
@@ -22,15 +22,11 @@ public class ViewWindow
     // SHAPE (Width and Fog start sliders in the Tab tools)
     public float CubeScale = 0.7f;          // half the cube's width as a share of the pedestal; 0.7 puts its corners over the bezel ring
     public const float MaxCubeScale = 0.74f;
-    public float FogStart = 0.9f;           // share of the way to the sides that stays clear; fog fills the rest
+    public float FogStart = 0.97f;          // share of the way to the sides that stays clear; a thin fog fills the rest
     public float HalfWidth => HalfSize * CubeScale;          // the cube spans -HalfWidth..HalfWidth on X and Z
     public float CornerReach => HalfWidth * MathF.Sqrt(2f);  // from the middle out to a corner
     public float PanSpeed = 8f;
     public float Yaw = 0f;                  // how far the hologram is turned around its vertical axis, in radians
-
-    // How round the fog makes the corners. Must match CornerPower in hologram.fs.
-    // Lower is rounder (2 is a circle); higher is closer to a sharp square.
-    public const float CornerPower = 6f;
 
     // ZOOM: box units per world unit. 1 = Close, smaller shows more of the world with smaller birds, bigger shows less.
     public static readonly float[] ZoomLevels = { 0.25f, 0.5f, 1f, 3f };    // Wide, Field, Close, Perch
@@ -58,21 +54,18 @@ public class ViewWindow
     }
 
     // How far out toward the cube's sides a point is (x, z measured from the middle): 0 in the middle, 1 at a side.
-    // The corners count as further out than a plain square would say, which rounds them off.
-    // Same math as the fog in hologram.fs, so anything here lines up with what you see.
+    // Square, so a corner counts as 1 too. Same math as the fog in hologram.fs, so anything here lines up with what you see.
     public static float EdgeAmount(float x, float z, float halfWidth)
     {
-        float ax = MathF.Abs(x) / halfWidth;
-        float az = MathF.Abs(z) / halfWidth;
-        return MathF.Pow(MathF.Pow(ax, CornerPower) + MathF.Pow(az, CornerPower), 1f / CornerPower);
+        return MathF.Max(MathF.Abs(x), MathF.Abs(z)) / halfWidth;
     }
 
-    // Is this world position inside the cube, rounded corners included (plus an optional margin, in world units)?
+    // Is this world position inside the cube (plus an optional margin, in world units)?
     public bool Contains(Vector3 worldPos, float margin = 0f)
     {
         float reach = WorldHalfWidth + margin;
         float dx = worldPos.X - Center.X, dz = worldPos.Z - Center.Y;
-        if (reach <= 0f || MathF.Abs(dx) > reach || MathF.Abs(dz) > reach) return false;    // quick miss
+        if (reach <= 0f) return false;
         return EdgeAmount(dx, dz, reach) <= 1f && worldPos.Y <= WorldHeight + margin;
     }
 
@@ -87,6 +80,7 @@ public class ViewWindow
     public void ZoomBy(float wheel)
     {
         Zoom = Math.Clamp(Zoom * MathF.Pow(1.1f, wheel), ZoomLevels[0], ZoomLevels[^1]);
+        JumpTo(Center);    // zooming out near an edge pushes the window back inside
     }
 
     // The +/- buttons: jump to the next fixed level in (direction 1) or out (direction -1).
@@ -97,16 +91,17 @@ public class ViewWindow
         {
             foreach (float level in ZoomLevels)
             {
-                if (level > Zoom + Tolerance) { Zoom = level; return; }
+                if (level > Zoom + Tolerance) { Zoom = level; break; }
             }
         }
         else
         {
             for (int i = ZoomLevels.Length - 1; i >= 0; i--)
             {
-                if (ZoomLevels[i] < Zoom - Tolerance) { Zoom = ZoomLevels[i]; return; }
+                if (ZoomLevels[i] < Zoom - Tolerance) { Zoom = ZoomLevels[i]; break; }
             }
         }
+        JumpTo(Center);
     }
 
     // WASD pans relative to the screen: W always moves "into" the hologram, however it's turned.
@@ -130,9 +125,11 @@ public class ViewWindow
         return true;
     }
 
+    // Moves the window, stopping where its sides reach the world's edge, so the view never shows past the world.
+    // If the window is wider than the world it stays in the middle.
     public void JumpTo(Vector2 newCenter)
     {
-        float limit = World.Instance.HalfSize;
+        float limit = MathF.Max(0f, World.Instance.HalfSize - WorldHalfWidth);
         Center = new Vector2(
             Math.Clamp(newCenter.X, -limit, limit),
             Math.Clamp(newCenter.Y, -limit, limit));

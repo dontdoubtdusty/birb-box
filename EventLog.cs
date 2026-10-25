@@ -7,6 +7,14 @@ public static class EventLog
     public static IReadOnlyList<string> Entries => entries;
     public static int Version { get; private set; }
 
+    // From a save: the log as it was, newest last.
+    public static void Restore(IEnumerable<string> saved)
+    {
+        entries.Clear();
+        entries.AddRange(saved.TakeLast(MaxEntries));
+        Version++;
+    }
+
     public static void Add(string message)
     {
         entries.Add($"[{Clock.Format(GameEngine.Instance.SimTime)}] {message}");

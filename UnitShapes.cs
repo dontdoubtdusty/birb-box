@@ -65,4 +65,28 @@ public class UnitShapes
         Raylib.DrawModelEx(sphere, center, Vector3.UnitY, yawDegrees, radii, color);
         DrawStats.CountModel();
     }
+
+    // A sphere squashed to these radii along its own X, Y and Z, then turned any which way (used by the hands).
+    public void BallTurned(Vector3 center, Vector3 radii, Color color, Quaternion turn)
+    {
+        ToAxisAngle(turn, out Vector3 axis, out float degrees);
+        Raylib.DrawModelEx(sphere, center, axis, degrees, radii, color);
+        DrawStats.CountModel();
+    }
+
+    // Raylib turns models by an axis and an angle; any turn can be written that way.
+    private static void ToAxisAngle(Quaternion turn, out Vector3 axis, out float degrees)
+    {
+        Quaternion q = Quaternion.Normalize(turn);
+        if (q.W < 0f) q = -q;    // the same turn, the short way round
+        float s = MathF.Sqrt(MathF.Max(0f, 1f - q.W * q.W));
+        if (s < 1e-5f)
+        {
+            axis = Vector3.UnitY;
+            degrees = 0f;
+            return;
+        }
+        axis = new Vector3(q.X, q.Y, q.Z) / s;
+        degrees = 2f * MathF.Acos(Math.Clamp(q.W, -1f, 1f)) * Raylib.RAD2DEG;
+    }
 }

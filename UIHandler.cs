@@ -15,9 +15,12 @@ public class UIHandler
         "Drag sideways: turn the box   Drag up/down: tilt",
         "Wheel on hologram or map: zoom view",
         "Wheel elsewhere: move closer / farther",
+        "Double-click box: Hologram View (again: leave)",
+        "Hologram View: wheel leans in to the glass",
         "WASD: pan (Shift = faster)",
         "Hold right mouse: pour bucket",
         "Click bird: select   Space: pause",
+        "Double-click bird (or its name): follow",
         "Click name on bird card: rename",
         "Click minimap: jump view   +/-: zoom levels",
         "Click gunk: scrape (needs Muck Scraper)",
@@ -98,7 +101,7 @@ public class UIHandler
             ImGui.SliderFloat("Scanlines", ref r.ScanlineStrength, 0f, 0.5f);
             ImGui.Checkbox("Smooth edges", ref r.SmoothEdges);
             ImGui.SliderFloat("Width", ref engine.View.CubeScale, 0.5f, ViewWindow.MaxCubeScale, "%.2f");
-            ImGui.SliderFloat("Fog start", ref engine.View.FogStart, 0.3f, 0.95f, "%.2f");
+            ImGui.SliderFloat("Fog start", ref engine.View.FogStart, 0.3f, 0.99f, "%.2f");
             ImGui.Checkbox("Projector base", ref r.ShowProjector);
         }
 
@@ -126,9 +129,19 @@ public class UIHandler
             if (onlyBirdsInView && !engine.View.Contains(bird.Position)) continue;
 
             ImGui.PushID(bird.EntityID);
-            if (ImGui.Selectable($"{bird.Name}  ({bird.State})", bird == engine.SelectedBird))
+            // Click: select (again: deselect). Double-click: select and follow.
+            // AllowDoubleClick makes the second click of a double-click report on its press, and skip its release.
+            if (ImGui.Selectable($"{bird.Name}  ({bird.State})", bird == engine.SelectedBird, ImGuiSelectableFlags.AllowDoubleClick))
             {
-                engine.SelectedBird = bird == engine.SelectedBird ? null : bird;
+                if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
+                {
+                    engine.SelectedBird = bird;
+                    engine.FollowSelected = true;
+                }
+                else
+                {
+                    engine.SelectedBird = bird == engine.SelectedBird ? null : bird;
+                }
             }
             if (ImGui.IsItemHovered())
             {

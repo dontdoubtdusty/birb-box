@@ -5,7 +5,7 @@ public class World
     public static World Instance { get; private set; } = null!;
 
     // The world is a square from -HalfSize to +HalfSize on X and Z. Ground is Y = 0.
-    public float HalfSize { get; } = 40f;
+    public float HalfSize { get; } = 28f;
     public const float Gravity = 9.8f;
 
     private readonly List<Entity> entities = new();
@@ -34,6 +34,15 @@ public class World
         foreach (Entity e in toAdd) entities.Add(e);
         toRemove.Clear();
         toAdd.Clear();
+    }
+
+    // Empties the world at once, including anything still queued (used when loading a save or starting over).
+    public void Clear()
+    {
+        entities.Clear();
+        toAdd.Clear();
+        toRemove.Clear();
+        typeLists.Clear();
     }
 
     public IReadOnlyList<Entity> Entities => entities;
@@ -65,5 +74,21 @@ public class World
     {
         float range = HalfSize - edgeMargin;
         return new Vector3(Rng.Range(-range, range), 0, Rng.Range(-range, range));
+    }
+
+    // A random ground point that leans toward the middle of the world, but can still land anywhere.
+    public Vector3 RandomGroundPointNearMiddle(float edgeMargin = 2f)
+    {
+        float range = HalfSize - edgeMargin;
+        float x = (Rng.Range(-range, range) + Rng.Range(-range, range)) * 0.5f;
+        float z = (Rng.Range(-range, range) + Rng.Range(-range, range)) * 0.5f;
+        return new Vector3(x, 0, z);
+    }
+
+    // The same position moved back inside the world (at least margin from the edge) if it's outside. Height is kept.
+    public Vector3 PullInside(Vector3 pos, float margin = 1f)
+    {
+        float limit = HalfSize - margin;
+        return new Vector3(Math.Clamp(pos.X, -limit, limit), pos.Y, Math.Clamp(pos.Z, -limit, limit));
     }
 }

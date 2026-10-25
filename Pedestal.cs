@@ -1,19 +1,21 @@
 using System.Numerics;
 using Raylib_cs;
 
-// The brass pedestal under the hologram, and everything built into it:
-//  - a wide plinth, a body ringed with buttons, and a bright lip with the bezel ring
+// The pedestal under the hologram: a dark wood cabinet with brass fittings, and everything built into it:
+//  - a wide plinth, a body ringed with buttons, a plain band, and the polished brass bezel ring on top
 //  - inside the bezel it's hollow: a deep well, lit by the hologram floating above it
 //  - the projector lens inside the well, right behind the logo, throwing the beams up to the cube (see FieldEdges)
 //  - the Birb Box logo on a brass plaque at the front. It's the power button, and it glows with the lens.
 //  - two glowing windows on either side of the logo: Birbs in the cube (left) and Coins (right)
 //  - a row of LEDs on the plinth below the logo, one per bird type, lit while that type is in the cube
+//  - in the band under the ring, above the logo, the BIRB / SHOP rocker switch (its own file, Rocker)
 //  - on the bezel ring, turning with the hologram: notches around its side, the compass letters and
 //    build name printed on its top
 // The pedestal itself never turns, so the windows and LEDs always face the player.
 // Angles are measured around the pedestal; PI/2 is straight out the front (+Z), where the logo is.
 //
-// It's a real object in the room: drawn right after the Backdrop, lit by room.fs with a bit of metal shine,
+// It's a real object in the room: drawn right after the Backdrop, lit by room.fs (a little varnish sheen on the wood,
+// metal shine on the brass),
 // and the hologram is laid over it afterward. The lights built into it (windows, LEDs, lens, logo) follow the power.
 public class Pedestal
 {
@@ -52,14 +54,20 @@ public class Pedestal
     private const float LensRadius = 0.26f;
     private const float LensInset = 0.45f;       // how far in from the well's wall the lens sits
 
+    // WOOD: the cabinet (plinth, body, plain band). A low shine reads as varnish rather than metal.
+    private static readonly Color PlinthWood = new Color(50, 31, 20, 255);
+    private static readonly Color BodyWood = new Color(82, 51, 31, 255);
+    private const float WoodShine = 0.12f;
     // BRASS: brighter than the flat Palette colors, since the room light takes some away. Shine is how polished it looks.
-    private static readonly Color PlinthBrass = new Color(128, 96, 62, 255);
-    private static readonly Color BodyBrass = new Color(214, 170, 104, 255);
+    // The compass ring is the showpiece, the most polished part; the small fittings (buttons, plaque, frames) a bit less.
+    private static readonly Color RingBrass = new Color(252, 214, 134, 255);
+    private const float RingShine = 0.85f;
     private static readonly Color LipBrass = new Color(240, 200, 124, 255);
-    private const float BrassShine = 0.35f;
+    private const float BrassShine = 0.6f;
+    private static readonly Color Seam = Palette.BrassDark;
     // Inside the well: darker, duller brass, so the hologram's light on it stands out
     private static readonly Color InnerBrass = new Color(104, 80, 54, 255);
-    private const float InnerShine = 0.2f;
+    private const float InnerShine = 0.25f;
 
     private static readonly Color Glass = new Color(16, 24, 28, 255);
     private static readonly Color Engraving = Palette.BrassDark;
@@ -67,8 +75,8 @@ public class Pedestal
     private Texture2D logoTexture;       // black, stamped into the plate
     private Texture2D logoGlowTexture;   // white, tinted the hologram color and added on top while the lens is lit
 
-    // The plinth, body, lip and well are each one mesh, built once at load (see LatheMesh).
-    private Model plinthModel, bodyModel, lipModel, wellModel;
+    // The plinth, body, band, bezel ring and well are each one mesh, built once at load (see LatheMesh).
+    private Model plinthModel, bodyModel, bandModel, bezelModel, wellModel;
 
     // Each number is drawn into a small texture, which is then laid on its window like a sticker.
     // The textures are only redrawn when the number changes.
@@ -129,11 +137,12 @@ public class Pedestal
         Raylib.UnloadRenderTexture(topTexture);
         Raylib.UnloadModel(plinthModel);
         Raylib.UnloadModel(bodyModel);
-        Raylib.UnloadModel(lipModel);
+        Raylib.UnloadModel(bandModel);
+        Raylib.UnloadModel(bezelModel);
         Raylib.UnloadModel(wellModel);
     }
 
-    // The four brass pieces as side profiles (radius, height), spun into meshes.
+    // The five pieces as side profiles (radius, height), spun into meshes.
     // r is the body's radius at the top; the body and plinth flare out slightly toward the table.
     private void BuildBody(Shader roomShader, float r)
     {
@@ -155,10 +164,16 @@ public class Pedestal
             new Vector2(r, LipBottom),
         }, Segments, roomShader);
 
-        // Up the plain band, out under the bezel, up the bezel's side, and in across its top to the well's edge
-        lipModel = LatheMesh.Build(new[]
+        // The plain wood band just under the ring
+        bandModel = LatheMesh.Build(new[]
         {
             new Vector2(r * 1.03f, LipBottom),
+            new Vector2(r * 1.03f, LipSplit),
+        }, Segments, roomShader);
+
+        // The brass ring: out under the bezel, up its side, and in across its top to the well's edge
+        bezelModel = LatheMesh.Build(new[]
+        {
             new Vector2(r * 1.03f, LipSplit),
             new Vector2(bezelRadius, LipSplit),
             new Vector2(bezelRadius, LipTop),
@@ -270,6 +285,18 @@ public class Pedestal
 
     public static float WellRadius(ViewWindow view) => view.HalfSize * WellShare;
 
+    // The middle of the logo plate's front face, where a finger presses the power button.
+    public static Vector3 LogoFace(ViewWindow view) => new Vector3(0f, PlateY, view.HalfSize * 1.015f + PlateDepth);
+
+    // A spot on top of the bezel ring, just in from its outer edge, at this angle (PI/2 is the front).
+    // outward: straight out from the middle of the pedestal at that spot.
+    public static Vector3 RingTop(ViewWindow view, float angle, out Vector3 outward)
+    {
+        outward = new Vector3(MathF.Cos(angle), 0f, MathF.Sin(angle));
+        float radius = view.HalfSize * 1.05f - 0.2f;
+        return outward * radius + new Vector3(0f, LipTop, 0f);
+    }
+
     // Is this room-space ray pointing at the logo plate (the power button)?
     public static bool RayHitsLogo(Ray roomRay, ViewWindow view)
     {
@@ -294,14 +321,20 @@ public class Pedestal
         Vector3 lens = LensSpot(view);
         float power = projector.Lens;
 
-        // Lit, polished brass
+        // The varnished wood cabinet
+        backdrop.SetShine(WoodShine);
+            Raylib.DrawModel(plinthModel, Vector3.Zero, 1f, PlinthWood);
+            Raylib.DrawModel(bodyModel, Vector3.Zero, 1f, BodyWood);
+            Raylib.DrawModel(bandModel, Vector3.Zero, 1f, BodyWood);
+            DrawStats.CountModel();
+            DrawStats.CountModel();
+            DrawStats.CountModel();
+        // The compass ring, the most polished brass
+        backdrop.SetShine(RingShine);
+            Raylib.DrawModel(bezelModel, Vector3.Zero, 1f, RingBrass);
+            DrawStats.CountModel();
+        // Brass fittings set into the wood
         backdrop.SetShine(BrassShine);
-            Raylib.DrawModel(plinthModel, Vector3.Zero, 1f, PlinthBrass);
-            Raylib.DrawModel(bodyModel, Vector3.Zero, 1f, BodyBrass);
-            Raylib.DrawModel(lipModel, Vector3.Zero, 1f, LipBrass);
-            DrawStats.CountModel();
-            DrawStats.CountModel();
-            DrawStats.CountModel();
             DrawButtons(shapes, r);
             DrawLogoPlate(shapes, r);
             DrawWindowFrame(shapes, MathF.PI / 2f + WindowAngle, windowRadius);
@@ -315,8 +348,8 @@ public class Pedestal
         backdrop.SetShine(0f);
 
         // Unlit details: seams, printed markings, glass, bulbs, the logo and the lens
-        Raylib.DrawCylinderWires(new Vector3(0, LipSplit, 0), bezelRadius, bezelRadius, 0.001f, 64, PlinthBrass);
-        Raylib.DrawCylinderWires(new Vector3(0, LipTop, 0), bezelRadius, bezelRadius, 0.01f, 64, PlinthBrass);
+        Raylib.DrawCylinderWires(new Vector3(0, LipSplit, 0), bezelRadius, bezelRadius, 0.001f, 64, Seam);
+        Raylib.DrawCylinderWires(new Vector3(0, LipTop, 0), bezelRadius, bezelRadius, 0.01f, 64, Seam);
         DrawLogo(logoTexture, r, 1f, 0.005f, Color.White);
         DrawBezelMarkings(bezelRadius, wellRadius, ringYaw);
         DrawWindowGlass(MathF.PI / 2f + WindowAngle, windowRadius);

@@ -1,6 +1,6 @@
 #version 330
 
-// Used for everything INSIDE the hologram: the dirt floor, food, birbs and the Gilded Granary.
+// Used for everything INSIDE the hologram: the grass-and-dirt floor, food, birbs and the Gilded Granary.
 // It adds simple lighting, the hologram tint, rim glow, scan bands, and the edge fog.
 
 in vec3 fragPosition;
@@ -9,6 +9,7 @@ in vec4 fragColor;
 in vec3 fragNormal;
 
 uniform sampler2D texture0;
+uniform sampler2D texture1;  // the floor's wear map (GroundWear): r 0 grass, 1 worn bare; a lush grass around rocks
 uniform vec4 colDiffuse;
 
 uniform vec3 holoOrigin;     // middle of this hologram's floor, normally (0,0,0)
@@ -18,8 +19,9 @@ uniform float fogStart;      // share of the way to the sides that stays clear b
 uniform float swallow;       // 0 normally; rises to 1 while switching scenes, rolling the fog in until nothing shows
 uniform float reveal;        // 1 normally; while the projector starts it rises from 0 and the picture grows up from the floor
 uniform float cubeHeight;
-uniform vec2 viewCenter;     // world X,Z at the hologram's center (so the dirt pattern pans)
-uniform float viewZoom;      // box units per world unit (so the dirt pattern zooms)
+uniform vec2 viewCenter;     // world X,Z at the hologram's center (so the ground pattern pans)
+uniform float viewZoom;      // box units per world unit (so the ground pattern zooms)
+uniform float worldHalfSize; // the world spans -worldHalfSize..worldHalfSize (to find a spot on the wear map)
 uniform vec3 viewPos;        // camera position, for rim glow
 uniform vec3 holoColor;
 uniform float time;
@@ -27,8 +29,6 @@ uniform int isFloor;
 uniform int flatShade;       // 1 while drawing birbs: each triangle gets one flat shade (the faceted look)
 
 out vec4 finalColor;
-
-const float CornerPower = 6.0;    // how round the fog makes the corners; must match ViewWindow.CornerPower
 
 float hash(vec2 p)
 {
@@ -44,31 +44,65 @@ float noise(vec2 p)
                mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
 }
 
+// Bare dirt, with a few light seed specks scattered on it.
 vec3 dirtColor(vec2 world)
 {
     float n = noise(world * 1.3) * 0.65 + noise(world * 5.0) * 0.35;
     vec3 dirt = mix(vec3(0.27, 0.19, 0.12), vec3(0.42, 0.30, 0.19), n);
 
-    // Scattered seeds: some grid cells get one small light speck
     vec2 cell = floor(world * 3.0);
     vec2 inCell = fract(world * 3.0);
     vec2 seedPos = vec2(hash(cell + 1.3), hash(cell + 7.7)) * 0.6 + 0.2;
     float hasSeed = step(0.8, hash(cell));
     float seed = hasSeed * (1.0 - smoothstep(0.03, 0.06, length(inCell - seedPos)));
-    dirt = mix(dirt, vec3(0.86, 0.74, 0.48), seed);
+    return mix(dirt, vec3(0.86, 0.74, 0.48), seed);
+}
+
+// Grass: soft light and dark clumps, plus fine speckle so it reads as many small blades.
+vec3 grassColor(vec2 world)
+{
+    float clumps = noise(world * 0.9) * 0.6 + noise(world * 3.0) * 0.4;
+    vec3 grass = mix(vec3(0.20, 0.33, 0.12), vec3(0.33, 0.47, 0.18), clumps);
+    float blades = noise(world * 14.0);
+    return grass * (0.85 + 0.3 * blades);
+}
+
+// The ground at a world position: patches of grass and dirt fixed in the world, with worn spots (texture1) turning bare.
+vec3 groundColor(vec2 world)
+{
+    // Big soft patches; above the threshold is grass. A little fine noise keeps the patch edges ragged.
+    float patches = noise(world * 0.16) * 0.6 + noise(world * 0.45) * 0.3 + noise(world * 2.2) * 0.1;
+    float grass = smoothstep(0.36, 0.46, patches);
+
+    // Wear: 0 untouched, 1 bare. The ragged noise makes worn spots fray at the edges instead of being round.
+    vec2 wearUV = (world + worldHalfSize) / (2.0 * worldHalfSize);
+    vec4 wearMap = texture(texture1, wearUV);
+    float wear = wearMap.r;
+    float lush = wearMap.a;
+    float frayed = wear + (noise(world * 4.0) - 0.5) * 0.3;
+
+    // Around rocks the grass fills in even where the patches would leave dirt
+    grass = max(grass, lush * smoothstep(0.1, 0.5, lush + (noise(world * 3.0) - 0.5) * 0.4));
+    grass *= 1.0 - smoothstep(0.25, 0.65, frayed);
+
+    // ...and grows deeper green, with thicker blades
+    vec3 grassLook = grassColor(world);
+    grassLook = mix(grassLook, grassLook * vec3(0.85, 1.12, 0.8) * (0.9 + 0.25 * noise(world * 22.0)), lush * 0.8);
+
+    vec3 ground = mix(dirtColor(world), grassLook, grass);
 
     // Faint world grid, so panning is easy to see
     vec2 g = abs(fract(world * 0.5) - 0.5);
     float line = smoothstep(0.485, 0.5, max(g.x, g.y));
-    dirt += holoColor * line * 0.12;
+    ground += holoColor * line * 0.06;
 
-    return dirt;
+    return ground;
 }
 
 void main()
 {
     // fragPosition is in scene space, already turned with the hologram.
-    // boxPos moves it back to this hologram's origin and undoes the turn, so the fog, dirt and bands line up with it.
+    // boxPos moves it back to this hologram's origin and undoes the turn, so the fog, ground and bands line up with it.
     vec3 p = fragPosition - holoOrigin;
     float c = cos(boxYaw);
     float s = sin(boxYaw);
@@ -93,7 +127,7 @@ void main()
 
     if (isFloor == 1)
     {
-        base = vec4(dirtColor(boxPos.xz / viewZoom + viewCenter), 1.0);
+        base = vec4(groundColor(boxPos.xz / viewZoom + viewCenter), 1.0);
         normal = vec3(0.0, 1.0, 0.0);
     }
 
@@ -104,8 +138,8 @@ void main()
 
     // Hologram tint: blend part of the color toward the hologram hue
     float lum = dot(color, vec3(0.299, 0.587, 0.114));
-    // (the floor gets less tint so the dirt still reads as brown)
-    float tintAmount = (isFloor == 1) ? 0.12 : 0.25;
+    // (the floor gets less tint so the grass still reads as green and the dirt as brown)
+    float tintAmount = (isFloor == 1) ? 0.08 : 0.25;
     color = mix(color, holoColor * lum * 1.6, tintAmount);
 
     // Rim glow on the edges of models
@@ -125,12 +159,12 @@ void main()
     float sweep = exp(-pow((boxPos.y - sweepY) * 3.5, 2.0));
     color += holoColor * sweep * 0.2;
 
-    // Fog: fade out toward the cube's sides and the ceiling.
-    // 'edge' is 0 in the middle and 1 at a side; the corners count as further out, which rounds them off
-    // (same math as ViewWindow.EdgeAmount). Past 1 fade is 0, so the floor's leftover corners get discarded.
+    // Fog: a thin fade at the cube's sides, and a softer one toward the ceiling.
+    // 'edge' is 0 in the middle and 1 at a side or corner (same math as ViewWindow.EdgeAmount), so the ground
+    // fills the square. Past 1 fade is 0, so the floor beyond the walls gets discarded.
     // Swallow moves both ends of the fade inward, past the middle, so the fog closes in from the sides.
     vec2 q = abs(boxPos.xz) / holoHalfWidth;
-    float edge = pow(pow(q.x, CornerPower) + pow(q.y, CornerPower), 1.0 / CornerPower);
+    float edge = max(q.x, q.y);
     float clearUntil = mix(fogStart, -0.4, swallow);
     float goneBy = mix(1.0, 0.0, swallow);
     float fade = 1.0 - smoothstep(clearUntil, goneBy, edge);

@@ -13,13 +13,14 @@ public class FoodSpawner
 
     public bool HasRoom => World.Instance.GetAllEntities<Food>().Count < MaxFood;
 
+    // Natural drops lean toward the middle of the world, so more of them land where you can see.
     public void Update(float dt)
     {
         if (!NaturalDrops) return;
 
         if (Rng.Chance(DropsPerMinute / 60f * dt))
         {
-            SpawnFood(World.Instance.RandomGroundPoint());
+            SpawnFood(World.Instance.RandomGroundPointNearMiddle());
         }
     }
 
@@ -56,11 +57,12 @@ public class FoodSpawner
         if (!HasRoom) return;
 
         contents ??= new() { [SeedType.Wild] = WildPileAmount };
+        if (position.Y <= 0f) position = Rock.PushOut(position);    // seed placed straight on the ground lands beside a rock, not in it
         Feeder? below = position.Y > 0f ? FeederBelow(position) : null;
         World.Instance.AddEntity(new Food(position, contents) { LandOn = below });
     }
 
-    private static Feeder? FeederBelow(Vector3 position)
+    public static Feeder? FeederBelow(Vector3 position)
     {
         foreach (Feeder feeder in World.Instance.GetAllEntities<Feeder>())
         {

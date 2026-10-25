@@ -9,7 +9,7 @@ public class Gunk : Entity
     public static readonly Color Color = new Color(78, 74, 40, 255);
     public const float AvoidDistance = 0.8f;    // how far past its edge birds keep away
 
-    public float Radius { get; }
+    public float Radius { get; private init; }
     private bool removed = false;
 
     // Bigger piles of seed leave bigger gunk.
@@ -20,6 +20,10 @@ public class Gunk : Entity
     }
 
     public override void Update(float dt) { }
+
+    // Saving (see SaveGame.cs)
+    public GunkSave ToSave() => new() { Position = Position, Radius = Radius };
+    public static Gunk FromSave(GunkSave save) => new Gunk(save.Position, 0f) { Radius = save.Radius };
 
     public void ScrapeUp()
     {

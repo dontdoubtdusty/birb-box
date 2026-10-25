@@ -26,7 +26,14 @@ public class Backdrop
 
     // ROOM
     private const float BackWallZ = -12f;
-    private const float WindowLeft = -12f, WindowRight = 12f, WindowBottom = 0f, WindowTop = 10f;
+    private const float WindowLeft = -14f, WindowRight = 14f, WindowBottom = -1.5f, WindowTop = 13f;
+
+    // WINDOW VIEW: the starfield picture (resources/starfield.png) behind the glass, with the painted planet in front
+    private const float SkyPixelsPerUnit = 50f;     // how many of the picture's pixels one unit of glass shows
+    private const float SkyDrift = 1f / 900f;       // picture widths per second the stars slide by (one width in 15 minutes)
+    private const float WindowDepth = 0.5f;         // how far away the stars look when the camera moves: 0 painted on the glass, 1 truly far
+    private const float PlanetPixelsPerUnit = 40f;  // the painted planet's picture size
+    private static readonly Color SkyTint = new Color(225, 225, 235, 255);    // a touch dimmer and cooler than the picture
     public static readonly Vector3 LampLeft = new Vector3(-16f, 6f, BackWallZ + 0.6f);
     public static readonly Vector3 LampRight = new Vector3(16f, 6f, BackWallZ + 0.6f);
 
@@ -46,11 +53,13 @@ public class Backdrop
     // Everything in the room is lit by room.fs: a dim fixed light from above plus the two warm wall lamps.
     private Shader roomShader;
     public Shader RoomShader => roomShader;
-    private int locViewPos, locShine;
+    private int locViewPos, locShine, locDissolve;
     private int locHoloLight, locHoloLightColor, locLensLight, locLensLightColor, locWellRadius;
     public UnitShapes Shapes { get; } = new UnitShapes();
     public TableProps Props { get; } = new TableProps();
-    private Texture2D windowView;
+    private Texture2D starfield, planet;
+    private Shader skyShader;    // sky.fs: the twinkle
+    private int locSkyTime;
 
     public void Load()
     {
@@ -60,23 +69,27 @@ public class Backdrop
         SetRoomUniform("roomCenter", TableCenter);
         locViewPos = Raylib.GetShaderLocation(roomShader, "viewPos");
         locShine = Raylib.GetShaderLocation(roomShader, "shine");
+        locDissolve = Raylib.GetShaderLocation(roomShader, "dissolve");
         locHoloLight = Raylib.GetShaderLocation(roomShader, "holoLight");
         locHoloLightColor = Raylib.GetShaderLocation(roomShader, "holoLightColor");
         locLensLight = Raylib.GetShaderLocation(roomShader, "lensLight");
         locLensLightColor = Raylib.GetShaderLocation(roomShader, "lensLightColor");
         locWellRadius = Raylib.GetShaderLocation(roomShader, "wellRadius");
         SetShine(0f);
+        SetDissolve(0f);
 
         Shapes.Load(roomShader);
         Props.Load();
-        windowView = PaintWindowView();
+        LoadWindowView();
     }
 
     public void Unload()
     {
         Shapes.Unload();
         Props.Unload();
-        Raylib.UnloadTexture(windowView);
+        Raylib.UnloadTexture(starfield);
+        Raylib.UnloadTexture(planet);
+        Raylib.UnloadShader(skyShader);
         Raylib.UnloadShader(roomShader);
     }
 
@@ -90,6 +103,13 @@ public class Backdrop
     public void SetShine(float shine)
     {
         Raylib.SetShaderValue(roomShader, locShine, shine, ShaderUniformDataType.Float);
+    }
+
+    // How much of the next things drawn are dithered away: 0 solid (the default), 1 gone. Used to fade the hands.
+    // Whoever turns it up turns it back to 0 when done.
+    public void SetDissolve(float dissolve)
+    {
+        Raylib.SetShaderValue(roomShader, locDissolve, dissolve, ShaderUniformDataType.Float);
     }
 
     // The Birb Box's own light on the room: where it comes from and how bright (color times power; black when off).
@@ -110,7 +130,7 @@ public class Backdrop
 
         Raylib.BeginMode3D(camera);
             DrawFloorAndWall();
-            DrawWindow();
+            DrawWindow(camera);
             DrawCrest();
             DrawTable();
             DrawRunner();
@@ -155,19 +175,19 @@ public class Backdrop
         Shapes.Box(new Vector3(0, -4f, BackWallZ + 0.02f), new Vector3(120f, 0.2f, 0.05f), WallSeam);
     }
 
-    // The view out of the window is a painted picture (see PaintWindowView), laid behind a thick frame.
-    private void DrawWindow()
+    // The view out of the window: the drifting, twinkling stars (through sky.fs), the planet in front of them,
+    // then a thick frame.
+    private void DrawWindow(Camera3D camera)
     {
         float z = BackWallZ + 0.05f;
-        Rlgl.SetTexture(windowView.Id);
-        Rlgl.Begin(DrawMode.Quads);
-            Rlgl.Color4ub(255, 255, 255, 255);
-            Rlgl.TexCoord2f(0, 0); Rlgl.Vertex3f(WindowLeft, WindowTop, z);
-            Rlgl.TexCoord2f(0, 1); Rlgl.Vertex3f(WindowLeft, WindowBottom, z);
-            Rlgl.TexCoord2f(1, 1); Rlgl.Vertex3f(WindowRight, WindowBottom, z);
-            Rlgl.TexCoord2f(1, 0); Rlgl.Vertex3f(WindowRight, WindowTop, z);
-        Rlgl.End();
-        Rlgl.SetTexture(0);
+        Vector2 sky = SkyOffset(camera);
+        Vector2 skySpan = new Vector2((WindowRight - WindowLeft) * SkyPixelsPerUnit / starfield.Width,
+                                      (WindowTop - WindowBottom) * SkyPixelsPerUnit / starfield.Height);
+        Raylib.SetShaderValue(skyShader, locSkyTime, (float)Raylib.GetTime(), ShaderUniformDataType.Float);
+        Raylib.BeginShaderMode(skyShader);
+            DrawGlass(starfield, z, sky, sky + skySpan, SkyTint);
+        Raylib.EndShaderMode();
+        DrawGlass(planet, z + 0.01f, Vector2.Zero, Vector2.One, Color.White);
 
         // Frame: top, bottom, sides, and two upright bars dividing the glass into three panes
         float frame = 0.8f, depth = 0.8f, frameZ = BackWallZ + depth / 2f;
@@ -280,35 +300,81 @@ public class Backdrop
         }
     }
 
-    // ---------------- PAINTED WINDOW VIEW ----------------
+    // ---------------- WINDOW VIEW ----------------
 
-    // Stars, and the night side of a planet with a thin lit edge and a few city lights.
-    // Painted once at startup into an image, then turned into a texture.
-    // A fixed random seed keeps the stars in the same places every time.
-    private static Texture2D PaintWindowView()
+    // The starfield repeats mirrored, so it can slide forever without a seam, and has mipmaps,
+    // so its small stars don't shimmer as they slide. The planet is painted, and the sky shader loaded.
+    private void LoadWindowView()
     {
-        const int Width = 960, Height = 400;
-        Image image = Raylib.GenImageColor(Width, Height, new Color(3, 6, 15, 255));
+        starfield = Raylib.LoadTexture(Assets.PathTo("starfield.png"));
+        Raylib.GenTextureMipmaps(ref starfield);
+        Raylib.SetTextureFilter(starfield, TextureFilter.Trilinear);
+        Raylib.SetTextureWrap(starfield, TextureWrap.MirrorRepeat);
+
+        planet = PaintPlanet();
+
+        skyShader = Raylib.LoadShader(Assets.PathTo("shaders/sky.vs"), Assets.PathTo("shaders/sky.fs"));
+        locSkyTime = Raylib.GetShaderLocation(skyShader, "time");
+        Raylib.SetShaderValue(skyShader, Raylib.GetShaderLocation(skyShader, "textureSize"),
+                              new Vector2(starfield.Width, starfield.Height), ShaderUniformDataType.Vec2);
+    }
+
+    // Where in the starfield the window looks: the slow drift, plus the direction from the camera to the window,
+    // so moving the camera slides the stars behind the glass the way something far away would.
+    private Vector2 SkyOffset(Camera3D camera)
+    {
+        Vector3 middle = new Vector3((WindowLeft + WindowRight) / 2f, (WindowBottom + WindowTop) / 2f, BackWallZ);
+        Vector3 toWindow = middle - camera.Position;
+        float across = MathF.Atan2(toWindow.X, -toWindow.Z);
+        float up = MathF.Atan2(toWindow.Y, MathF.Sqrt(toWindow.X * toWindow.X + toWindow.Z * toWindow.Z));
+
+        // Truly far stars move one unit of glass (SkyPixelsPerUnit) for each 1/distance radians the view turns
+        float pixelsPerRadian = SkyPixelsPerUnit * toWindow.Length() * WindowDepth;
+        float u = (float)Raylib.GetTime() * SkyDrift + across * pixelsPerRadian / starfield.Width;
+        float v = -up * pixelsPerRadian / starfield.Height;
+        return new Vector2(u, v);
+    }
+
+    // One textured quad filling the window's glass at depth z, showing the picture from uvMin (top left) to uvMax.
+    private static void DrawGlass(Texture2D texture, float z, Vector2 uvMin, Vector2 uvMax, Color tint)
+    {
+        Rlgl.SetTexture(texture.Id);
+        Rlgl.Begin(DrawMode.Quads);
+            Rlgl.Color4ub(tint.R, tint.G, tint.B, tint.A);
+            Rlgl.TexCoord2f(uvMin.X, uvMin.Y); Rlgl.Vertex3f(WindowLeft, WindowTop, z);
+            Rlgl.TexCoord2f(uvMin.X, uvMax.Y); Rlgl.Vertex3f(WindowLeft, WindowBottom, z);
+            Rlgl.TexCoord2f(uvMax.X, uvMax.Y); Rlgl.Vertex3f(WindowRight, WindowBottom, z);
+            Rlgl.TexCoord2f(uvMax.X, uvMin.Y); Rlgl.Vertex3f(WindowRight, WindowTop, z);
+        Rlgl.End();
+        Rlgl.SetTexture(0);
+    }
+
+    // The night side of a planet with a thin lit edge and a few city lights, on a clear picture the size of the glass.
+    // Painted once at startup. A fixed random seed keeps the city lights in the same places every time.
+    private static Texture2D PaintPlanet()
+    {
+        int width = (int)((WindowRight - WindowLeft) * PlanetPixelsPerUnit);
+        int height = (int)((WindowTop - WindowBottom) * PlanetPixelsPerUnit);
+        Image image = Raylib.GenImageColor(width, height, Color.Blank);
         Random random = new Random(7);
 
-        for (int i = 0; i < 450; i++)
-        {
-            int x = random.Next(Width), y = random.Next(Height);
-            int b = 120 + random.Next(136);
-            Raylib.ImageDrawPixel(ref image, x, y, new Color(b, b, Math.Min(255, b + 20), 255));
-            if (random.Next(12) == 0) Raylib.ImageDrawRectangle(ref image, x, y, 2, 2, new Color(b, b, 255, 255));
-        }
+        // A spot on the back wall (room units) as a pixel in the picture
+        static Vector2 Pixel(float x, float y) => new Vector2((x - WindowLeft) * PlanetPixelsPerUnit, (WindowTop - y) * PlanetPixelsPerUnit);
 
-        // Planet: an atmosphere ring, the lit body, then a big dark circle offset to the lower right for the night side
-        Vector2 planet = new Vector2(760, 560);
-        Raylib.ImageDrawCircle(ref image, (int)planet.X, (int)planet.Y, 432, new Color(80, 170, 230, 255));
-        Raylib.ImageDrawCircle(ref image, (int)planet.X, (int)planet.Y, 424, new Color(38, 96, 146, 255));
-        Raylib.ImageDrawCircle(ref image, (int)planet.X + 50, (int)planet.Y + 50, 400, new Color(12, 34, 58, 255));
+        // An atmosphere ring, the lit body, then a big dark circle offset to the lower right for the night side
+        Vector2 middle = Pixel(7f, -4f);
+        Vector2 night = middle + new Vector2(50, 50);
+        Raylib.ImageDrawCircle(ref image, (int)middle.X, (int)middle.Y, 432, new Color(80, 170, 230, 255));
+        Raylib.ImageDrawCircle(ref image, (int)middle.X, (int)middle.Y, 424, new Color(38, 96, 146, 255));
+        Raylib.ImageDrawCircle(ref image, (int)night.X, (int)night.Y, 400, new Color(12, 34, 58, 255));
 
+        // City lights, only on the night side
+        Vector2 lightsFrom = Pixel(3f, 3.5f), lightsTo = Pixel(11.5f, WindowBottom);
         for (int i = 0; i < 60; i++)
         {
-            int x = 600 + random.Next(340), y = 260 + random.Next(140);
-            if (Vector2.Distance(new Vector2(x, y), planet + new Vector2(50, 50)) > 390) continue;    // only on the night side
+            int x = random.Next((int)lightsFrom.X, (int)lightsTo.X);
+            int y = random.Next((int)lightsFrom.Y, (int)lightsTo.Y);
+            if (Vector2.Distance(new Vector2(x, y), night) > 390) continue;
             Raylib.ImageDrawPixel(ref image, x, y, new Color(255, 205, 130, 255));
         }
 

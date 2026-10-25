@@ -4,11 +4,31 @@ using Raylib_cs;
 // Chat-style labels that float inside the hologram:
 //  - "<name> has entered the chat" above a bird that arrived; it follows the bird and drifts up.
 //  - "<name> has left the chat" where a bird took off to leave for good; it stays put, sinks, and is dimmer.
+//  - "<name> has rejoined the chat" instead, for a regular coming back.
+//  - name tags: just the name, floating over a bird for as long as it's in view (which birds: NameLabels setting).
 // Labels fade out, and dim near the hologram's edge like everything else in the fog.
 // Each label's text is drawn once into its own small texture, then shown on a flat rectangle
 // that always faces the camera.
+public enum NameLabelMode { Off, Named, All }
+
 public class ChatMessages
 {
+    // NAME TAGS (setting in the Esc menu; not saved, like the other settings)
+    public NameLabelMode NameLabels = NameLabelMode.Named;
+    private const float NameLabelWidth = 1.8f;      // box units, same text scale as the chat labels
+    private const float NameLift = 0.3f;            // above the top of the bird's head, in box units
+    private const float NameAlpha = 0.85f;
+    private const int NameTextureWidth = 256;
+
+    private class NameTag
+    {
+        public string Name = "";
+        public RenderTexture2D Texture;
+    }
+    private readonly Dictionary<int, NameTag> nameTags = new();     // by bird EntityID
+    private readonly List<Bird> labeledBirds = new();                // shown this frame
+    private readonly HashSet<int> taggableBirds = new();             // allowed a tag right now, in view or not
+
     private const float Lifetime = 5f;
     private const float FadeIn = 0.3f;
     private const float FadeOut = 1.5f;
@@ -17,6 +37,7 @@ public class ChatMessages
     private const float LabelWidth = 3.6f;        // in world units
     private const int MaxMessages = 6;
     private const string JoinText = " has entered the chat";
+    private const string RejoinText = " has rejoined the chat";
     private const string LeaveText = " has left the chat";
 
     private const int TextureWidth = 512, TextureHeight = 48;
@@ -91,6 +112,28 @@ public class ChatMessages
         {
             if (msg.Age >= Lifetime) Finish(msg);
         }
+
+        UpdateNameLabels(view, birds);
+    }
+
+    // Which birds get a name tag: the ones the setting allows, in view, not leaving,
+    // and not showing an "entered the chat" label right now.
+    private void UpdateNameLabels(ViewWindow view, IReadOnlyList<Bird> birds)
+    {
+        labeledBirds.Clear();
+        taggableBirds.Clear();
+        if (NameLabels == NameLabelMode.Off) return;
+
+        foreach (Bird bird in birds)
+        {
+            if (NameLabels == NameLabelMode.Named && !bird.IsNamed) continue;
+            if (bird.State == BirdState.Leaving) continue;
+            taggableBirds.Add(bird.EntityID);
+
+            if (!view.Contains(bird.Position, 0.5f)) continue;
+            if (messages.Any(msg => !msg.Leaving && msg.Bird == bird)) continue;
+            labeledBirds.Add(bird);
+        }
     }
 
     private void Finish(Message msg)
@@ -116,15 +159,57 @@ public class ChatMessages
             if (msg.Texture.Id != 0) continue;
             msg.Texture = Raylib.LoadRenderTexture(TextureWidth, TextureHeight);
             Raylib.SetTextureFilter(msg.Texture.Texture, TextureFilter.Bilinear);
-            RenderLabel(msg.Texture, msg.Bird.Name, msg.Bird.Info.Color, msg.Leaving);
+            RenderLabel(msg.Texture, msg.Bird.Name, msg.Bird.Info.Color, msg.Leaving, msg.Bird.Visits > 1);
         }
+
+        PrepareNameTags();
+    }
+
+    // A tag's texture is made the first time its bird is labeled, redrawn after a rename,
+    // and freed once the bird is gone or no longer allowed a tag.
+    private void PrepareNameTags()
+    {
+        foreach (int id in nameTags.Keys.ToList())
+        {
+            if (taggableBirds.Contains(id)) continue;
+            Raylib.UnloadRenderTexture(nameTags[id].Texture);
+            nameTags.Remove(id);
+        }
+
+        foreach (Bird bird in labeledBirds)
+        {
+            if (nameTags.TryGetValue(bird.EntityID, out NameTag? tag) && tag.Name == bird.Name) continue;
+
+            if (tag == null)
+            {
+                tag = new NameTag { Texture = Raylib.LoadRenderTexture(NameTextureWidth, TextureHeight) };
+                Raylib.SetTextureFilter(tag.Texture.Texture, TextureFilter.Bilinear);
+                nameTags[bird.EntityID] = tag;
+            }
+            tag.Name = bird.Name;
+            RenderName(tag.Texture, bird.Name, bird.Info.Color);
+        }
+    }
+
+    // Just the name, in the bird's color, centered and shrunk to fit.
+    private static void RenderName(RenderTexture2D target, string name, Color color)
+    {
+        int size = 34;
+        while (size > 10 && UiText.Measure(name, size) > NameTextureWidth - 12) size -= 2;
+        int x = (NameTextureWidth - UiText.Measure(name, size)) / 2;
+        int y = (TextureHeight - size) / 2;
+
+        Raylib.BeginTextureMode(target);
+            Raylib.ClearBackground(Color.Blank);
+            UiText.Draw(name, x, y, size, color);
+        Raylib.EndTextureMode();
     }
 
     // The name in the bird's color, the rest in white, centered and shrunk to fit.
     // Leaving labels use a darker name color and gray text.
-    private static void RenderLabel(RenderTexture2D target, string name, Color nameColor, bool leaving)
+    private static void RenderLabel(RenderTexture2D target, string name, Color nameColor, bool leaving, bool returning)
     {
-        string text = leaving ? LeaveText : JoinText;
+        string text = leaving ? LeaveText : returning ? RejoinText : JoinText;
         if (leaving) nameColor = Raylib.ColorBrightness(nameColor, -0.35f);
         Color textColor = leaving ? Palette.DimText : Palette.Text;
 
@@ -154,6 +239,7 @@ public class ChatMessages
 
         Rlgl.DrawRenderBatchActive();
         Rlgl.DisableDepthMask();
+        DrawNameTags(view, right, up);
         foreach (Message msg in messages)
         {
             if (msg.Texture.Id == 0) continue;
@@ -171,6 +257,25 @@ public class ChatMessages
         }
         Rlgl.DrawRenderBatchActive();
         Rlgl.EnableDepthMask();
+    }
+
+    // Each tag floats a little above the top of its bird's head and follows it.
+    private void DrawNameTags(ViewWindow view, Vector3 right, Vector3 up)
+    {
+        float halfWidth = NameLabelWidth / 2f;
+        float halfHeight = halfWidth * TextureHeight / NameTextureWidth;
+
+        foreach (Bird bird in labeledBirds)
+        {
+            if (!nameTags.TryGetValue(bird.EntityID, out NameTag? tag)) continue;
+
+            Vector3 head = new Vector3(bird.Position.X, bird.Position.Y + bird.Bounds.Max.Y * bird.Size, bird.Position.Z);
+            Vector3 local = view.ToLocal(head) + new Vector3(0, NameLift + halfHeight, 0);
+            float alpha = NameAlpha * EdgeFade(local, view);
+            if (alpha <= 0.01f) continue;
+
+            DrawFacingQuad(tag.Texture.Texture, view.BoxToScene(local), right * halfWidth, up * halfHeight, alpha);
+        }
     }
 
     // Render textures are stored upside down, so the top of the quad uses v = 1.
@@ -206,5 +311,7 @@ public class ChatMessages
         }
         messages.Clear();
         finished.Clear();
+        foreach (NameTag tag in nameTags.Values) Raylib.UnloadRenderTexture(tag.Texture);
+        nameTags.Clear();
     }
 }

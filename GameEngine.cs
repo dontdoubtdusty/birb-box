@@ -8,12 +8,13 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Box 4.48 Alpha";
+    public const string Version = "Birb Box 4.72 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
     public BirdSpawner BirdSpawner { get; private set; }
     public FoodSpawner FoodSpawner { get; private set; }
+    public GroundWear Wear { get; private set; }
     public HoloCamera Camera { get; private set; }
     public Dial Dial { get; private set; }
     public ViewWindow View { get; private set; }
@@ -31,11 +32,14 @@ public class GameEngine
     public FeederPlacer Placer { get; private set; }
     public Radio Radio { get; private set; }
     public Projector Projector { get; private set; }
+    public SaveGame Saves { get; private set; }
+    public Hands Hands { get; private set; }
+    public Rocker Rocker { get; private set; }
 
     // SIMULATION STATE
     public bool Paused = false;
     public float SimSpeed = 1f;
-    public float SimTime { get; private set; }
+    public float SimTime { get; set; }    // set directly only when loading a save
 
     // OFF-SCREEN BIRDS update less often, with a bigger time step, to save work.
     private const int OffscreenStep = 3;           // update every 3rd frame
@@ -60,6 +64,7 @@ public class GameEngine
     private bool warnedEmptyBucket = false;
 
     // SELECTION. Choosing a different bird (or none) always switches following off.
+    // A bird or a feeder can be selected, never both: picking one clears the other.
     private Bird? selectedBird;
     public Bird? SelectedBird
     {
@@ -68,6 +73,17 @@ public class GameEngine
         {
             if (value != selectedBird) FollowSelected = false;
             selectedBird = value;
+            if (value != null) selectedFeeder = null;
+        }
+    }
+    private Feeder? selectedFeeder;
+    public Feeder? SelectedFeeder
+    {
+        get => selectedFeeder;
+        set
+        {
+            selectedFeeder = value;
+            if (value != null) SelectedBird = null;
         }
     }
     public Bird? HoveredBird;          // set by the UI when hovering a name in the tracker
@@ -75,6 +91,9 @@ public class GameEngine
     // PLACING FEEDERS: where a carried feeder would go (box space), or null when the mouse isn't over clear floor
     public Vector3? PlacingSpot { get; private set; }
     public bool FollowSelected = false;
+
+    // HOLOGRAM VIEW: the bird world's zoom when it was entered; the wheel zooms the world back out only this far
+    private float holoBaseZoom = 1f;
 
     // WINDOW
     private const int StartWidth = 1280;
@@ -96,6 +115,8 @@ public class GameEngine
         World = new World();
         BirdSpawner = new BirdSpawner();
         FoodSpawner = new FoodSpawner();
+        Wear = new GroundWear();
+        Wear.Reset(World.HalfSize);
         Camera = new HoloCamera();
         Dial = new Dial();
         View = new ViewWindow();
@@ -113,6 +134,9 @@ public class GameEngine
         Placer = new FeederPlacer();
         Radio = new Radio();
         Projector = new Projector();
+        Saves = new SaveGame();
+        Hands = new Hands();
+        Rocker = new Rocker();
     }
 
     public void Run()
@@ -129,6 +153,7 @@ public class GameEngine
         Sounds.Load();
         Radio.Load();
         Renderer.Load(View);
+        Rocker.Load();
         BirbBuilder.Load(Renderer.HoloShader);
 
         // Fonts added between Begin and End come before ImGui's built-in one, so the first becomes the default.
@@ -138,7 +163,8 @@ public class GameEngine
         rlImGui.EndInitImGui();
         UI.ApplyStyle();
 
-        SeedStartingWorld();
+        Saves.LoadOrStartNew(this);
+        Settings.Load(this);    // after the window is up, since it may go fullscreen
 
         while (!Raylib.WindowShouldClose() && !Menu.QuitRequested)
         {
@@ -147,9 +173,12 @@ public class GameEngine
             Draw();
         }
 
+        Saves.Save(this);    // closing the window or quitting from the menu both end up here
+        Settings.Save(this);
         rlImGui.Shutdown();
         Bucket.Unload();
         Renderer.Unload();
+        Rocker.Unload();
         BirbBuilder.Unload();
         UiText.Unload();
         Radio.Unload();
@@ -157,8 +186,8 @@ public class GameEngine
         Raylib.CloseWindow();
     }
 
-    // The world starts with wild seed and no birds; every bird arrives because of seed.
-    private void SeedStartingWorld()
+    // A new world starts with wild seed and no birds; every bird arrives because of seed.
+    public void SeedStartingWorld()
     {
         FoodSpawner.ScatterAcrossWorld(40);
         FoodSpawner.ScatterInView(6, View);
@@ -167,15 +196,28 @@ public class GameEngine
 
     // ---------------- UPDATE (no drawing) ----------------
 
+    // Everything, then the hands, which go wherever this frame's update asked them to (see Hands).
     private void Update(float dt)
     {
         updateClock.Restart();
 
+        UpdateSystems(dt);
+        Hands.Update(dt, Camera.Camera, showColor: Menu.ShowingSettings);
+
+        // Smoothed so the number is readable instead of flickering
+        float ms = (float)updateClock.Elapsed.TotalMilliseconds;
+        UpdateMs += (ms - UpdateMs) * 0.05f;
+    }
+
+    // Input, the box, the simulation and the panels. Returns early while the menu or the Designer has the screen.
+    private void UpdateSystems(float dt)
+    {
         // The hum runs even while paused; it just ducks quieter behind the menu or the Designer, and follows the power.
         // Bird sounds fade out while the store is showing or the box is off.
         Sounds.Update(dt, Menu.IsOpen || Designer.IsOpen, Mode.Showing == BoxScene.Birds && Projector.IsOn, Projector.Lens);
         Radio.Update(dt, ducked: Menu.IsOpen);    // keeps playing, quieter, behind the Esc menu
         Projector.Update(dt);                     // keeps starting up or shutting down behind the menu too
+        Saves.Update(dt, this);                   // autosave, on real time
 
         // The mouse is "blocked" for the hologram when it's over an ImGui window, the bird card, or a side column.
         // The keyboard is blocked while typing, either a bird's name or in an ImGui box.
@@ -202,13 +244,18 @@ public class GameEngine
         if (!typingName) Menu.Update(this);
         if (Menu.IsOpen) return;
 
+        // While a drag is turning the ring, the hands stay on the ring: none reaches for a button or knob the mouse passes
+        bool handsFree = !Camera.IsTurning;
+
         // The radio on the table has the mouse while it's over the radio or turning one of its knobs
         Radio.HandleInput(MouseRayInRoom(), mouseBlocked);
         mouseBlocked |= Radio.UsingMouse;
+        if (handsFree) ReachForRadio();
 
-        // The logo on the pedestal's front is the power button
+        // The logo on the pedestal's front is the power button; the right hand comes up to press it
         bool mouseOverLogo = !mouseBlocked && Pedestal.RayHitsLogo(MouseRayInRoom(), View);
         Projector.LogoHovered = mouseOverLogo;
+        if (mouseOverLogo && handsFree) Hands.Press(HandSide.Right, Pedestal.LogoFace(View), Vector3.UnitZ, pushed: Camera.IsHolding);
 
         // The Birb Designer takes over the hologram while it's open (see BirbDesigner.cs).
         // Its birb is shown in the bird scene, so if it's opened from the store (B or the Esc menu),
@@ -222,6 +269,7 @@ public class GameEngine
             Projector.TurnOn();    // the Designer shows its birb in the box, so the box has to be on
             Mode.SwitchTo(BoxScene.Birds);
             if (Mode.Update(dt)) OnSceneSwapped();
+            Rocker.Update(dt, Mode.Heading, hovered: null, holding: false);    // follows the box back to the birbs
             UpdateDesigning(dt, mouseBlocked);
             return;
         }
@@ -234,29 +282,51 @@ public class GameEngine
         {
             UI.ShowTools = !UI.ShowTools;
         }
-        // The box shows either the bird world or the store; the sign floating above it switches.
+        // The box shows either the bird world or the store; the rocker on the pedestal's front switches.
+        // The right hand comes up to press whichever half the mouse is on.
         // While the store is showing, the birds ignore the mouse and WASD (see ClickInStore for its clicks).
-        // Nothing in the box takes the mouse or WASD until the projector is fully on.
+        // Nothing in the box takes the mouse or WASD until the projector is fully on (the rocker won't budge either).
         bool boxReady = Projector.Ready;
-        bool mouseOverSign = !mouseBlocked && boxReady && BoxMode.RayHitsSign(MouseRayInHologram(), View);
-        Mode.SignHovered = mouseOverSign;
+        BoxScene? rockerHalf = null;
+        if (!mouseBlocked && Rocker.RayHits(MouseRayInRoom(), View, out BoxScene half)) rockerHalf = half;
+        bool mouseOverRocker = rockerHalf != null;
+        if (rockerHalf != null && handsFree)
+        {
+            Vector3 face = Rocker.FacePoint(View, rockerHalf.Value, out Vector3 facing);
+            Hands.Press(HandSide.Right, face, facing, pushed: Camera.IsHolding);
+        }
         if (Mode.Update(dt)) OnSceneSwapped();
+        Rocker.Update(dt, Mode.Heading, rockerHalf, holding: Camera.IsHolding && boxReady && !Mode.IsSwitching);
         bool inStore = Mode.InStore;
         bool birdsShowing = Mode.Showing == BoxScene.Birds && !Mode.IsSwitching && boxReady;
         if (!Projector.IsOn) Store.SelectedItem = null;    // no price tag hanging off a switched-off box
 
         Store.Update(dt, showing: inStore);
-        Store.UpdateHover(MouseRayInHologram(), active: inStore && boxReady && !Mode.IsSwitching && !mouseBlocked && !mouseOverSign);
+        Store.UpdateHover(MouseRayInHologram(), active: inStore && boxReady && !Mode.IsSwitching && !mouseBlocked && !mouseOverRocker);
         Tag.Update(Store);
 
-        // The wheel zooms the hologram (and map) when the mouse is over the birds, otherwise the outer camera.
-        bool mouseOverHologram = !mouseBlocked && birdsShowing && !mouseOverSign && View.RayHitsHologram(MouseRayInBox());
-        Camera.Update(mouseBlocked, mouseOverHologram);
-        if (mouseOverHologram) View.ZoomBy(Raylib.GetMouseWheelMove());
+        // Room view: the wheel zooms the hologram (and map) when the mouse is over the birds, otherwise the outer camera.
+        // Hologram View: see HologramWheelZoomsWorld.
+        bool mouseOverBox = !mouseBlocked && !mouseOverRocker && !mouseOverLogo && View.RayHitsHologram(MouseRayInBox());
+        float wheel = Raylib.GetMouseWheelMove();
+        bool wheelZoomsWorld = birdsShowing && (Camera.InHologramView ? !mouseBlocked && HologramWheelZoomsWorld(wheel) : mouseOverBox);
+        Camera.Update(mouseBlocked, wheelZoomsWorld);
+        if (wheelZoomsWorld)
+        {
+            View.ZoomBy(wheel);
+            if (Camera.InHologramView && wheel < 0f) View.Zoom = MathF.Max(View.Zoom, holoBaseZoom);
+        }
+        // A double-click on a bird follows it; anywhere else on the box it enters or leaves the Hologram View
+        bool followedBird = birdsShowing && !mouseBlocked && !mouseOverRocker && !mouseOverLogo && FollowBirdOnDoubleClick();
+        UpdateHologramView(mouseBlocked || mouseOverRocker || mouseOverLogo || followedBird, mouseOverBox && boxReady && !Mode.IsSwitching);
+        // Both hands part as the cube grows, and turn around to press it back together as it shrinks
+        if (Camera.IsChangingView) Hands.Spread(Camera.Growth, closing: !Camera.InHologramView);
 
-        // A sideways drag turns the bezel ring, and with it whatever the box is showing (see Dial)
-        if (inStore) Dial.Turn(ref Store.Yaw, dt, Camera.TurnThisFrame, Camera.IsHolding);
-        else Dial.Turn(ref View.Yaw, dt, Camera.TurnThisFrame, Camera.IsHolding);
+        // A sideways drag turns the bezel ring, and with it whatever the box is showing (see Dial).
+        // The birds and the store share one turn, so the ring never jumps when the rocker switches scenes.
+        Dial.Turn(ref View.Yaw, dt, Camera.TurnThisFrame, Camera.IsHolding);
+        Store.Yaw = View.Yaw;
+        if (Camera.IsTurning) Hands.HoldRing(RingHand(), View, Camera.TurnThisFrame);
 
         if (!keyboardBlocked && birdsShowing && View.HandlePanInput(dt))
         {
@@ -264,16 +334,24 @@ public class GameEngine
         }
 
         Placer.Update(birdsShowing);
-        PlacingSpot = Placer.Carried != null && birdsShowing && !mouseBlocked && !mouseOverSign ? FloorPointUnderMouse() : null;
+        PlacingSpot = Placer.Carried != null && birdsShowing && !mouseBlocked && !mouseOverRocker ? FloorPointUnderMouse() : null;
 
         if (Camera.ClickedThisFrame && !mouseBlocked)
         {
-            if (mouseOverLogo) Projector.Toggle();
-            else if (mouseOverSign) Mode.Toggle();
+            if (mouseOverLogo)
+            {
+                Projector.Toggle();
+                Hands.Tap(HandSide.Right);
+            }
+            else if (rockerHalf != null)
+            {
+                Hands.Tap(HandSide.Right);
+                PressRocker(rockerHalf.Value, boxReady);
+            }
             else if (inStore && boxReady) ClickInStore();
-            else if (birdsShowing) HandleClick();
+            else if (birdsShowing && !followedBird) HandleClick();    // the double-click's second click already picked its bird
         }
-        UpdatePouring(dt, mouseBlocked || !birdsShowing || mouseOverSign);
+        UpdatePouring(dt, mouseBlocked || !birdsShowing || mouseOverRocker);
 
         if (!Paused)
         {
@@ -284,12 +362,14 @@ public class GameEngine
             CheckFrostcrestSeen();
             BirdSpawner.Update(simDt);
             FoodSpawner.Update(simDt);
+            Wear.Update(simDt, World);
         }
 
         World.FlushChanges();
 
         // Forget birds that have left the world
         if (SelectedBird != null && !World.Contains(SelectedBird)) SelectedBird = null;
+        if (SelectedFeeder != null && !SelectedFeeder.InWorld) SelectedFeeder = null;
         if (HoveredBird != null && !World.Contains(HoveredBird)) HoveredBird = null;
 
         Sides.Update(this, mouseOverImGui);
@@ -302,10 +382,66 @@ public class GameEngine
         {
             View.Follow(SelectedBird.Position, dt);
         }
+    }
 
-        // Smoothed so the number is readable instead of flickering
-        float ms = (float)updateClock.Elapsed.TotalMilliseconds;
-        UpdateMs += (ms - UpdateMs) * 0.05f;
+    // Pressing the raised half of the rocker switches to its scene with a click. The half already pushed in,
+    // a box that isn't fully on, or one already mid-switch doesn't budge.
+    private void PressRocker(BoxScene half, bool boxReady)
+    {
+        if (!boxReady || Mode.IsSwitching || half == Mode.Showing) return;
+        Mode.SwitchTo(half);
+        Sounds.PlayRocker();
+    }
+
+    // Double-clicking the box enters the Hologram View; double-clicking anywhere (but a control) leaves it.
+    // Switching the box off leaves it too, since there's nothing left to look at.
+    private void UpdateHologramView(bool mouseOnSomethingElse, bool mouseOverReadyBox)
+    {
+        if (Camera.InHologramView && !Projector.IsOn)
+        {
+            Camera.LeaveHologramView();
+            return;
+        }
+        if (!Camera.DoubleClickedThisFrame || mouseOnSomethingElse) return;
+
+        if (Camera.InHologramView) Camera.LeaveHologramView();
+        else if (mouseOverReadyBox)
+        {
+            Camera.EnterHologramView(View);
+            holoBaseZoom = View.Zoom;
+        }
+    }
+
+    // On a double-click, the bird under the mouse (if any) is selected and followed. Not while carrying a feeder.
+    private bool FollowBirdOnDoubleClick()
+    {
+        if (!Camera.DoubleClickedThisFrame || Placer.Carried != null) return false;
+
+        Bird? bird = PickBird(MouseRayInBox());
+        if (bird == null) return false;
+        SelectedBird = bird;
+        FollowSelected = true;    // after selecting, since choosing a new bird switches following off
+        return true;
+    }
+
+    // In the Hologram View the wheel is one continuous zoom. In: the camera first, down to where the whole
+    // cube just fits, then the bird world. Out: the bird world back to its zoom on entering, then the camera.
+    private bool HologramWheelZoomsWorld(float wheel)
+    {
+        if (wheel > 0f) return Camera.AtClosestFit;
+        if (wheel < 0f) return View.Zoom > holoBaseZoom + 0.0001f;
+        return false;
+    }
+
+    // The hand that turns the ring: the right one for a drag that started toward the right, else the left.
+    private HandSide RingHand() => Camera.TurnStartedRight ? HandSide.Right : HandSide.Left;
+
+    // The right hand reaches for whichever radio control the mouse is on: a finger for the buttons, a grip for the knobs.
+    private void ReachForRadio()
+    {
+        if (!Radio.HandTarget(out Vector3 point, out Vector3 facing, out bool isKnob, out bool holding, out float twist)) return;
+        if (isKnob) Hands.GripKnob(HandSide.Right, point, facing, holding, twist);
+        else Hands.Press(HandSide.Right, point, facing, holding);
     }
 
     // While designing, dragging still turns and tilts the hologram and the wheel moves the camera.
@@ -314,6 +450,7 @@ public class GameEngine
     {
         Camera.Update(mouseBlocked, wheelUsedElsewhere: false);
         Dial.Turn(ref View.Yaw, dt, Camera.TurnThisFrame, Camera.IsHolding);
+        if (Camera.IsTurning) Hands.HoldRing(RingHand(), View, Camera.TurnThisFrame);
         Designer.Update(dt);
     }
 
@@ -360,7 +497,7 @@ public class GameEngine
     }
 
     // In the store, clicking a jar or sack hangs its price tag where you clicked.
-    // Clicking anything else just closes an open tag; only the sign leaves the store.
+    // Clicking anything else just closes an open tag; only the rocker leaves the store.
     private void ClickInStore()
     {
         if (Store.HoveredItem != null)
@@ -374,8 +511,8 @@ public class GameEngine
         }
     }
 
-    // A click sets down a carried feeder. Otherwise it picks up a coin, selects a bird, picks up a feeder
-    // to move it, or scrapes up gunk. Clicking empty floor deselects.
+    // A click sets down a carried feeder. Otherwise it picks up a coin, selects a bird, selects a feeder
+    // (its card has a Move button), or scrapes up gunk. Clicking empty floor deselects.
     private void HandleClick()
     {
         if (Placer.Carried != null)
@@ -404,7 +541,7 @@ public class GameEngine
         Feeder? hitFeeder = PickFeeder(ray);
         if (hitFeeder != null)
         {
-            Placer.PickUp(hitFeeder);
+            SelectedFeeder = hitFeeder;
             return;
         }
 
@@ -417,6 +554,7 @@ public class GameEngine
         }
 
         SelectedBird = null;
+        SelectedFeeder = null;
     }
 
     // Holding right mouse pours the bucket onto the floor under the cursor.
@@ -453,7 +591,7 @@ public class GameEngine
     }
 
     // Where the mouse ray hits the floor, in box space.
-    // Only the clear middle of the cube counts, not the foggy edges and corners.
+    // Only the clear dirt counts, not the thin fog at the walls.
     private Vector3? FloorPointUnderMouse()
     {
         Ray ray = MouseRayInBox();
@@ -588,7 +726,7 @@ public class GameEngine
         drawClock.Restart();
         Raylib.BeginDrawing();
             Color accent = Palette.ToColor(Renderer.HoloColor);
-            Renderer.Draw(Camera, View, Mode, Store, SelectedBird, HoveredBird, Designer, Radio, Projector);
+            Renderer.Draw(Camera, View, Mode, Store, SelectedBird, HoveredBird, Designer, Radio, Projector, Hands, Rocker);
             Sides.Draw(this, accent);
             Hud.Draw(this, accent);
             Map.Draw(this, accent);
@@ -681,5 +819,13 @@ public class GameEngine
     public void JumpToBird(Bird bird)
     {
         View.JumpTo(new Vector2(bird.Position.X, bird.Position.Z));
+    }
+
+    // The feeder card's Move button: lift the selected feeder so the next click on the dirt sets it down.
+    public void MoveSelectedFeeder()
+    {
+        if (SelectedFeeder == null || Placer.Carried != null) return;
+        Placer.PickUp(SelectedFeeder);
+        SelectedFeeder = null;
     }
 }

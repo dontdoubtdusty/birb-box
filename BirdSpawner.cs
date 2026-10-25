@@ -20,6 +20,11 @@ public class BirdSpawner
 
     private readonly Dictionary<BirdType, int> nameCounters = new();
 
+    // REGULARS: birds that left (not of old age) and may come back under the same name.
+    private readonly List<BirdSave> regulars = new();
+    private const float RegularChance = 0.5f;     // share of arrivals that are a regular, when one of that kind is away
+    private const int MaxRegulars = 40;           // the longest-gone are forgotten past this
+
     public BirdSpawner()
     {
         Instance = this;
@@ -92,22 +97,26 @@ public class BirdSpawner
     }
 
     // With no type given, picks one of the common birds.
+    // Often it's a regular of that kind coming back instead of a new bird.
     public Bird SpawnArrival(BirdType? type = null)
     {
-        Bird bird = CreateBird(type ?? GetRandomBirdType());
+        BirdType birdType = type ?? GetRandomBirdType();
+        Bird? regular = TakeRegular(birdType);
+        Bird bird = regular ?? CreateBird(birdType);
         bird.State = BirdState.Arriving;
         bird.ArriveHungry();
+        string who = regular != null ? $"{bird.Name} is back, and" : bird.Name;
 
         // Frostcrests always fly straight to the Blue Barley; walking in from the edge they might never find it.
         if (bird.Type == BirdType.Frostcrest || Rng.Chance(AirArrivalChance))
         {
             SetupAirArrival(bird);
-            EventLog.Add($"{bird.Name} flew down from the sky.");
+            EventLog.Add($"{who} flew down from the sky.");
         }
         else
         {
             SetupEdgeArrival(bird);
-            EventLog.Add($"{bird.Name} walked in from the edge of the world.");
+            EventLog.Add($"{who} walked in from the edge of the world.");
         }
 
         World.Instance.AddEntity(bird);
@@ -143,6 +152,7 @@ public class BirdSpawner
             : World.Instance.RandomGroundPoint();
 
         landing += new Vector3(Rng.Range(-3f, 3f), 0, Rng.Range(-3f, 3f));
+        landing = Rock.PushOut(landing, 0.3f);
         landing.Y = bird.GroundY;
 
         float angle = Rng.Range(0f, MathF.PI * 2f);
@@ -161,6 +171,46 @@ public class BirdSpawner
         count++;
         nameCounters[type] = count;
         return new Bird(type, $"{Birds.Get(type).Name} #{count}");
+    }
+
+    // ---------------- REGULARS ----------------
+
+    // Called when a bird leaves the world for now (Bird.Remove). A bird past its lifespan is gone for good instead.
+    public void AddRegular(Bird bird)
+    {
+        if (bird.Age >= bird.Lifespan) return;
+        regulars.Add(bird.ToSave());
+        if (regulars.Count > MaxRegulars) regulars.RemoveAt(0);
+    }
+
+    // Half the time, if any bird of this kind is away, one of them comes back. Null means a new bird comes instead.
+    private Bird? TakeRegular(BirdType type)
+    {
+        List<BirdSave> away = regulars.Where(save => save.Type == type).ToList();
+        if (away.Count == 0 || !Rng.Chance(RegularChance)) return null;
+
+        BirdSave pick = away[Rng.Next(away.Count)];
+        regulars.Remove(pick);
+        Bird bird = Bird.FromSave(pick);
+        bird.StartNewVisit();
+        return bird;
+    }
+
+    public List<BirdSave> SaveRegulars() => new(regulars);
+
+    public void RestoreRegulars(List<BirdSave> saved)
+    {
+        regulars.Clear();
+        regulars.AddRange(saved);
+    }
+
+    // Saving (see SaveGame.cs): the name counters, so a loaded world never repeats a name.
+    public Dictionary<BirdType, int> SaveNameCounters() => new(nameCounters);
+
+    public void RestoreNameCounters(Dictionary<BirdType, int> counters)
+    {
+        nameCounters.Clear();
+        foreach ((BirdType type, int count) in counters) nameCounters[type] = count;
     }
 
     public static BirdType GetRandomBirdType()

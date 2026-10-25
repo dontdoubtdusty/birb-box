@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Raylib_cs;
 
@@ -5,6 +6,8 @@ public class Bird : Entity
 {
     // IDENTITY
     public string Name { get; private set; }
+    public bool IsNamed { get; private set; }      // the player renamed it
+    public int Visits { get; private set; } = 1;   // 2 and up: a regular that came back
     public BirdType Type { get; private set; }
     public BirdInfo Info => Birds.Get(Type);
     public BirbShape Shape { get; private set; }
@@ -24,6 +27,19 @@ public class Bird : Entity
     public float HungerThreshold { get; private set; } = 0.4f;
     private const float StarveLimit = 25f;         // seconds at zero hunger before leaving
     private float starveTimer = 0f;
+    private const float LifespanMin = 3600f, LifespanMax = 10800f;    // 1 to 3 hours
+
+    // HOME: the patch a bird keeps coming back to (see BirdMover.HomeForce). Set when it arrives, moved after each meal.
+    public Vector3 Home { get; private set; }
+    public bool HasHome { get; private set; }
+    private const float HomeEdgeMargin = 8f;       // a home is never closer than this to the world's edge
+
+    // LOSING INTEREST: now and then a wandering bird just leaves, sooner when there's nothing it likes to eat.
+    private const float InterestCheckInterval = 15f;
+    private const float LoseInterestAfter = 2700f;     // seconds, on average (45 min) while food is about
+    private const float ScarceFoodFactor = 4f;         // how much sooner when there's no seed it can eat
+    private float interestTimer;
+    private bool returnsLater = true;                  // false once it leaves for good (old age)
 
     // STATE
     public BirdState State { get; set; } = BirdState.Wandering;
@@ -48,6 +64,8 @@ public class Bird : Entity
     // VOICE
     public float VoicePitch { get; private set; }  // each bird sounds a little higher or lower than the rest
     private float callTimer;                        // seconds until it calls out on its own
+    private const float CallDelayMin = 30f, CallDelayMax = 90f;    // time between a bird's own calls
+    private const float HushRetryMin = 4f, HushRetryMax = 12f;     // wait after holding a call for a nearby one
     private bool? wasFlying;                        // null until the first update, so a bird spawned in the air doesn't flap
 
     private bool removed = false;
@@ -58,20 +76,75 @@ public class Bird : Entity
         Name = name;
         Size = Info.Size;
         Speed = Rng.Range(0.45f, 1f);
-        Lifespan = Rng.Range(240f, 600f);    // 4 to 10 minutes
+        Lifespan = Rng.Range(LifespanMin, LifespanMax);
         Hunger = Rng.Range(0.5f, 1f);
         Heading = Rng.Range(0f, MathF.PI * 2f);
         HopPhase = Rng.Range(0f, 10f);
         foodSearchTimer = Rng.Range(0f, FoodSearchInterval);    // staggered so birds don't all search on one frame
         VoicePitch = Rng.Range(0.92f, 1.08f);
         callTimer = NextCallDelay();
+        interestTimer = Rng.Range(0f, InterestCheckInterval);
         Mover = new BirdMover(this);
 
-        Shape = Info.Shapes[Rng.Next(Info.Shapes.Length)];
-        Bounds = Shape.GetBounds();
+        SetShape(Rng.Next(Info.Shapes.Length));
+    }
 
-        // The origin is not at the feet, so the bottom of the box tells how high to lift the bird.
+    // Picks one of its species' shapes. The origin is not at the feet, so the bottom of the box tells how high to lift the bird.
+    [MemberNotNull(nameof(Shape))]
+    private void SetShape(int index)
+    {
+        Shape = Info.Shapes[index];
+        Bounds = Shape.GetBounds();
         GroundY = -Bounds.Min.Y * Size;
+    }
+
+    // ---------------- SAVING (see SaveGame.cs) ----------------
+
+    public BirdSave ToSave() => new()
+    {
+        Type = Type,
+        Name = Name,
+        ShapeIndex = Math.Max(0, Array.IndexOf(Info.Shapes, Shape)),
+        Position = Position,
+        Speed = Speed,
+        Heading = Heading,
+        HopPhase = HopPhase,
+        Age = Age,
+        Lifespan = Lifespan,
+        Hunger = Hunger,
+        State = State,
+        FlightTarget = FlightTarget,
+        ArrivingByAir = ArrivingByAir,
+        VoicePitch = VoicePitch,
+        IsNamed = IsNamed,
+        Visits = Visits,
+        HasHome = HasHome,
+        Home = Home,
+    };
+
+    // A bird that was heading for or eating some seed goes back to wandering; it finds its food again in a moment.
+    // One that was up on a feeder flutters down first, like after any meal there.
+    // A save from before the long lives gets a new lifespan in the new range.
+    public static Bird FromSave(BirdSave save)
+    {
+        Bird bird = new Bird(save.Type, save.Name);
+        bird.SetShape(Math.Clamp(save.ShapeIndex, 0, bird.Info.Shapes.Length - 1));
+        bird.Position = save.Position;
+        bird.Speed = save.Speed;
+        bird.Heading = save.Heading;
+        bird.HopPhase = save.HopPhase;
+        bird.Age = save.Age;
+        bird.Lifespan = save.Lifespan >= LifespanMin ? save.Lifespan : Rng.Range(LifespanMin, LifespanMax);
+        bird.Hunger = save.Hunger;
+        bird.State = save.State is BirdState.SeekingFood or BirdState.Eating ? BirdState.Wandering : save.State;
+        bird.FlightTarget = save.FlightTarget;
+        bird.ArrivingByAir = save.ArrivingByAir;
+        bird.VoicePitch = save.VoicePitch;
+        bird.IsNamed = save.IsNamed;
+        bird.Visits = Math.Max(1, save.Visits);
+        bird.HasHome = save.HasHome;
+        bird.Home = save.Home;
+        return bird;
     }
 
     public override void Update(float dt)
@@ -83,11 +156,15 @@ public class Bird : Entity
         {
             if (Age >= Lifespan)
             {
-                StartLeaving($"{Name} has grown old and flew off.");
+                StartLeaving($"{Name} has grown old and flew off for good.", returns: false);
             }
             else if (starveTimer >= StarveLimit)
             {
                 StartLeaving($"{Name} got too hungry and left to find food elsewhere.");
+            }
+            else
+            {
+                CheckInterest(dt);
             }
         }
 
@@ -98,7 +175,8 @@ public class Bird : Entity
                 break;
 
             case BirdState.Wandering:
-                if (IsHungry())
+                // Not while up on a feeder or a rock: it gets down first (see BirdMover)
+                if (IsHungry() && !IsFlying)
                 {
                     foodSearchTimer -= dt;
                     if (foodSearchTimer <= 0f)
@@ -125,7 +203,7 @@ public class Bird : Entity
 
         UpdateVoice(dt);
 
-        // A bird that walks past the world edge has wandered off to somewhere else.
+        // A bird that walks past the world edge has wandered off to somewhere else (rare: BirdMover turns them back).
         if (State != BirdState.Arriving && !World.Instance.IsInside(Position, 3f))
         {
             if (State != BirdState.Leaving)
@@ -137,18 +215,56 @@ public class Bird : Entity
     }
 
     // Removes the bird from the world once, even if two things ask in the same frame.
+    // Unless it left for good, it joins the regulars who may come back later (see BirdSpawner).
     public void Remove()
     {
         if (removed) return;
         removed = true;
         World.Instance.RemoveEntity(this);
+        if (returnsLater) BirdSpawner.Instance.AddRegular(this);
+    }
+
+    // Every so often a wandering bird may lose interest and leave. Much likelier when nothing it eats is lying about.
+    private void CheckInterest(float dt)
+    {
+        if (State != BirdState.Wandering || IsFlying) return;
+
+        interestTimer -= dt;
+        if (interestTimer > 0f) return;
+        interestTimer = InterestCheckInterval;
+
+        bool scarce = !World.Instance.GetAllEntities<Food>().Any(food => !food.IsFullyEaten && CanEat(food));
+        float chance = InterestCheckInterval / LoseInterestAfter * (scarce ? ScarceFoodFactor : 1f);
+        if (!Rng.Chance(chance)) return;
+
+        StartLeaving(scarce ? $"{Name} found the pickings slim and flew off." : $"{Name} lost interest and flew off.");
+    }
+
+    // Moves its home patch to here, kept well inside the world.
+    public void SetHome(Vector3 spot)
+    {
+        Home = World.Instance.PullInside(new Vector3(spot.X, 0f, spot.Z), HomeEdgeMargin);
+        HasHome = true;
+    }
+
+    // A regular coming back for another visit (see BirdSpawner.TakeRegular).
+    public void StartNewVisit()
+    {
+        Visits++;
+        returnsLater = true;
+        starveTimer = 0f;
     }
 
     // Calls out now and then, and flaps when it leaves or touches the ground.
+    // If another bird called close by a moment ago, it holds its call and tries again a little later.
     private void UpdateVoice(float dt)
     {
         callTimer -= dt;
-        if (callTimer <= 0f) Call();
+        if (callTimer <= 0f)
+        {
+            if (Sounds.CalledNearby(Position)) callTimer = Rng.Range(HushRetryMin, HushRetryMax);
+            else Call();
+        }
 
         bool flying = IsFlying;
         if (wasFlying != null && flying != wasFlying) Sounds.PlayFlap(Position, takeoff: flying);
@@ -162,7 +278,7 @@ public class Bird : Entity
         callTimer = NextCallDelay();
     }
 
-    private static float NextCallDelay() => Rng.Range(8f, 25f);
+    private static float NextCallDelay() => Rng.Range(CallDelayMin, CallDelayMax);
 
     // Blank names are ignored, so the bird keeps its old one.
     public void Rename(string newName)
@@ -172,6 +288,7 @@ public class Bird : Entity
 
         EventLog.Add($"{Name} shall henceforth be known as {newName}.");
         Name = newName;
+        IsNamed = true;
     }
 
     private void TickDownHunger(float dt)
@@ -219,9 +336,14 @@ public class Bird : Entity
         float reach = feeder != null ? feeder.Info.PerchRadius + 0.5f : 0.6f;
         if (Mover.IsCloseTo(TargetFood.Position, reach))
         {
+            perchSpot = feeder?.TakePerch(this);
+            if (feeder != null && perchSpot == null)
+            {
+                ForgetFood();    // every perch got taken on the way; it looks again in a moment
+                return;
+            }
             State = BirdState.Eating;
             eatTimer = 0f;
-            perchSpot = feeder?.PerchSpot(Position, GroundY);
             return;
         }
 
@@ -255,6 +377,7 @@ public class Bird : Entity
             {
                 TargetFood = null;
                 State = BirdState.Wandering;
+                SetHome(Position);
                 if (Rng.Chance(CoinDropChance))
                 {
                     World.Instance.AddEntity(new Coin(Position + new Vector3(0, 0.3f, 0)));
@@ -270,21 +393,33 @@ public class Bird : Entity
         if (State == BirdState.SeekingFood || State == BirdState.Eating) State = BirdState.Wandering;
     }
 
-    public void StartLeaving(string reason)
+    // returns: false when it's gone for good (old age), so it never comes back as a regular.
+    public void StartLeaving(string reason, bool returns = true)
     {
         if (State == BirdState.Leaving) return;
 
+        returnsLater = returns;
         State = BirdState.Leaving;
         TargetFood = null;
         Mover.PickLeavingTarget();
         EventLog.Add(reason);
     }
 
+    // How far the tip of its beak sticks out in front of its middle (for sitting the right distance from a feeding port).
+    public float BeakReach => Bounds.Max.Z * Size;
+
     // Roughly how far the bird reaches out from its middle when seen from above (for the selection ring).
     public float FootprintRadius => MathF.Max(Bounds.Max.X - Bounds.Min.X, Bounds.Max.Z - Bounds.Min.Z) * 0.5f * Size;
 
     public string FormatAge()
     {
-        return $"{(int)(Age / 60)}m {(int)(Age % 60)}s of {(int)(Lifespan / 60)}m";
+        return $"{FormatTime(Age)} of {FormatTime(Lifespan)}";
+    }
+
+    // "1h 05m" past an hour, "12m 30s" below it.
+    private static string FormatTime(float seconds)
+    {
+        if (seconds >= 3600f) return $"{(int)(seconds / 3600)}h {(int)(seconds % 3600 / 60):00}m";
+        return $"{(int)(seconds / 60)}m {(int)(seconds % 60):00}s";
     }
 }

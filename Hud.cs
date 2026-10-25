@@ -2,9 +2,10 @@ using System.Numerics;
 using Raylib_cs;
 
 // The fixed on-screen HUD, drawn with plain Raylib on top of the hologram:
-// the stats screen in the right side column (see SidePanels), and the selected bird card
+// the stats screen in the right side column (see SidePanels), and the selected bird or feeder card
 // floating at the top of the middle area. The world map is its own class (MiniMap).
-// Clickable parts of the card: the name (click to rename), and the Follow and Center buttons.
+// Clickable parts of the bird card: the name (click to rename), and the Follow and Center buttons.
+// The feeder card shows the seed inside and has Move and Center buttons.
 public class Hud
 {
     // LAYOUT
@@ -13,12 +14,14 @@ public class Hud
     private const int HeaderSize = 12;
     private const int NameSize = 20;
     private const int CardWidth = 260, CardHeight = 164;
+    private const int SeedLineHeight = 20;
     private const int CardButtonHeight = 24, CardButtonGap = 6;
 
     // Screen rectangles, recalculated every frame so they follow window resizes.
     private Rectangle statsRect;
     private Rectangle cardRect, nameRect, followButton, centerButton;
     private bool cardVisible;
+    private Feeder? feeder;          // the selected feeder this frame, when its card is showing instead of a bird's
 
     // NAME EDITING: while this is on, the keyboard types into the name instead of steering the game.
     public bool IsEditingName { get; private set; }
@@ -88,22 +91,29 @@ public class Hud
     {
         statsRect = engine.Sides.StatsSlot;
 
-        cardVisible = engine.SelectedBird != null;
+        feeder = engine.SelectedFeeder;
+        cardVisible = engine.SelectedBird != null || feeder != null;
         Rectangle left = engine.Sides.LeftColumn;
-        cardRect = new Rectangle(left.X + left.Width + Margin, Margin, CardWidth, CardHeight);
+        cardRect = new Rectangle(left.X + left.Width + Margin, Margin, CardWidth, feeder != null ? FeederCardHeight(feeder) : CardHeight);
 
         float x = cardRect.X + Pad;
         float innerWidth = CardWidth - Pad * 2;
         nameRect = new Rectangle(x - 4, cardRect.Y + Pad + HeaderSize + 3, innerWidth + 8, NameSize + 6);
 
         float buttonWidth = (innerWidth - CardButtonGap) / 2f;
-        float buttonTop = cardRect.Y + CardHeight - Pad - CardButtonHeight;
+        float buttonTop = cardRect.Y + cardRect.Height - Pad - CardButtonHeight;
         followButton = new Rectangle(x, buttonTop, buttonWidth, CardButtonHeight);
         centerButton = new Rectangle(x + buttonWidth + CardButtonGap, buttonTop, buttonWidth, CardButtonHeight);
     }
 
     private void HandleCardClicks(GameEngine engine, bool mouseBlockedByImGui)
     {
+        if (feeder != null)
+        {
+            HandleFeederCardClicks(engine, feeder, mouseBlockedByImGui);
+            return;
+        }
+
         Bird? bird = engine.SelectedBird;
         if (bird == null || mouseBlockedByImGui || !Raylib.IsMouseButtonPressed(MouseButton.Left)) return;
 
@@ -124,13 +134,86 @@ public class Hud
         }
     }
 
+    // The feeder card's buttons share the bird card's spots: Move on the left, Center on the right.
+    private void HandleFeederCardClicks(GameEngine engine, Feeder selected, bool mouseBlockedByImGui)
+    {
+        if (mouseBlockedByImGui || !Raylib.IsMouseButtonPressed(MouseButton.Left)) return;
+
+        Vector2 mouse = Raylib.GetMousePosition();
+        if (Raylib.CheckCollisionPointRec(mouse, followButton)) engine.MoveSelectedFeeder();
+        else if (Raylib.CheckCollisionPointRec(mouse, centerButton)) engine.View.JumpTo(new Vector2(selected.Position.X, selected.Position.Z));
+    }
+
+    // Header, name, label, fill bar, one line per seed (at least one, for "Empty"), the birds eating there, buttons.
+    private static int FeederCardHeight(Feeder selected)
+    {
+        int seedLines = Math.Max(1, SeedsIn(selected).Count);
+        return Pad + HeaderSize + 6 + 24 + 22 + 24 + seedLines * SeedLineHeight + 24 + CardButtonHeight + Pad;
+    }
+
+    // The seed in a feeder that's worth listing, most first.
+    private static List<(SeedType Seed, float Amount)> SeedsIn(Feeder selected)
+    {
+        if (selected.Seed == null) return new();
+        return selected.Seed.Contents.Where(pair => pair.Value > 0.01f)
+                                     .OrderByDescending(pair => pair.Value)
+                                     .Select(pair => (pair.Key, pair.Value)).ToList();
+    }
+
     // ---------------- DRAW (no simulation changes) ----------------
 
     public void Draw(GameEngine engine, Color accent)
     {
         Layout(engine);
         DrawStats(engine, accent);
-        if (cardVisible) DrawSelectedCard(engine, engine.SelectedBird!, accent);
+        if (feeder != null) DrawFeederCard(feeder, accent);
+        else if (cardVisible) DrawSelectedCard(engine, engine.SelectedBird!, accent);
+    }
+
+    private void DrawFeederCard(Feeder selected, Color accent)
+    {
+        UiDraw.Panel(cardRect, accent);
+        int x = (int)cardRect.X + Pad;
+        int y = (int)cardRect.Y + Pad;
+        int innerWidth = CardWidth - Pad * 2;
+        FeederInfo info = selected.Info;
+
+        UiText.Draw("FEEDER", x, y, HeaderSize, accent);
+        y += HeaderSize + 6;
+        UiText.Draw(info.Name, x, y, NameSize, Palette.BrassLight);
+        y += 24;
+        UiText.Draw(info.Label, x, y, HeaderSize, Palette.DimText);
+        y += 22;
+
+        // How full it is
+        float full = Math.Clamp(selected.Held / info.Capacity, 0f, 1f);
+        Raylib.DrawRectangle(x, y, innerWidth, 16, Palette.PanelDark);
+        Raylib.DrawRectangle(x, y, (int)(innerWidth * full), 16, Raylib.Fade(accent, 0.8f));
+        UiText.Draw($"Holds {selected.Held:0.0} of {info.Capacity:0}", x + 6, y + 3, HeaderSize, Palette.Text);
+        y += 24;
+
+        // What's inside, with a swatch of each seed's color
+        List<(SeedType Seed, float Amount)> inside = SeedsIn(selected);
+        if (inside.Count == 0)
+        {
+            UiText.Draw("Empty", x, y, 18, Palette.DimText);
+            y += SeedLineHeight;
+        }
+        foreach ((SeedType seed, float amount) in inside)
+        {
+            SeedInfo seedInfo = Seeds.Get(seed);
+            Raylib.DrawRectangle(x, y + 4, 4, 12, seedInfo.Color);
+            UiText.Draw(seedInfo.Name, x + 10, y, 18, Palette.Text);
+            string value = amount.ToString("0.0");
+            UiText.Draw(value, x + innerWidth - UiText.Measure(value, 18), y, 18, Palette.DimText);
+            y += SeedLineHeight;
+        }
+
+        int eating = World.Instance.GetAllEntities<Bird>().Count(b => b.State == BirdState.Eating && b.TargetFood != null && b.TargetFood == selected.Seed);
+        UiText.Draw(eating == 1 ? "1 bird eating here" : $"{eating} birds eating here", x, y + 2, HeaderSize, Palette.DimText);
+
+        UiDraw.Button(followButton, "Move", accent);
+        UiDraw.Button(centerButton, "Center", accent);
     }
 
     private void DrawStats(GameEngine engine, Color accent)
@@ -178,6 +261,11 @@ public class Hud
         DrawNameField(bird, x, y, nameHovered, accent);
         y += 24;
         UiText.Draw(bird.State.ToString(), x, y, 20, Palette.DimText);
+        if (bird.Visits > 1)
+        {
+            string visit = $"Visit {bird.Visits}";
+            UiText.Draw(visit, x + innerWidth - UiText.Measure(visit, 20), y, 20, Palette.DimText);
+        }
         y += 28;
 
         // Hunger bar: hologram color normally, orange when the bird is hungry

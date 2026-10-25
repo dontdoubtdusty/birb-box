@@ -18,6 +18,11 @@ public static class Sounds
     private static Sound projectorStop;
     private const float ProjectorVolume = 0.5f;
 
+    // The BIRBS / SHOP rocker. Your own sounds/rocker_click.wav if it's there, otherwise the radio's button click.
+    private static Sound rockerClick;
+    private static bool hasRockerClick;
+    private const float RockerVolume = 0.8f;
+
     // The hum is streamed as Music, so it loops on its own without a gap
     private static Music holoHum;
     private const float HumVolume = 0.22f;
@@ -31,9 +36,14 @@ public static class Sounds
     private static SoundPool flapLand = null!;
     private static SoundPool[] pecks = null!;
 
-    private const float CallVolume = 0.3f;
+    private const float CallVolume = 0.15f;
     private const float FlapVolume = 0.35f;
     private const float PeckVolume = 0.18f;
+
+    // CROWD HUSH: a bird holds its call if another bird called within this distance in the last few seconds
+    private const float HushRadius = 5f;
+    private const float HushTime = 4f;
+    private static readonly List<(Vector3 Position, double Time)> recentCalls = new();
 
     // Birds past the hologram's edge are heard softly, fading out over this share of its radius
     private const float OffscreenStartVolume = 0.4f;
@@ -51,6 +61,9 @@ public static class Sounds
         radioButton = Raylib.LoadSound(Assets.PathTo("sounds/radio_button.wav"));
         projectorStart = Raylib.LoadSound(Assets.PathTo("sounds/projector_start.wav"));
         projectorStop = Raylib.LoadSound(Assets.PathTo("sounds/projector_stop.wav"));
+        string rockerFile = Assets.PathTo("sounds/rocker_click.wav");
+        hasRockerClick = File.Exists(rockerFile);
+        if (hasRockerClick) rockerClick = Raylib.LoadSound(rockerFile);
 
         holoHum = Raylib.LoadMusicStream(Assets.PathTo("sounds/holo_hum.wav"));
         Raylib.SetMusicVolume(holoHum, 0f);
@@ -86,6 +99,7 @@ public static class Sounds
         Raylib.UnloadSound(radioButton);
         Raylib.UnloadSound(projectorStart);
         Raylib.UnloadSound(projectorStop);
+        if (hasRockerClick) Raylib.UnloadSound(rockerClick);
         Raylib.UnloadMusicStream(holoHum);
 
         foreach (SoundPool[] pools in calls.Values)
@@ -136,6 +150,13 @@ public static class Sounds
     // A push button on the radio going down
     public static void PlayRadioButton() => PlayVaried(radioButton, 0.7f);
 
+    // The rocker switch snapping over to the other scene
+    public static void PlayRocker()
+    {
+        if (hasRockerClick) PlayVaried(rockerClick, RockerVolume);
+        else PlayVaried(radioButton, 0.7f);
+    }
+
     // A bird's coin hitting the dirt, and the player collecting one.
     // A small random pitch shift keeps a run of coins from sounding identical.
     public static void PlayCoinLand() => PlayVaried(coinLand, 0.5f);
@@ -150,12 +171,25 @@ public static class Sounds
 
     // ---------------- BIRDS ----------------
 
-    // One of the bird's species calls, at its own voice pitch.
+    // One of the bird's species calls, at its own voice pitch. Remembered for the crowd hush, even when too far to hear.
     public static void PlayCall(Bird bird)
     {
+        recentCalls.Add((bird.Position, Raylib.GetTime()));
         SoundPool[] options = calls[bird.Type];
         if (options.Length == 0) return;
         PlayBird(options[Rng.Next(options.Length)], bird.Position, CallVolume, bird.VoicePitch * Rng.Range(0.97f, 1.03f));
+    }
+
+    // True if some bird called within HushRadius of this spot in the last HushTime seconds.
+    public static bool CalledNearby(Vector3 position)
+    {
+        double now = Raylib.GetTime();
+        recentCalls.RemoveAll(call => now - call.Time > HushTime);
+        foreach ((Vector3 calledAt, _) in recentCalls)
+        {
+            if (Vector3.Distance(calledAt, position) < HushRadius) return true;
+        }
+        return false;
     }
 
     // takeoff: true when leaving the ground, false when touching down

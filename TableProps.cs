@@ -5,7 +5,8 @@ using Raylib_cs;
 // They're there to show how big the toys are, so they're kept to real sizes (1 unit is about 7.5 cm).
 //
 // Nothing can sit in front of the pedestals (the hologram scene is drawn over the room),
-// so the mug takes the front-left corner and everything else sits along the sides and back.
+// so the mug takes the front-left corner, the books sit just behind it, the candle takes the front-right
+// (the radio sits beside the pedestal; see Radio), and the rest sits along the sides and back.
 // Only the steam and the candle's LED flame move; the room's light never changes.
 public class TableProps
 {
@@ -13,12 +14,10 @@ public class TableProps
 
     // WHERE THINGS SIT (on the tabletop)
     private static readonly Vector3 MugSpot = new Vector3(-9.3f, T, 6.6f);
-    private static readonly Vector3 DrawingSpot = new Vector3(-10.9f, T, 2.6f);
+    private static readonly Vector3 DrawingSpot = new Vector3(-11.8f, T, -4.8f);
     private static readonly Vector3 TabletSpot = new Vector3(-11.3f, T, -1.2f);
-    private static readonly Vector3 BooksSpot = new Vector3(-12f, T, -5f);
-    private static readonly Vector3 PlantSpot = new Vector3(-8.4f, T, -5.6f);
-    private static readonly Vector3 GobletSpot = new Vector3(14f, T, 1.5f);
-    private static readonly Vector3 CandleSpot = new Vector3(15f, T, -4f);
+    private static readonly Vector3 BooksSpot = new Vector3(-11.4f, T, 2.8f);
+    private static readonly Vector3 CandleSpot = new Vector3(8.8f, T, 6.4f);
 
     // COLORS
     private static readonly Color MugRed = new Color(123, 23, 27, 255);    // #7B171B
@@ -29,15 +28,9 @@ public class TableProps
     private static readonly Color TabletText = new Color(110, 205, 215, 255);
     private static readonly Color Pages = new Color(214, 204, 180, 255);
     private static readonly Color Paper = new Color(168, 163, 152, 255);    // unlit, so already dimmed for night
-    private static readonly Color Pot = new Color(150, 90, 62, 255);
-    private static readonly Color Soil = new Color(50, 35, 25, 255);
-    private static readonly Color Leaf = new Color(80, 140, 80, 255);
-    private static readonly Color LeafLight = new Color(104, 164, 92, 255);
     private static readonly Color Brass = new Color(190, 150, 80, 255);
     private static readonly Color Wax = new Color(225, 215, 190, 255);
     private static readonly Color Flame = new Color(255, 210, 120, 255);
-    private static readonly Color Pewter = new Color(140, 144, 150, 255);
-    private static readonly Color Wine = new Color(70, 15, 25, 255);
 
     private Texture2D logo;
 
@@ -61,8 +54,6 @@ public class TableProps
         DrawDrawing();
         DrawTablet(shapes);
         DrawBooks(shapes);
-        DrawPlant(shapes);
-        DrawGoblet(shapes);
         DrawCandleHolder(shapes, time);
 
         // See-through things last, without writing depth, so they don't hide what's behind them
@@ -207,38 +198,7 @@ public class TableProps
         shapes.Box(bottom + new Vector3(0, 0.23f, 0) + Turn(new Vector3(-1.47f, 0, 0), yaw), new Vector3(0.06f, 0.46f, 2.2f), cover, Vector3.UnitY, yaw);
     }
 
-    // A clay pot with a lip, dark soil, and a bushy clump of leaves.
-    private void DrawPlant(UnitShapes shapes)
-    {
-        Vector3 p = PlantSpot;
-        shapes.Cylinder(p, 0.7f, 1.1f, Pot);
-        shapes.Cylinder(p + new Vector3(0, 1.0f, 0), 0.8f, 0.18f, Pot);
-        shapes.Cylinder(p + new Vector3(0, 1.12f, 0), 0.68f, 0.07f, Soil);
-
-        Vector3[] leaves =
-        {
-            new(0.35f, 1.6f, 0.1f), new(-0.4f, 1.8f, -0.1f), new(0f, 2.1f, 0.2f),
-            new(0.15f, 1.9f, -0.35f), new(-0.2f, 2.4f, 0f), new(0.3f, 2.3f, 0.1f),
-        };
-        for (int i = 0; i < leaves.Length; i++)
-        {
-            shapes.Ball(p + leaves[i], new Vector3(0.5f, 0.25f, 0.32f), i % 2 == 0 ? Leaf : LeafLight);
-        }
-    }
-
     // ---------------- MEDIEVAL-REVIVAL DECOR ----------------
-
-    // A pewter-look goblet with a little wine in it.
-    private void DrawGoblet(UnitShapes shapes)
-    {
-        Vector3 g = GobletSpot;
-        shapes.Cylinder(g, 0.6f, 0.1f, Pewter);
-        shapes.Cylinder(g + new Vector3(0, 0.1f, 0), 0.12f, 1.0f, Pewter);
-        shapes.Ball(g + new Vector3(0, 0.55f, 0), new Vector3(0.2f, 0.2f, 0.2f), Pewter);
-        shapes.Cylinder(g + new Vector3(0, 1.1f, 0), 0.35f, 0.25f, Pewter);
-        shapes.Cylinder(g + new Vector3(0, 1.35f, 0), 0.55f, 0.85f, Pewter);
-        shapes.Cylinder(g + new Vector3(0, 2.2f, 0), 0.49f, 0.01f, Wine);
-    }
 
     // A printed brass candle holder: base, stem with a knob, drip pan, a wax candle, and an LED flame.
     private const float CandleTop = 3.32f;    // height of the candle's top above the table

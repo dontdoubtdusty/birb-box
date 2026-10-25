@@ -1,7 +1,8 @@
 using System.Numerics;
 using Raylib_cs;
 
-// The cathedral radio on the front-right of the table: a walnut cabinet with a pointed-arch speaker grille,
+// The cathedral radio on the table just right of the pedestal, level with its middle (so it stays in view
+// when leaning in): a walnut cabinet with a pointed-arch speaker grille,
 // a glowing tuning window, and a row of brass controls along the bottom:
 //   [volume knob]  [power button]  [next button]  [tuning knob]
 // Knobs turn with a drag (sideways or up/down) or the mouse wheel; buttons press on click.
@@ -14,9 +15,9 @@ public class Radio
 {
     public RadioPlayer Player { get; } = new RadioPlayer();
 
-    // WHERE IT SITS: front-right of the table, turned to face the camera a little
-    public static readonly Vector3 Spot = new Vector3(8.8f, Backdrop.TableY, 6.4f);
-    private const float YawDegrees = -28f;
+    // WHERE IT SITS: right of the pedestal, turned to face the camera
+    public static readonly Vector3 Spot = new Vector3(10.4f, Backdrop.TableY, -0.3f);
+    private const float YawDegrees = -22f;
 
     // SHAPE (local units)
     private const float Width = 3.4f, Depth = 1.5f;
@@ -69,6 +70,7 @@ public class Radio
     private float powerPush, nextPush;      // 0 = up, 1 = pushed all the way in
     private bool tuningSettles;             // the needle is easing onto the nearest station
     private float labelTimer;
+    private float grabAngle;                // a held knob's angle when it was grabbed, so the hand turns with it
 
     // True while the mouse is over the radio or holding one of its controls, so it doesn't reach the hologram.
     public bool UsingMouse => hovered != Part.None || held != Part.None;
@@ -139,6 +141,7 @@ public class Radio
     {
         held = part;
         tuningSettles = false;
+        if (part == Part.Volume || part == Part.Tuning) grabAngle = KnobAngle(part);
         switch (part)
         {
             case Part.Power:
@@ -209,6 +212,30 @@ public class Radio
 
     private static bool Hits(Ray ray, Vector3 min, Vector3 max) => Raylib.GetRayCollisionBox(ray, new BoundingBox(min, max)).Hit;
 
+    // Where a hand should go for the control the mouse is on or holding, in room space (see Hands).
+    // point: a button's face, or a knob's middle. facing: out of the radio's front. holding: pressed or gripped.
+    // twist: how far a held knob has turned since it was grabbed. False when it's no control (or just the cabinet).
+    public bool HandTarget(out Vector3 point, out Vector3 facing, out bool isKnob, out bool holding, out float twist)
+    {
+        Part part = held != Part.None ? held : hovered;
+        facing = Forward;
+        holding = held == part && held != Part.None;
+        isKnob = part == Part.Volume || part == Part.Tuning;
+        twist = isKnob && holding ? KnobAngle(part) - grabAngle : 0f;
+
+        switch (part)
+        {
+            case Part.Volume: point = ToScene(-KnobX, ControlY, PlateFront + KnobLength * 0.5f); return true;
+            case Part.Tuning: point = ToScene(KnobX, ControlY, PlateFront + KnobLength * 0.5f); return true;
+            case Part.Power: point = ToScene(-ButtonX, ControlY, PlateFront + ButtonDepth - powerPush * ButtonTravel); return true;
+            case Part.Next: point = ToScene(ButtonX, ControlY, PlateFront + ButtonDepth - nextPush * ButtonTravel); return true;
+            default: point = Vector3.Zero; return false;
+        }
+    }
+
+    // How far a knob is turned, in radians, the same way its pointer dot is drawn.
+    private float KnobAngle(Part part) => part == Part.Volume ? VolumeAngle() : Player.Tuning * MathF.PI * 6f;
+
     // ---------------- DRAW (no changes) ----------------
 
     // The solid parts, lit by the room. Called from Backdrop.Draw with the room's shapes.
@@ -218,7 +245,7 @@ public class Radio
         DrawGrille(shapes);
         DrawDial(shapes);
         DrawKnob(shapes, -KnobX, VolumeAngle(), hovered == Part.Volume || held == Part.Volume);
-        DrawKnob(shapes, KnobX, Player.Tuning * MathF.PI * 6f, hovered == Part.Tuning || held == Part.Tuning);
+        DrawKnob(shapes, KnobX, KnobAngle(Part.Tuning), hovered == Part.Tuning || held == Part.Tuning);
         DrawButton(shapes, -ButtonX, powerPush, hovered == Part.Power, isPower: true);
         DrawButton(shapes, ButtonX, nextPush, hovered == Part.Next, isPower: false);
     }

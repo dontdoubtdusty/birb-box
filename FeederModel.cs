@@ -45,14 +45,19 @@ public static class FeederModel
         }
         else
         {
-            // A post, a brass dish, two crossed perches, the seed inside a glass tube, and a domed brass roof.
+            // A post, a brass dish, one perch rod through the tube (sizes match Feeders: rodReach 0.3, top at 0.608),
+            // the seed inside a glass tube, a brass feeding port above each end of the rod, and a domed brass roof.
             // The seed is drawn before the glass so it shows through.
             Cylinder(new Vector3(0f, 0f, 0f), 0.025f, 0.53f, WoodDark);
             Cylinder(new Vector3(0f, 0.53f, 0f), 0.11f, 0.03f, Palette.Brass);
-            Box(new Vector3(0f, 0.6f, 0f), new Vector3(0.46f, 0.015f, 0.015f), WoodLight);
-            Box(new Vector3(0f, 0.6f, 0f), new Vector3(0.015f, 0.015f, 0.46f), WoodLight);
+            Box(new Vector3(0f, 0.6f, 0f), new Vector3(0.6f, 0.016f, 0.016f), WoodLight);
             if (fill > 0f) Cylinder(new Vector3(0f, 0.56f, 0f), 0.075f, 0.38f * fill, seedColor);
             Cylinder(new Vector3(0f, 0.56f, 0f), 0.085f, 0.38f, Glass);
+            foreach (float side in new[] { -1f, 1f })
+            {
+                Ball(new Vector3(0.085f * side, 0.69f, 0f), new Vector3(0.012f, 0.03f, 0.03f), Palette.BrassLight);
+                Ball(new Vector3(0.094f * side, 0.69f, 0f), new Vector3(0.006f, 0.016f, 0.016f), WoodDark);
+            }
             Ball(new Vector3(0f, 0.96f, 0f), new Vector3(0.12f, 0.06f, 0.12f), Palette.BrassLight);
             Ball(new Vector3(0f, 1.03f, 0f), new Vector3(0.025f, 0.025f, 0.025f), Palette.BrassLight);
         }

@@ -32,9 +32,9 @@ public class BucketPanel
     // How much seed is left in each bag
     public Dictionary<SeedType, float> BagSupply { get; } = new();
 
-    // The speckles and the ATTRACTS list only change when the bucket does, so they're worked out once per change.
-    private RenderTexture2D speckleTexture;
-    private int speckleVersion = -1;
+    // The bucket's contents and the ATTRACTS list only change when the bucket does, so they're worked out once per change.
+    private RenderTexture2D contentsTexture;
+    private int contentsVersion = -1;
     private List<KeyValuePair<BirdType, float>> shares = new();
     private int sharesVersion = -1;
     private bool sharesFrostcrestSeen;
@@ -174,90 +174,218 @@ public class BucketPanel
         }
     }
 
-    // Stirred seed fills the bottom as speckles; unstirred layers stack above it as bands.
+    // ---------------- THE BUCKET ----------------
+
+    // The bucket's outline in screen pixels, worked out from the box it's drawn in: a rim band with an oval opening,
+    // sides that narrow toward a rounded bottom, and a handle that loops out on the left to a grip,
+    // then crosses the front up to the right side.
+    private readonly struct BucketShape
+    {
+        public const float TopHalf = 44f, BottomHalf = 36f;    // half widths of the body at its top and bottom
+        public const float RimHalf = 48f, RimDepth = 6f;       // the rim's oval: half width, and half height (the tilt)
+        public const float BandHeight = 9f;
+        public const float BottomDepth = 5f;                   // how far the rounded bottom dips below the sides
+        public const float GripRadius = 4f;
+
+        public readonly float Cx, RimY, BodyTop, BodyBottom;
+
+        // Shifted right of the box's middle, to make room for the handle on the left
+        public BucketShape(Rectangle box)
+        {
+            Cx = box.X + box.Width / 2f + 10f;
+            RimY = box.Y + RimDepth;
+            BodyTop = RimY + BandHeight;
+            BodyBottom = box.Y + box.Height - 2f - BottomDepth;
+        }
+
+        public float Floor => BodyBottom + BottomDepth;      // the lowest point inside
+        public float FillTop => RimY + 2f;                   // a full bucket reaches just under the rim
+        public Vector2 GripLeft => new Vector2(Cx - TopHalf - 8f, BodyTop + 46f);
+        public Vector2 GripRight => new Vector2(Cx - TopHalf + 20f, BodyTop + 46f);
+
+        // Half the inside width at a height: straight under the rim, narrowing down the body, rounding off at the bottom.
+        public float HalfWidthAt(float y)
+        {
+            if (y < RimY) return 0f;
+            if (y <= BodyTop) return TopHalf + 2f;
+            if (y <= BodyBottom) return TopHalf + (BottomHalf - TopHalf) * (y - BodyTop) / (BodyBottom - BodyTop);
+            float t = (y - BodyBottom) / BottomDepth;
+            return t >= 1f ? 0f : BottomHalf * MathF.Sqrt(1f - t * t);
+        }
+    }
+
+    // A see-through hologram bucket: a faint body with scanlines, the seed inside, and a glowing outline
+    // (a wide faint stroke under a thin bright one).
     private void DrawBucket(Color accent)
     {
         Rectangle r = bucketRect;
-        Color wall = Raylib.Fade(accent, 0.6f);
+        BucketShape shape = new BucketShape(r);
 
-        // Walls and floor, open at the top, with a small rim
-        Raylib.DrawRectangle((int)r.X, (int)r.Y, 2, (int)r.Height, wall);
-        Raylib.DrawRectangle((int)(r.X + r.Width - 2), (int)r.Y, 2, (int)r.Height, wall);
-        Raylib.DrawRectangle((int)r.X, (int)(r.Y + r.Height - 2), (int)r.Width, 2, wall);
-        Raylib.DrawRectangle((int)r.X - 3, (int)r.Y, 8, 2, wall);
-        Raylib.DrawRectangle((int)(r.X + r.Width - 5), (int)r.Y, 8, 2, wall);
-
-        float innerX = r.X + 2, innerWidth = r.Width - 4;
-        float innerHeight = r.Height - 2;
-        float floorY = r.Y + innerHeight;
-        float pxPerSeed = innerHeight / SeedBucket.Capacity;
-
-        float mixedHeight = Bucket.MixedTotal * pxPerSeed;
-        if (mixedHeight >= 1f)
+        for (int y = (int)shape.RimY; y < (int)MathF.Ceiling(shape.Floor); y++)
         {
-            DrawSpeckles(new Rectangle(innerX, floorY - mixedHeight, innerWidth, mixedHeight));
+            float halfWidth = shape.HalfWidthAt(y + 0.5f);
+            if (halfWidth <= 0f) continue;
+            float alpha = y % 3 == 0 ? 0.12f : 0.06f;
+            Raylib.DrawRectangle((int)(shape.Cx - halfWidth), y, (int)MathF.Ceiling(halfWidth * 2f), 1, Raylib.Fade(accent, alpha));
         }
 
-        // Stack the layers using a running float so there are no gaps from rounding
-        float fillTop = floorY - mixedHeight;
-        foreach (SeedBucket.Layer layer in Bucket.Layers)
-        {
-            float bandHeight = layer.Amount * pxPerSeed;
-            int y0 = (int)MathF.Round(fillTop - bandHeight);
-            int y1 = (int)MathF.Round(fillTop);
-            Raylib.DrawRectangle((int)innerX, y0, (int)innerWidth, y1 - y0, Seeds.Get(layer.Seed).Color);
-            fillTop -= bandHeight;
-        }
+        if (Bucket.Total > 0.01f) DrawContents(r);
+
+        Vector2 gripLeft = shape.GripLeft, gripRight = shape.GripRight;
+        Color gripFill = Raylib.Fade(accent, 0.15f);
+        Raylib.DrawRectangleRec(new Rectangle(gripLeft.X, gripLeft.Y - BucketShape.GripRadius, gripRight.X - gripLeft.X, BucketShape.GripRadius * 2f), gripFill);
+        Raylib.DrawCircleV(gripLeft, BucketShape.GripRadius, gripFill);
+        Raylib.DrawCircleV(gripRight, BucketShape.GripRadius, gripFill);
+
+        DrawOutline(shape, 4f, Raylib.Fade(accent, 0.18f));
+        DrawOutline(shape, 1.6f, Raylib.Fade(accent, 0.9f));
 
         string fullness = Bucket.IsFull ? "FULL" : $"{Bucket.Total / SeedBucket.Capacity * 100f:0}%";
         int textWidth = UiText.Measure(fullness, HeaderSize);
         UiText.Draw(fullness, (int)(r.X + r.Width - textWidth), (int)panelRect.Y + Pad, HeaderSize, Palette.DimText);
     }
 
-    // The speckles are drawn into a texture as tall as the bucket, sitting on its floor,
-    // and only redrawn when the bucket changes. Every other frame just shows the texture.
-    private void DrawSpeckles(Rectangle area)
+    // Every line of the bucket, at one thickness and color.
+    private static void DrawOutline(BucketShape s, float thick, Color color)
     {
-        if (speckleTexture.Id == 0)
-        {
-            speckleTexture = Raylib.LoadRenderTexture((int)area.Width, BucketHeight);
-        }
-        int textureHeight = speckleTexture.Texture.Height;
+        float r = BucketShape.RimHalf, d = BucketShape.RimDepth;
 
-        if (speckleVersion != Bucket.Version)
-        {
-            Raylib.BeginTextureMode(speckleTexture);
-                Raylib.ClearBackground(Color.Blank);
-                RenderSpeckles(new Rectangle(0, textureHeight - area.Height, area.Width, area.Height));
-            Raylib.EndTextureMode();
-            speckleVersion = Bucket.Version;
-        }
+        // Rim: the oval opening, the band's sides, and the band's lower edge (front half only)
+        Arc(s.Cx, s.RimY, r, d, 0f, 360f, thick, color);
+        Raylib.DrawLineEx(new Vector2(s.Cx - r, s.RimY), new Vector2(s.Cx - r, s.BodyTop), thick, color);
+        Raylib.DrawLineEx(new Vector2(s.Cx + r, s.RimY), new Vector2(s.Cx + r, s.BodyTop), thick, color);
+        Arc(s.Cx, s.BodyTop, r, d, 0f, 180f, thick, color);
 
-        // Render textures are stored upside down, so the source height is negative.
-        Rectangle source = new Rectangle(0, 0, speckleTexture.Texture.Width, -textureHeight);
-        Vector2 topLeft = new Vector2(area.X, area.Y + area.Height - textureHeight);
-        Raylib.DrawTextureRec(speckleTexture.Texture, source, topLeft, Color.White);
+        // Sides and the rounded bottom
+        float sideTop = s.BodyTop + 2f;
+        Raylib.DrawLineEx(new Vector2(s.Cx - BucketShape.TopHalf, sideTop), new Vector2(s.Cx - BucketShape.BottomHalf, s.BodyBottom), thick, color);
+        Raylib.DrawLineEx(new Vector2(s.Cx + BucketShape.TopHalf, sideTop), new Vector2(s.Cx + BucketShape.BottomHalf, s.BodyBottom), thick, color);
+        Arc(s.Cx, s.BodyBottom, BucketShape.BottomHalf, BucketShape.BottomDepth, 0f, 180f, thick, color);
+
+        // Handle: out from the left ear and down to the grip, then from the grip across the front up to the right ear
+        Vector2 gripLeft = s.GripLeft, gripRight = s.GripRight;
+        float g = BucketShape.GripRadius;
+        Bezier(new Vector2(s.Cx - BucketShape.TopHalf + 1f, s.BodyTop + 8f),
+               new Vector2(s.Cx - BucketShape.TopHalf - 26f, s.BodyTop + 18f),
+               gripLeft - new Vector2(g, 0f), thick, color);
+        Bezier(gripRight + new Vector2(g, 0f),
+               new Vector2(s.Cx + BucketShape.TopHalf * 0.3f, s.BodyTop + 52f),
+               new Vector2(s.Cx + BucketShape.TopHalf - 1f, s.BodyTop + 8f), thick, color);
+
+        // The grip: a short capsule
+        Raylib.DrawLineEx(gripLeft - new Vector2(0f, g), gripRight - new Vector2(0f, g), thick, color);
+        Raylib.DrawLineEx(gripLeft + new Vector2(0f, g), gripRight + new Vector2(0f, g), thick, color);
+        Arc(gripLeft.X, gripLeft.Y, g, g, 90f, 270f, thick, color);
+        Arc(gripRight.X, gripRight.Y, g, g, -90f, 90f, thick, color);
     }
 
-    // A dark base with dots in each seed's color, in proportion to how much of it is mixed in.
-    private void RenderSpeckles(Rectangle area)
+    // The seed inside is drawn into a texture the size of the bucket's box, only redrawn when the bucket changes.
+    private void DrawContents(Rectangle area)
     {
-        Raylib.DrawRectangleRec(area, new Color(40, 32, 24, 255));
+        if (contentsTexture.Id == 0)
+        {
+            contentsTexture = Raylib.LoadRenderTexture((int)area.Width, (int)area.Height);
+        }
 
+        if (contentsVersion != Bucket.Version)
+        {
+            Raylib.BeginTextureMode(contentsTexture);
+                Raylib.ClearBackground(Color.Blank);
+                RenderContents(new BucketShape(new Rectangle(0, 0, area.Width, area.Height)));
+            Raylib.EndTextureMode();
+            contentsVersion = Bucket.Version;
+        }
+
+        // Render textures are stored upside down, so the source height is negative. Drawn a little see-through.
+        Rectangle source = new Rectangle(0, 0, contentsTexture.Texture.Width, -contentsTexture.Texture.Height);
+        Raylib.DrawTextureRec(contentsTexture.Texture, source, new Vector2(area.X, area.Y), Raylib.Fade(Color.White, 0.8f));
+    }
+
+    // Row by row from the bottom up, following the bucket's shape: stirred seed first (a dark base with speckles
+    // in each seed's color), then the unstirred layers as bands, and a lighter oval for the top of the seed.
+    private void RenderContents(BucketShape shape)
+    {
+        float pxPerSeed = (shape.Floor - shape.FillTop) / SeedBucket.Capacity;
+        float mixedHeight = Bucket.MixedTotal * pxPerSeed;
+        float fillHeight = Bucket.Total * pxPerSeed;
+        float topY = shape.Floor - fillHeight;
+
+        for (int y = (int)MathF.Floor(topY); y < (int)MathF.Ceiling(shape.Floor); y++)
+        {
+            float above = shape.Floor - (y + 0.5f);
+            float halfWidth = shape.HalfWidthAt(y + 0.5f);
+            if (above > fillHeight || halfWidth <= 0f) continue;
+            Color color = ColorAtHeight(above, mixedHeight, pxPerSeed);
+            Raylib.DrawRectangle((int)(shape.Cx - halfWidth), y, (int)MathF.Ceiling(halfWidth * 2f), 1, color);
+        }
+
+        if (mixedHeight >= 1f) RenderSpeckles(shape, mixedHeight);
+
+        Color top = Palette.Lighten(ColorAtHeight(fillHeight - 0.5f, mixedHeight, pxPerSeed), 0.15f);
+        Raylib.DrawEllipse((int)shape.Cx, (int)topY, shape.HalfWidthAt(topY), 3.5f, top);
+    }
+
+    // Which seed shows at this height above the bottom: the stirred base, or one of the layers stacked on it.
+    private Color ColorAtHeight(float above, float mixedHeight, float pxPerSeed)
+    {
+        if (above < mixedHeight) return MixedBase;
+
+        float layerTop = mixedHeight;
+        Color last = MixedBase;
+        foreach (SeedBucket.Layer layer in Bucket.Layers)
+        {
+            layerTop += layer.Amount * pxPerSeed;
+            last = Seeds.Get(layer.Seed).Color;
+            if (above < layerTop) return last;
+        }
+        return last;
+    }
+
+    private static readonly Color MixedBase = new Color(40, 32, 24, 255);
+
+    // Dots in each seed's color over the stirred part, in proportion to how much of it is mixed in.
+    private void RenderSpeckles(BucketShape shape, float mixedHeight)
+    {
         float mixedTotal = Bucket.MixedTotal;
-        int dots = (int)(area.Width * area.Height / 6f);
-        float floorY = area.Y + area.Height;
+        int dots = (int)(mixedHeight * BucketShape.TopHalf * 2f / 6f);
 
         for (int i = 0; i < dots; i++)
         {
             // Fixed random numbers per dot, so the speckles stay put from frame to frame
-            float px = Rng.Fixed(i, 0);
-            float py = Rng.Fixed(i, 1);
+            float y = shape.Floor - 1f - Rng.Fixed(i, 1) * (mixedHeight - 1f);
+            float halfWidth = shape.HalfWidthAt(y) - 1.5f;
+            if (halfWidth <= 1f) continue;
+            float x = shape.Cx + (Rng.Fixed(i, 0) * 2f - 1f) * halfWidth;
             SeedType seed = PickMixedSeed(Rng.Fixed(i, 2) * mixedTotal);
+            Raylib.DrawRectangle((int)x, (int)y - 1, 2, 2, Seeds.Get(seed).Color);
+        }
+    }
 
-            int x = (int)(area.X + px * (area.Width - 2));
-            int y = (int)(floorY - 2 - py * (area.Height - 2));
-            Raylib.DrawRectangle(x, y, 2, 2, Seeds.Get(seed).Color);
+    // A piece of an oval as short straight strokes. Angles in degrees; 0 is right, 90 is down.
+    private static void Arc(float cx, float cy, float rx, float ry, float fromDegrees, float toDegrees, float thick, Color color)
+    {
+        const int Steps = 28;
+        Vector2 previous = Vector2.Zero;
+        for (int i = 0; i <= Steps; i++)
+        {
+            float a = (fromDegrees + (toDegrees - fromDegrees) * i / Steps) * Raylib.DEG2RAD;
+            Vector2 point = new Vector2(cx + MathF.Cos(a) * rx, cy + MathF.Sin(a) * ry);
+            if (i > 0) Raylib.DrawLineEx(previous, point, thick, color);
+            previous = point;
+        }
+    }
+
+    // A curve from a to b, bent toward control (a quadratic Bezier), as short straight strokes.
+    private static void Bezier(Vector2 a, Vector2 control, Vector2 b, float thick, Color color)
+    {
+        const int Steps = 16;
+        Vector2 previous = a;
+        for (int i = 1; i <= Steps; i++)
+        {
+            float t = (float)i / Steps;
+            Vector2 point = (1 - t) * (1 - t) * a + 2 * (1 - t) * t * control + t * t * b;
+            Raylib.DrawLineEx(previous, point, thick, color);
+            previous = point;
         }
     }
 
@@ -326,7 +454,7 @@ public class BucketPanel
 
     public void Unload()
     {
-        if (speckleTexture.Id != 0) Raylib.UnloadRenderTexture(speckleTexture);
+        if (contentsTexture.Id != 0) Raylib.UnloadRenderTexture(contentsTexture);
     }
 
     // ---------------- HELPERS ----------------

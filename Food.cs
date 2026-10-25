@@ -10,6 +10,7 @@ using System.Numerics;
 //
 // Seed falling onto a feeder is caught by it (LandOn) instead of reaching the dirt.
 // The seed a feeder holds is a Food too (Feeder is set): it never spoils, and birds perch to eat it.
+// Seed falling onto a rock rolls down its side and comes to rest just past its edge.
 public class Food : Entity
 {
     public const float BiteSize = 0.5f;           // seed removed per bite
@@ -23,6 +24,9 @@ public class Food : Entity
     public Feeder? LandOn { get; init; }        // while falling: the feeder below that will catch it
 
     private float fallSpeed = 0f;
+    private Rock? rollingOff;                   // the rock it landed on and is rolling down, or null
+    private float rollSpeed = 0f;
+    private const float RollStartSpeed = 0.6f, RollSpeedUp = 5f, RestPastEdge = 0.15f;
     private bool removed = false;
 
     public bool IsLanded { get; private set; }
@@ -44,7 +48,11 @@ public class Food : Entity
 
     public override void Update(float dt)
     {
-        if (!IsLanded)
+        if (rollingOff != null)
+        {
+            RollOff(dt);
+        }
+        else if (!IsLanded)
         {
             // A feeder that was picked up while the seed fell can't catch it anymore.
             bool caught = LandOn != null && LandOn.InWorld;
@@ -53,6 +61,17 @@ public class Food : Entity
             fallSpeed += World.Gravity * dt;
             float y = MathF.Max(floor, Position.Y - fallSpeed * dt);
             Position = new Vector3(Position.X, y, Position.Z);
+
+            // Hitting the top of a rock starts it rolling instead of landing
+            Rock? rock = caught ? null : Rock.At(Position);
+            if (rock != null && y <= rock.HeightAt(Position))
+            {
+                Position = new Vector3(Position.X, rock.HeightAt(Position), Position.Z);
+                rollingOff = rock;
+                rollSpeed = RollStartSpeed;
+                fallSpeed = 0f;
+                return;
+            }
 
             if (y <= floor)
             {
@@ -84,6 +103,36 @@ public class Food : Entity
         }
     }
 
+    // Rolls outward from the rock's middle along its top, getting faster, and lands on the ground once past the edge.
+    private void RollOff(float dt)
+    {
+        Rock rock = rollingOff!;
+        Vector2 away = new Vector2(Position.X, Position.Z) - rock.Flat;
+        float dist = away.Length();
+        Vector2 dir;
+        if (dist > 0.001f) dir = away / dist;
+        else
+        {
+            float angle = Rng.Fixed(EntityID, 5) * MathF.PI * 2f;    // dead center: any way will do, but always the same one
+            dir = new Vector2(MathF.Cos(angle), MathF.Sin(angle));
+        }
+
+        rollSpeed += RollSpeedUp * dt;
+        dist += rollSpeed * dt;
+        Vector2 flat = rock.Flat + dir * dist;
+
+        if (dist >= rock.Radius + RestPastEdge)
+        {
+            flat = rock.Flat + dir * (rock.Radius + RestPastEdge);
+            Position = Rock.PushOut(new Vector3(flat.X, 0f, flat.Y));    // clear of a rock right beside it too
+            rollingOff = null;
+            IsLanded = true;
+            return;
+        }
+        Vector3 onTop = new Vector3(flat.X, 0f, flat.Y);
+        Position = new Vector3(flat.X, rock.HeightAt(onTop), flat.Y);
+    }
+
     // Hands this seed to the feeder. Whatever doesn't fit carries on falling to the dirt beside it.
     private void DropInto(Feeder feeder)
     {
@@ -95,6 +144,21 @@ public class Food : Entity
         }
         removed = true;
         World.Instance.RemoveEntity(this);
+    }
+
+    // ---------------- SAVING (see SaveGame.cs) ----------------
+    // Seed in a feeder is saved by its feeder, so this is only for seed on the dirt or still falling.
+
+    public FoodSave ToSave() => new() { Position = Position, Contents = new(Contents), FallSpeed = fallSpeed, Age = Age };
+
+    // Seed still falling looks for the feeder under it again, so feeders have to be loaded first.
+    public static Food FromSave(FoodSave save)
+    {
+        Feeder? below = save.Position.Y > 0f ? FoodSpawner.FeederBelow(save.Position) : null;
+        Food food = new Food(save.Position, new(save.Contents)) { LandOn = below };
+        food.fallSpeed = save.FallSpeed;
+        food.Age = save.Age;
+        return food;
     }
 
     // Seed added to a feeder's pile.

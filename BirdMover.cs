@@ -11,13 +11,28 @@ public class BirdMover
     private float pauseTimer = 0f;       // > 0 means standing still
     private float nextPauseIn;
     private BirdPose pausePose;          // what the bird does while it stands still
-    private Vector3? landingSpot;        // where it's fluttering down to after eating up on a feeder
+    private Vector3? landingSpot;        // where it's fluttering down to after eating up on a feeder or sitting on a rock
+
+    // PERCHING on a rock
+    private Rock? perchRock;             // the rock it's going up to or sitting on, or null
+    private Vector3 perchSpot;           // where on top of it
+    private bool perchSeated;            // false while still fluttering up
+    private float perchTimer;            // seconds left to sit
+    private float perchLookTimer;        // seconds until it looks somewhere else
+    public bool IsPerched => perchRock != null;
+    public Rock? PerchRock => perchRock;
 
     // TUNING
     private const float TurnRate = 4f;            // radians per second
     private const float FlySpeed = 3.2f;
     private const float NeighborRadius = 3f;      // how far a bird looks for its flock
     private const float SeparationRadius = 0.7f;  // personal space
+    private const float RockRoom = 0.12f;         // how close a bird's middle gets to a rock's edge
+    private const float RockSteerReach = 0.9f;    // how far past a rock's edge birds start steering around it
+    private const float PerchChance = 0.3f;       // chance a pause near a rock becomes a sit on top of it
+    private const float PerchReach = 2.5f;        // how near a rock's edge a bird has to be to hop up
+    private const float HomeRadius = 7f;          // a wandering bird roams this far from home before turning back
+    private const float EdgeMargin = 5f;          // birds turn back this far from the world's edge
     // HopPhase speeds: how fast the bird's rhythm runs (BirbAnimator draws from it)
     private const float PeckRate = 6f;
     private const float HopRate = 12f;            // times walking speed
@@ -41,10 +56,16 @@ public class BirdMover
 
         // A bird still up on a feeder (done eating, or the feeder was moved) flutters down first,
         // backing away from the feeder it was facing.
+        if (perchRock != null)
+        {
+            UpdatePerching(dt);
+            return;
+        }
+
         if (bird.IsFlying)
         {
             Vector2 back = -HeadingVector(bird.Heading) * 0.5f;
-            landingSpot ??= new Vector3(bird.Position.X + back.X, bird.GroundY, bird.Position.Z + back.Y);
+            landingSpot ??= Rock.PushOut(new Vector3(bird.Position.X + back.X, bird.GroundY, bird.Position.Z + back.Y), RockRoom);
             if (FlyToward(landingSpot.Value, dt)) landingSpot = null;
             return;
         }
@@ -58,7 +79,7 @@ public class BirdMover
         Vector2 desired;
         if (bird.State == BirdState.SeekingFood && bird.TargetFood != null)
         {
-            desired = DirectionTo(bird.TargetFood.Position) * 2f + SeparationForce() + GunkForce();
+            desired = DirectionTo(bird.TargetFood.Position) * 2f + SeparationForce() + GunkForce() + RockForce();
         }
         else
         {
@@ -66,7 +87,9 @@ public class BirdMover
             desired = HeadingVector(bird.Heading)
                     + HeadingVector(wanderAngle) * 0.6f
                     + FlockForce()
-                    + GunkForce();
+                    + GunkForce()
+                    + RockForce()
+                    + HomeForce();
         }
 
         TurnToward(desired, dt);
@@ -86,6 +109,11 @@ public class BirdMover
         }
 
         nextPauseIn -= dt;
+        if (nextPauseIn <= 0f && TryStartPerch())
+        {
+            nextPauseIn = Rng.Range(3f, 9f);
+            return true;
+        }
         if (nextPauseIn <= 0f)
         {
             pauseTimer = Rng.Range(0.8f, 2.5f);
@@ -145,10 +173,10 @@ public class BirdMover
             travel = HopProgress(bird.HopPhase) < HopAirShare ? speed / HopAirShare : 0f;
         }
 
-        bird.Position = new Vector3(
+        bird.Position = Rock.PushOut(new Vector3(
             bird.Position.X + dir.X * travel * dt,
             bird.GroundY,
-            bird.Position.Z + dir.Y * travel * dt);
+            bird.Position.Z + dir.Y * travel * dt), RockRoom);
     }
 
     // How far through the current hop the bird is, 0 to 1.
@@ -161,7 +189,7 @@ public class BirdMover
     private void PutOnGround()
     {
         Vector3 p = ParentBird.Position;
-        ParentBird.Position = new Vector3(p.X, ParentBird.GroundY, p.Z);
+        ParentBird.Position = Rock.PushOut(new Vector3(p.X, ParentBird.GroundY, p.Z), RockRoom);
     }
 
     // ---------------- FLOCKING ----------------
@@ -244,6 +272,137 @@ public class BirdMover
         return push;
     }
 
+    // A push away from rocks the bird is close to, plus a sideways push so it walks around one
+    // instead of stopping in front of it. The sideways push goes whichever way the bird is already facing.
+    private Vector2 RockForce()
+    {
+        Vector2 push = Vector2.Zero;
+        Vector2 heading = HeadingVector(ParentBird.Heading);
+
+        foreach (Rock rock in World.Instance.GetAllEntities<Rock>())
+        {
+            Vector2 away = Flat(ParentBird.Position) - rock.Flat;
+            float dist = away.Length();
+            float reach = rock.Radius + RockSteerReach;
+            if (dist <= 0.001f || dist >= reach) continue;
+
+            Vector2 outward = away / dist;
+            Vector2 around = new Vector2(-outward.Y, outward.X);
+            if (Vector2.Dot(around, heading) < 0f) around = -around;
+            push += (outward + around) * (1f - dist / reach) * 3f;
+        }
+        return push;
+    }
+
+    // A pull back toward home once the bird strays past HomeRadius, growing the further it goes,
+    // plus a strong push inward near the world's edge, so wandering birds stay where they can be seen again.
+    private Vector2 HomeForce()
+    {
+        Bird bird = ParentBird;
+        Vector2 force = Vector2.Zero;
+
+        if (bird.HasHome)
+        {
+            Vector2 toHome = Flat(bird.Home) - Flat(bird.Position);
+            float dist = toHome.Length();
+            if (dist > HomeRadius) force += toHome / dist * MathF.Min((dist - HomeRadius) / HomeRadius, 1f) * 1.5f;
+        }
+
+        float limit = World.Instance.HalfSize - EdgeMargin;
+        Vector2 pos = Flat(bird.Position);
+        if (MathF.Abs(pos.X) > limit) force.X -= MathF.Sign(pos.X) * (MathF.Abs(pos.X) - limit) / EdgeMargin * 3f;
+        if (MathF.Abs(pos.Y) > limit) force.Y -= MathF.Sign(pos.Y) * (MathF.Abs(pos.Y) - limit) / EdgeMargin * 3f;
+        return force;
+    }
+
+    // ---------------- PERCHING ----------------
+
+    // Sometimes, instead of pausing on the ground, a wandering bird near a rock hops up onto it,
+    // if there's room for one more. Returns true when it sets off.
+    private bool TryStartPerch()
+    {
+        Bird bird = ParentBird;
+        if (bird.IsHungry() || !Rng.Chance(PerchChance)) return false;
+
+        Rock? rock = Rock.At(bird.Position, PerchReach);
+        if (rock == null || BirdsOn(rock) >= rock.PerchRoom) return false;
+
+        // A spot near the top, not right on the edge
+        float angle = Rng.Range(0f, MathF.PI * 2f);
+        float r = rock.Radius * 0.35f * MathF.Sqrt(Rng.Range(0f, 1f));
+        Vector3 spot = rock.Position + new Vector3(MathF.Cos(angle) * r, 0f, MathF.Sin(angle) * r);
+        spot.Y = rock.HeightAt(spot) + bird.GroundY;
+
+        perchRock = rock;
+        perchSpot = spot;
+        perchSeated = false;
+        perchTimer = Rng.Range(5f, 14f);
+        perchLookTimer = 0f;
+        return true;
+    }
+
+    private static int BirdsOn(Rock rock)
+    {
+        int count = 0;
+        foreach (Bird other in World.Instance.GetAllEntities<Bird>())
+        {
+            if (other.Mover.PerchRock == rock) count++;
+        }
+        return count;
+    }
+
+    // Flutters up, sits looking about for a while, then hops down. It gets down early when it turns hungry
+    // or something else needs it (seeking food, leaving).
+    private void UpdatePerching(float dt)
+    {
+        Bird bird = ParentBird;
+        bool canStay = bird.State == BirdState.Wandering && !bird.IsHungry();
+
+        if (!perchSeated)
+        {
+            if (!canStay) { GetDownFromRock(); return; }
+            if (FlyToward(perchSpot, dt))
+            {
+                perchSeated = true;
+                bird.Pose = BirdPose.Idle;
+            }
+            return;
+        }
+
+        perchTimer -= dt;
+        if (perchTimer <= 0f || !canStay)
+        {
+            GetDownFromRock();
+            return;
+        }
+
+        // Now and then it looks another way, or turns a little on the spot
+        perchLookTimer -= dt;
+        if (perchLookTimer <= 0f)
+        {
+            perchLookTimer = Rng.Range(1.2f, 3f);
+            pausePose = Rng.Chance(0.6) ? BirdPose.LookAround : BirdPose.Idle;
+            wanderAngle = bird.Heading + Rng.Range(-1.5f, 1.5f);
+        }
+        bird.Pose = pausePose;
+        TurnToward(HeadingVector(wanderAngle), dt * 0.4f);
+        bird.Position = perchSpot;
+    }
+
+    // Picks a spot on the ground just past the rock's edge, the way the bird is facing, and flutters down to it
+    // (the flying part of UpdateWalking carries it there).
+    private void GetDownFromRock()
+    {
+        Bird bird = ParentBird;
+        Rock rock = perchRock!;
+        perchRock = null;
+
+        Vector2 dir = HeadingVector(bird.Heading);
+        Vector2 flat = rock.Flat + dir * (rock.Radius + 0.35f);
+        landingSpot = Rock.PushOut(new Vector3(flat.X, bird.GroundY, flat.Y), RockRoom);
+        if (!bird.IsFlying) landingSpot = null;    // never got off the ground
+    }
+
     // ---------------- ARRIVING & LEAVING ----------------
 
     public void UpdateArriving(float dt)
@@ -256,6 +415,7 @@ public class BirdMover
             {
                 PutOnGround();
                 bird.State = BirdState.Wandering;
+                if (!bird.HasHome) bird.SetHome(bird.Position);
             }
         }
         else
@@ -266,6 +426,7 @@ public class BirdMover
             if (World.Instance.IsInside(bird.Position, -3f))
             {
                 bird.State = BirdState.Wandering;
+                if (!bird.HasHome) bird.SetHome(bird.Position);
             }
         }
     }
@@ -273,6 +434,7 @@ public class BirdMover
     public void PickLeavingTarget()
     {
         // Fly off in roughly the direction the bird is already facing, up and out of the world.
+        perchRock = null;
         float angle = ParentBird.Heading + Rng.Range(-0.8f, 0.8f);
         Vector2 dir = HeadingVector(angle);
         float dist = World.Instance.HalfSize * 2f;
@@ -325,6 +487,7 @@ public class BirdMover
         foreach (Food food in World.Instance.GetAllEntities<Food>())
         {
             if (!food.IsLanded || food.IsFullyEaten) continue;
+            if (food.Feeder != null && !food.Feeder.HasRoomFor(ParentBird)) continue;    // every perch taken
 
             SeedType? favorite = food.FavoriteFor(type);
             if (favorite == null) continue;

@@ -38,13 +38,24 @@ public class Coin : Entity
             Position += velocity * dt;
             if (Position.Y < Radius)
             {
-                Position = new Vector3(Position.X, Radius, Position.Z);
+                Position = Rock.PushOut(new Vector3(Position.X, Radius, Position.Z), Radius);
                 velocity = Vector3.Zero;
                 if (onScreen) Sounds.PlayCoinLand();
             }
         }
 
         if (LifeLeft <= 0f) Remove();
+    }
+
+    // Saving (see SaveGame.cs)
+    public CoinSave ToSave() => new() { Position = Position, Velocity = velocity, LifeLeft = LifeLeft };
+
+    public static Coin FromSave(CoinSave save)
+    {
+        Coin coin = new Coin(save.Position);
+        coin.velocity = save.Velocity;
+        coin.LifeLeft = save.LifeLeft;
+        return coin;
     }
 
     public void Collect()

@@ -7,11 +7,22 @@ public class WorldDrawer
 {
     private Shader holoShader;
     private int locIsFloor;
+    private int locWorldHalfSize;
+    private int locFlatShade;
+
+    // The ground wear map (GroundWear) as a two-channel texture, handed to the floor as its second texture (texture1):
+    // the first channel is the wear, the second (read as alpha in the shader) the lush grass around rocks
+    private Texture2D wearTexture;
+    private byte[] wearPixels = Array.Empty<byte>();
+    private int wearVersion = -1;
+    private double wearUploadedAt = -1.0;
+    private const double WearUploadInterval = 0.2;    // seconds of real time between uploads
 
     private Model floorModel;
     private Model grainRound;    // unit-sized; each seed type stretches these into its own grain shape
     private Model grainBlock;
     private Model coinModel;
+    private Model rockModel;     // a low, faceted sphere; each rock is a few of these squashed together
     private readonly BirbAnimator animator = new BirbAnimator();
     private readonly UnitShapes shapes = new UnitShapes();    // for feeders
 
@@ -19,6 +30,8 @@ public class WorldDrawer
     {
         holoShader = holo;
         locIsFloor = Raylib.GetShaderLocation(holoShader, "isFloor");
+        locWorldHalfSize = Raylib.GetShaderLocation(holoShader, "worldHalfSize");
+        locFlatShade = Raylib.GetShaderLocation(holoShader, "flatShade");
 
         // A square floor big enough for the widest the cube can be; the shader's fog cuts off the rest.
         float floorSize = view.HalfSize * ViewWindow.MaxCubeScale * 2f;
@@ -26,35 +39,77 @@ public class WorldDrawer
         grainRound = Raylib.LoadModelFromMesh(Raylib.GenMeshSphere(0.5f, 6, 8));
         grainBlock = Raylib.LoadModelFromMesh(Raylib.GenMeshCube(1f, 1f, 1f));
         coinModel = Raylib.LoadModelFromMesh(Raylib.GenMeshCylinder(Coin.Radius, 0.03f, 20));
+        rockModel = Raylib.LoadModelFromMesh(Raylib.GenMeshSphere(0.5f, 6, 9));
         shapes.Load(holoShader);
 
         Raylib.SetMaterialShader(ref floorModel, 0, ref holo);
         Raylib.SetMaterialShader(ref grainRound, 0, ref holo);
         Raylib.SetMaterialShader(ref grainBlock, 0, ref holo);
         Raylib.SetMaterialShader(ref coinModel, 0, ref holo);
+        Raylib.SetMaterialShader(ref rockModel, 0, ref holo);
     }
 
     public void Unload()
     {
         Raylib.UnloadModel(floorModel);
+        if (wearTexture.Id != 0) Raylib.UnloadTexture(wearTexture);
         Raylib.UnloadModel(grainRound);
         Raylib.UnloadModel(grainBlock);
         Raylib.UnloadModel(coinModel);
+        Raylib.UnloadModel(rockModel);
         shapes.Unload();
     }
 
     public void DrawFloor(ViewWindow view)
     {
+        RefreshWearTexture(GameEngine.Instance.Wear);
+        Raylib.SetShaderValue(holoShader, locWorldHalfSize, World.Instance.HalfSize, ShaderUniformDataType.Float);
         Raylib.SetShaderValue(holoShader, locIsFloor, 1, ShaderUniformDataType.Int);
         Raylib.DrawModelEx(floorModel, Vector3.Zero, Vector3.UnitY, view.YawDegrees, Vector3.One, Color.White);
         DrawStats.CountModel();
         Raylib.SetShaderValue(holoShader, locIsFloor, 0, ShaderUniformDataType.Int);
     }
 
-    // Everything standing on the floor. ringColor is the selected bird's ring.
+    // Copies the wear map into its texture when it has changed (a few times a second at most).
+    // Made, or made again, when the grid's size doesn't match the texture.
+    private void RefreshWearTexture(GroundWear wear)
+    {
+        if (wear.Size == 0) return;
+
+        if (wearTexture.Id == 0 || wearTexture.Width != wear.Size)
+        {
+            if (wearTexture.Id != 0) Raylib.UnloadTexture(wearTexture);
+            Image image = Raylib.GenImageColor(wear.Size, wear.Size, Color.Black);
+            Raylib.ImageFormat(ref image, PixelFormat.UncompressedGrayAlpha);
+            wearTexture = Raylib.LoadTextureFromImage(image);
+            Raylib.UnloadImage(image);
+            Raylib.SetTextureFilter(wearTexture, TextureFilter.Bilinear);
+            Raylib.SetTextureWrap(wearTexture, TextureWrap.Clamp);
+            Raylib.SetMaterialTexture(ref floorModel, 0, MaterialMapIndex.Metalness, ref wearTexture);
+            wearPixels = new byte[wear.Size * wear.Size * 2];
+            wearVersion = -1;
+        }
+
+        double now = Raylib.GetTime();
+        if (wear.Version == wearVersion || now - wearUploadedAt < WearUploadInterval) return;
+
+        float[] cells = wear.Cells;
+        float[] lush = wear.Lush;
+        for (int i = 0; i < cells.Length; i++)
+        {
+            wearPixels[i * 2] = (byte)(cells[i] * 255f);
+            wearPixels[i * 2 + 1] = (byte)(lush[i] * 255f);
+        }
+        Raylib.UpdateTexture(wearTexture, wearPixels);
+        wearVersion = wear.Version;
+        wearUploadedAt = now;
+    }
+
+    // Everything standing on the floor. ringColor is the ring under the selected bird or feeder.
     public void DrawContents(ViewWindow view, Bird? selected, Bird? hovered, Color ringColor)
     {
-        DrawFeeders(view);
+        DrawRocks(view);
+        DrawFeeders(view, ringColor);
         DrawFood(view);
         DrawGunk(view);
         DrawCoins(view);
@@ -67,7 +122,7 @@ public class WorldDrawer
     // As seed goes bad its grains darken toward gunk and slump flatter and closer together.
     // Seed in a tray stays inside its rim; seed in a tube is shown by the tube itself (FeederModel).
     private const int GrainsPerBite = 6;
-    private const float TraySpread = 0.24f;
+    private const float TraySpread = 0.24f * Feeders.WorldScale;
 
     private void DrawFood(ViewWindow view)
     {
@@ -137,26 +192,73 @@ public class WorldDrawer
         }
     }
 
-    // Feeders standing in view, plus the see-through one following the mouse while placing.
-    private void DrawFeeders(ViewWindow view)
+    // A rock is one squashed dome (its true shape, see Rock.HeightAt) with a few lower lumps around its sides,
+    // all faceted like the birbs. Lumps, turn and shade come from the rock's Look, so each rock always looks the same.
+    private static readonly Color StoneColor = new Color(120, 114, 104, 255);
+
+    private void DrawRocks(ViewWindow view)
     {
+        Raylib.SetShaderValue(holoShader, locFlatShade, 1, ShaderUniformDataType.Int);
+        foreach (Rock rock in World.Instance.GetAllEntities<Rock>())
+        {
+            if (!view.Contains(rock.Position, rock.Radius + 0.5f)) continue;
+
+            Vector3 local = view.ToLocal(rock.Position);
+            int look = rock.Look;
+            float shade = Rng.Fixed(look, 0, 0, 1) * 0.3f - 0.15f;
+            Color stone = Raylib.ColorBrightness(Palette.Mix(StoneColor, new Color(150, 128, 104, 255), Rng.Fixed(look, 0, 0, 2) * 0.6f), shade);
+            float turn = Rng.Fixed(look, 0, 0, 3) * 360f;
+
+            Vector3 dome = new Vector3(rock.Radius * 2f, rock.Height * 2f, rock.Radius * 2f);
+            Raylib.DrawModelEx(rockModel, view.BoxToScene(local), Vector3.UnitY, turn + view.YawDegrees, dome * view.Zoom, stone);
+            DrawStats.CountModel();
+
+            int lumps = 2 + (int)(Rng.Fixed(look, 1, 0, 0) * 2f);
+            for (int i = 0; i < lumps; i++)
+            {
+                float angle = (Rng.Fixed(look, 1, i, 1) + i / (float)lumps) * MathF.PI * 2f;
+                float distance = rock.Radius * (0.45f + 0.15f * Rng.Fixed(look, 1, i, 2));
+                float lumpRadius = rock.Radius * (0.4f + 0.15f * Rng.Fixed(look, 1, i, 3));
+                float lumpHeight = rock.Height * (0.55f + 0.2f * Rng.Fixed(look, 1, i, 4));
+                float lumpShade = Rng.Fixed(look, 1, i, 5) * 0.16f - 0.08f;
+
+                Vector3 offset = new Vector3(MathF.Cos(angle) * distance, 0f, MathF.Sin(angle) * distance);
+                Vector3 size = new Vector3(lumpRadius * 2f, lumpHeight * 2f, lumpRadius * 2f);
+                Raylib.DrawModelEx(rockModel, view.BoxToScene(local + offset * view.Zoom), Vector3.UnitY,
+                                   turn + i * 47f + view.YawDegrees, size * view.Zoom, Raylib.ColorBrightness(stone, lumpShade));
+                DrawStats.CountModel();
+            }
+        }
+        Raylib.SetShaderValue(holoShader, locFlatShade, 0, ShaderUniformDataType.Int);
+    }
+
+    // Feeders standing in view (a ring under the selected one), plus the see-through one following the mouse while placing.
+    private void DrawFeeders(ViewWindow view, Color ringColor)
+    {
+        GameEngine engine = GameEngine.Instance;
         foreach (Feeder feeder in World.Instance.GetAllEntities<Feeder>())
         {
-            if (!view.Contains(feeder.Position, 0.5f)) continue;
+            if (!view.Contains(feeder.Position, feeder.Info.FootRadius + 0.5f)) continue;
 
             float fill = feeder.Held / feeder.Info.Capacity;
             Color seedColor = feeder.Seed != null ? Seeds.Get(feeder.Seed.MainSeed).Color : Color.Blank;
-            FeederModel.Draw(shapes, view.BoxToScene(view.ToLocal(feeder.Position)), view.Zoom, view.YawDegrees,
+            Vector3 scenePos = view.BoxToScene(view.ToLocal(feeder.Position));
+            FeederModel.Draw(shapes, scenePos, view.Zoom * Feeders.WorldScale, view.YawDegrees,
                              feeder.Style, fill, seedColor, Color.White);
+
+            if (feeder == engine.SelectedFeeder)
+            {
+                float ringRadius = (feeder.Info.FootRadius + 0.25f) * view.Zoom;
+                Raylib.DrawCircle3D(scenePos + new Vector3(0f, 0.02f, 0f), ringRadius, Vector3.UnitX, 90f, ringColor);
+            }
         }
 
         // The engine works out where the mouse points on the floor; null when it isn't over the clear floor.
-        GameEngine engine = GameEngine.Instance;
         Feeder? carried = engine.Placer.Carried;
         if (carried != null && engine.PlacingSpot != null)
         {
             Color ghost = new Color(160, 255, 240, 130);
-            FeederModel.Draw(shapes, view.BoxToScene(engine.PlacingSpot.Value), view.Zoom, view.YawDegrees,
+            FeederModel.Draw(shapes, view.BoxToScene(engine.PlacingSpot.Value), view.Zoom * Feeders.WorldScale, view.YawDegrees,
                              carried.Style, carried.Held / carried.Info.Capacity, Color.White, ghost);
         }
     }
@@ -197,7 +299,8 @@ public class WorldDrawer
 
             if (bird == selected)
             {
-                Vector3 ringPos = new Vector3(scenePos.X, 0.02f, scenePos.Z);
+                float feet = bird.Mover.IsPerched ? (bird.Position.Y - bird.GroundY) * view.Zoom : 0f;    // on top of the rock
+                Vector3 ringPos = new Vector3(scenePos.X, 0.02f + feet, scenePos.Z);
                 Raylib.DrawCircle3D(ringPos, bird.FootprintRadius * 1.1f * view.Zoom, Vector3.UnitX, 90f, ringColor);
             }
         }
