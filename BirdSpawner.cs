@@ -6,13 +6,9 @@ public class BirdSpawner
 {
     public static BirdSpawner Instance { get; set; } = null!;
 
-    // SETTINGS (changed from the ImGui panel)
-    public float HungerTickdownRate = 6f;            // seconds per 5% hunger lost (about 2 minutes from full to empty)
-    public float ArrivalsPerFoodPerMinute = 0.4f;
-    public int MaxBirds = 15;
+    // SETTINGS (hunger, arrivals, max birds and regulars are in SimTuning)
     public float MinArrivalGap = 5f;                 // seconds; at most one new bird this often, however much food is down
     public float AirArrivalChance = 0.35f;           // the rest walk in from the edge
-    public float GunkPenalty = 0.08f;                // each gunk pile in the world cuts arrivals by about this much
 
     private const float ArrivalCheckInterval = 1f;    // seconds between arrival rolls
     private float arrivalTimer = 0f;
@@ -22,7 +18,6 @@ public class BirdSpawner
 
     // REGULARS: birds that left (not of old age) and may come back under the same name.
     private readonly List<BirdSave> regulars = new();
-    private const float RegularChance = 0.5f;     // share of arrivals that are a regular, when one of that kind is away
     private const int MaxRegulars = 40;           // the longest-gone are forgotten past this
 
     public BirdSpawner()
@@ -56,12 +51,10 @@ public class BirdSpawner
         if (totalPull <= 0f) return;
 
         if (sinceLastArrival < MinArrivalGap) return;
-        if (World.Instance.GetAllEntities<Bird>().Count >= MaxBirds) return;
+        if (World.Instance.GetAllEntities<Bird>().Count >= SimTuning.Now.MaxBirds) return;
 
         // The square root gives diminishing returns: 30 piles pull about 5x as hard as one, not 30x.
-        // Gunk puts birds off: 10 piles of it cuts arrivals almost in half.
-        int gunkCount = World.Instance.GetAllEntities<Gunk>().Count;
-        float chance = MathF.Sqrt(totalPull) * ArrivalsPerFoodPerMinute / 60f * elapsed / (1f + gunkCount * GunkPenalty);
+        float chance = MathF.Sqrt(totalPull) * SimTuning.Now.ArrivalsPerFoodPerMinute / 60f * elapsed;
 
         if (Rng.Chance(chance))
         {
@@ -187,7 +180,7 @@ public class BirdSpawner
     private Bird? TakeRegular(BirdType type)
     {
         List<BirdSave> away = regulars.Where(save => save.Type == type).ToList();
-        if (away.Count == 0 || !Rng.Chance(RegularChance)) return null;
+        if (away.Count == 0 || !Rng.Chance(SimTuning.Now.RegularChance)) return null;
 
         BirdSave pick = away[Rng.Next(away.Count)];
         regulars.Remove(pick);

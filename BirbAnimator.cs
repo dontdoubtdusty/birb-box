@@ -18,6 +18,10 @@ public struct BirbMotion
     public float TailPitch;     // + lifts the tail
     public float LegTuck;       // + swings both legs back
     public float LegSwing;      // + swings the left leg forward and the right leg back (walking)
+    public float Squash;        // + stretches the body taller and thinner, - squashes it flatter and wider
+    public float Fluff;         // 0 = sleek, about 0.12 = feathers puffed up
+    public float WingStretch;   // degrees the left wing reaches out on its own (an idle stretch)
+    public float EyeClose;      // 0 = open, 1 = shut (a blink)
 
     public static BirbMotion Lerp(BirbMotion a, BirbMotion b, float t)
     {
@@ -36,6 +40,10 @@ public struct BirbMotion
             TailPitch = float.Lerp(a.TailPitch, b.TailPitch, t),
             LegTuck = float.Lerp(a.LegTuck, b.LegTuck, t),
             LegSwing = float.Lerp(a.LegSwing, b.LegSwing, t),
+            Squash = float.Lerp(a.Squash, b.Squash, t),
+            Fluff = float.Lerp(a.Fluff, b.Fluff, t),
+            WingStretch = float.Lerp(a.WingStretch, b.WingStretch, t),
+            EyeClose = float.Lerp(a.EyeClose, b.EyeClose, t),
         };
     }
 }
@@ -48,6 +56,20 @@ public class BirbAnimator
     private const float BlendTime = 0.2f;     // seconds to ease into a new pose
     private const float FlickTime = 0.45f;    // tail flick after landing
 
+    // SQUASH AND STRETCH
+    private const float HopStretch = 0.08f;       // taller at the top of each hop
+    private const float HopSquash = 0.12f;        // flatter for a moment as each hop lands
+    private const float LandSquash = 0.2f;        // flatter for a moment after a flight lands
+
+    // BLINKS
+    private const float BlinkTime = 0.15f;
+    private const float BlinkGapMin = 2f, BlinkGapMax = 6f;
+
+    // IDLE ACTS: now and then a standing bird fluffs up or stretches a wing
+    private const float IdleGapMin = 8f, IdleGapMax = 20f;
+    private const float FluffTime = 1.2f, FluffAmount = 0.12f;
+    private const float StretchTime = 1.4f, StretchAngle = 60f;
+
     // What the animator remembers about one bird between frames.
     private class BirdAnim
     {
@@ -56,9 +78,16 @@ public class BirbAnimator
         public BirbMotion Shown;      // what was drawn last frame
         public float Blend = 1f;      // 0 = just changed pose, 1 = fully in it
         public float Clock;           // this bird's own animation time
-        public float FlickTimer;
+        public float FlickTimer;      // also times the squash after a flight lands
+        public float BlinkTimer;      // > 0 while blinking
+        public float NextBlink;       // seconds until the next blink
+        public IdleAct Act;           // the idle act playing, if any
+        public float ActTimer;        // > 0 while it plays
+        public float NextAct;         // seconds of standing about until the next one
         public bool Seen;
     }
+
+    private enum IdleAct { None, Fluff, Stretch }
 
     private readonly Dictionary<int, BirdAnim> anims = new();
 
@@ -67,7 +96,13 @@ public class BirbAnimator
         if (!anims.TryGetValue(bird.EntityID, out BirdAnim? a))
         {
             // A random start time keeps birds from moving in step.
-            a = new BirdAnim { Pose = bird.Pose, Clock = Rng.Range(0f, 10f) };
+            a = new BirdAnim
+            {
+                Pose = bird.Pose,
+                Clock = Rng.Range(0f, 10f),
+                NextBlink = Rng.Range(0f, BlinkGapMax),
+                NextAct = Rng.Range(IdleGapMin, IdleGapMax),
+            };
             anims[bird.EntityID] = a;
         }
         a.Seen = true;
@@ -92,8 +127,70 @@ public class BirbAnimator
             a.FlickTimer -= dt;
             float done = 1f - a.FlickTimer / FlickTime;
             shown.TailPitch += MathF.Sin(done * MathF.PI) * style.TailFlick;
+            shown.Squash -= MathF.Sin(MathF.Min(1f, done * 2f) * MathF.PI) * LandSquash;    // squash in the first half
         }
+        AddBlink(a, ref shown, dt);
+        AddIdleAct(a, ref shown, dt);
         return shown;
+    }
+
+    // Every few seconds the eyes shut for a moment, each bird on its own rhythm.
+    private static void AddBlink(BirdAnim a, ref BirbMotion m, float dt)
+    {
+        if (a.BlinkTimer > 0f)
+        {
+            a.BlinkTimer -= dt;
+            m.EyeClose = MathF.Sin(MathF.Max(0f, a.BlinkTimer) / BlinkTime * MathF.PI);
+            return;
+        }
+        a.NextBlink -= dt;
+        if (a.NextBlink > 0f) return;
+        a.BlinkTimer = BlinkTime;
+        a.NextBlink = Rng.Range(BlinkGapMin, BlinkGapMax);
+    }
+
+    // While standing about (idle or looking around), a bird now and then fluffs its feathers or stretches a wing.
+    // Any other pose cuts the act short; the pose blend smooths that over.
+    private static void AddIdleAct(BirdAnim a, ref BirbMotion m, float dt)
+    {
+        bool standing = a.Pose == BirdPose.Idle || a.Pose == BirdPose.LookAround;
+        if (!standing)
+        {
+            a.Act = IdleAct.None;
+            return;
+        }
+
+        if (a.Act == IdleAct.None)
+        {
+            a.NextAct -= dt;
+            if (a.NextAct > 0f) return;
+            a.Act = Rng.Chance(0.5f) ? IdleAct.Fluff : IdleAct.Stretch;
+            a.ActTimer = a.Act == IdleAct.Fluff ? FluffTime : StretchTime;
+            a.NextAct = Rng.Range(IdleGapMin, IdleGapMax);
+        }
+
+        a.ActTimer -= dt;
+        if (a.ActTimer <= 0f)
+        {
+            a.Act = IdleAct.None;
+            return;
+        }
+
+        if (a.Act == IdleAct.Fluff)
+        {
+            // Puff up, give a quick shiver at the fullest, settle back down
+            float bump = MathF.Sin((1f - a.ActTimer / FluffTime) * MathF.PI);
+            m.Fluff += bump * FluffAmount;
+            m.BodyLift += MathF.Sin(a.ActTimer * 60f) * 0.01f * bump;
+        }
+        else
+        {
+            // Reach the left wing out, tail lifting and head turning to match, then fold it back
+            float bump = MathF.Sin((1f - a.ActTimer / StretchTime) * MathF.PI);
+            m.WingStretch += bump * StretchAngle;
+            m.TailPitch += bump * 10f;
+            m.HeadYaw += bump * 15f;
+        }
     }
 
     // Call once after drawing all birds: forgets birds that weren't drawn (out of view or gone).
@@ -128,6 +225,7 @@ public class BirbAnimator
                 float progress = BirdMover.HopProgress(phase);
                 float air = progress < BirdMover.HopAirShare ? MathF.Sin(progress / BirdMover.HopAirShare * MathF.PI) : 0f;
                 m.Bounce = air * style.HopHeight;
+                m.Squash = air * HopStretch - LandingBump(progress) * HopSquash;
                 m.HeadForward = -air * style.HeadBob * 0.5f;    // head pulls back in the air
                 m.BodyPitch = -air * 4f;
                 m.LegTuck = air * 25f;
@@ -165,6 +263,14 @@ public class BirbAnimator
         return m;
     }
 
+    // 0 to 1 and back over the moment just after a hop touches down, for the landing squash.
+    private static float LandingBump(float progress)
+    {
+        const float Share = 0.12f;    // share of each hop spent squashed
+        float t = (progress - BirdMover.HopAirShare) / Share;
+        return t > 0f && t < 1f ? MathF.Sin(t * MathF.PI) : 0f;
+    }
+
     // The pigeon head bob, -1 (back) to 1 (forward), once per step. The head snaps forward quickly,
     // then holds still in the air while the body walks under it, which looks like a slow slide back.
     private static float HeadThrust(float phase)
@@ -197,7 +303,10 @@ public class BirbAnimator
         switch (part.Role)
         {
             case PartRole.Body:
-                turn = TurnX(m.BodyPitch);
+                // Squash, stretch and fluff scale the body (and everything hanging from it) around its bottom
+                float tall = (1f + m.Squash) * (1f + m.Fluff);
+                float wide = (1f - m.Squash * 0.5f) * (1f + m.Fluff);
+                turn = Then(Raymath.MatrixScale(wide, tall, wide), TurnX(m.BodyPitch));
                 move = new Vector3(0f, m.BodyLift, 0f);
                 break;
             case PartRole.Head:
@@ -208,8 +317,16 @@ public class BirbAnimator
                 turn = TurnX(m.BeakDip);
                 break;
             case PartRole.Wing:
-                // swing out to the side, then flap up and down; the right wing does the mirror image
-                turn = Then(TurnY(-m.WingSpread * part.Side), TurnZ(m.WingFlap * part.Side));
+                // swing out to the side, then flap up and down; the right wing does the mirror image.
+                // An idle stretch reaches only the left wing out.
+                float spread = m.WingSpread + (part.Side > 0f ? m.WingStretch : 0f);
+                turn = Then(TurnY(-spread * part.Side), TurnZ(m.WingFlap * part.Side));
+                break;
+            case PartRole.Eye:
+                // A blink flattens the eye toward its middle (the eye's joint is at its bottom)
+                float open = 1f - 0.9f * m.EyeClose;
+                turn = Raymath.MatrixScale(1f, open, 1f);
+                move = new Vector3(0f, part.Scale.Y * (1f - open), 0f);
                 break;
             case PartRole.Tail:
                 turn = TurnX(m.TailPitch);

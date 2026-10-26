@@ -156,7 +156,7 @@ public static class Sounds
         Raylib.PlaySound(dialClick);
     }
 
-    // The Birb Box switching on (a click and a rising whir) or off (a click and a falling one).
+    // The Birb Cube switching on (a click and a rising whir) or off (a click and a falling one).
     // Whichever is playing (or waiting) stops, so switching quickly never stacks them.
     // delay: seconds before it starts (the power button's click goes first).
     public static void PlayProjector(bool on, float delay = 0f)

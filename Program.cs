@@ -31,7 +31,7 @@ public class Program
         }
 
         const uint ErrorIcon = 0x10;
-        MessageBoxW(IntPtr.Zero, $"{e.Message}\n\nThe details were saved to:\n{file}", "Birb Box crashed", ErrorIcon);
+        MessageBoxW(IntPtr.Zero, $"{e.Message}\n\nThe details were saved to:\n{file}", "Birb Cube crashed", ErrorIcon);
     }
 
     // Windows' own message box, so no extra UI library is needed

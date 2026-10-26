@@ -71,13 +71,7 @@ public class PriceTag
         Raylib.DrawCircleLinesV(hole, 5f, accent);
 
         // What it is, and what you get
-        if (item.IsTool)
-        {
-            UiText.Draw("GONGFARMER'S TOOL", x + 26, y + Pad, SmallText, accent);
-            UiText.Draw("Muck Scraper", x + Pad, y + Pad + 18, BigText, Palette.BrassLight);
-            UiText.Draw("Scrapes gunk off the dirt", x + Pad, y + Pad + 48, SmallText, Palette.DimText);
-        }
-        else if (item.IsFeeder)
+        if (item.IsFeeder)
         {
             FeederInfo feeder = Feeders.Get(item.Feeder);
             UiText.Draw("FEEDER", x + 26, y + Pad, SmallText, accent);
@@ -98,10 +92,6 @@ public class PriceTag
         if (coins < item.Price)
         {
             UiText.Draw($"You have {coins}.", x + Pad, y + Pad + 66, SmallText, Warning);
-        }
-        else if (item.IsTool)
-        {
-            UiText.Draw("Yours to keep.", x + Pad, y + Pad + 66, SmallText, Palette.DimText);
         }
         else if (item.IsFeeder)
         {

@@ -10,7 +10,7 @@ using System.Text.Json.Serialization;
 // Each game class turns itself into one (ToSave) and back (FromSave), since only it can reach its private parts.
 public class SaveGame
 {
-    public const string FileName = "birbbox-save.json";
+    public const string FileName = "birbcube-save.json";
     private const float AutosaveInterval = 120f;    // seconds of real time
     private const int FormatVersion = 1;            // goes up if the file's layout changes in a way old saves can't follow
 
@@ -24,7 +24,7 @@ public class SaveGame
         WriteIndented = true,
         IncludeFields = true,                                                  // Vector2 and Vector3 keep X, Y, Z in fields
         Converters = { new JsonStringEnumConverter() },                         // "Emberwing" instead of 0
-        NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,    // the sold scraper restocks at "Infinity"
+        NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals,    // saves from before 4.79 have a sold scraper restocking at "Infinity"
     };
 
     // Counts down real time, paused or not, and saves when it runs out.
@@ -102,7 +102,6 @@ public class SaveGame
             SavedAt = DateTime.Now,
             SimTime = engine.SimTime,
             Coins = engine.Coins,
-            HasScraper = engine.HasScraper,
             FrostcrestSeen = Seeds.FrostcrestSeen,
             VisitedStore = engine.Store.VisitedBefore,
             View = new ViewSave
@@ -132,7 +131,6 @@ public class SaveGame
                 case Bird bird: data.Birds.Add(bird.ToSave()); break;
                 case Food food when food.Feeder == null: data.Seed.Add(food.ToSave()); break;
                 case Feeder feeder: data.Feeders.Add(feeder.ToSave()); break;
-                case Gunk gunk: data.Gunk.Add(gunk.ToSave()); break;
                 case Coin coin: data.LooseCoins.Add(coin.ToSave()); break;
                 case Rock rock: data.Rocks.Add(rock.ToSave()); break;
             }
@@ -153,7 +151,6 @@ public class SaveGame
 
         engine.SimTime = data.SimTime;
         engine.Coins = data.Coins;
-        engine.HasScraper = data.HasScraper;
         Seeds.FrostcrestSeen = data.FrostcrestSeen;
         engine.Store.VisitedBefore = data.VisitedStore;
 
@@ -170,7 +167,7 @@ public class SaveGame
         engine.Bucket.Bucket.Restore(data.Bucket);
         engine.BirdSpawner.RestoreNameCounters(data.NameCounters);
         engine.BirdSpawner.RestoreRegulars(data.Regulars);
-        engine.Store.RestoreTimers(data.RestockTimers, data.HasScraper);
+        engine.Store.RestoreTimers(data.RestockTimers);
         engine.Placer.Restore(data.BoughtFeeders, data.CarriedFeeder != null ? Feeder.FromSave(data.CarriedFeeder) : null);
         EventLog.Restore(data.Log);
         engine.Wear.Restore(data.GroundWear, world.HalfSize);
@@ -194,7 +191,6 @@ public class SaveGame
             if (food.Position.Y <= 0f) food.Position = Rock.PushOut(food.Position);
             world.AddEntity(Food.FromSave(food));
         }
-        foreach (GunkSave gunk in data.Gunk) { gunk.Position = Rock.PushOut(world.PullInside(gunk.Position), gunk.Radius); world.AddEntity(Gunk.FromSave(gunk)); }
         foreach (CoinSave coin in data.LooseCoins) { coin.Position = Rock.PushOut(world.PullInside(coin.Position), Coin.Radius); world.AddEntity(Coin.FromSave(coin)); }
         foreach (BirdSave save in data.Birds)
         {
@@ -243,7 +239,6 @@ public class SaveData
     // THE PLAYER
     public float SimTime { get; set; }
     public int Coins { get; set; }
-    public bool HasScraper { get; set; }
     public bool FrostcrestSeen { get; set; }
     public bool VisitedStore { get; set; }
     public ViewSave View { get; set; } = new();
@@ -261,7 +256,6 @@ public class SaveData
     public List<BirdSave> Birds { get; set; } = new();
     public List<FoodSave> Seed { get; set; } = new();                 // piles on the dirt, or still falling
     public List<FeederSave> Feeders { get; set; } = new();
-    public List<GunkSave> Gunk { get; set; } = new();
     public List<CoinSave> LooseCoins { get; set; } = new();
     public string GroundWear { get; set; } = "";                      // worn grass, one byte per cell (GroundWear.ToSave)
     public List<RockSave>? Rocks { get; set; }                        // null in a new world or a save from before rocks: new ones are placed
@@ -323,12 +317,6 @@ public class FeederSave
     public FeederStyle Style { get; set; }
     public Vector3 Position { get; set; }
     public Dictionary<SeedType, float>? Seed { get; set; }    // null when empty
-}
-
-public class GunkSave
-{
-    public Vector3 Position { get; set; }
-    public float Radius { get; set; }
 }
 
 public class RockSave

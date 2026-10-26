@@ -5,8 +5,8 @@ using System.Numerics;
 // so a mixed pile can outlast its first visitors.
 //
 // Seed left on the dirt goes bad. After its seed's SpoilTime (Seeds.cs) birds won't eat it,
-// and once everything left has sat there GunkAfter times that long, the pile turns into Gunk.
-// Wild seed is the exception: once spoiled, it just disappears.
+// and once everything left has sat there FadeAfter times that long, the pile fades into the dirt.
+// Wild seed fades sooner, as soon as it has spoiled.
 //
 // Seed falling onto a feeder is caught by it (LandOn) instead of reaching the dirt.
 // The seed a feeder holds is a Food too (Feeder is set): it never spoils, and birds perch to eat it.
@@ -15,7 +15,7 @@ public class Food : Entity
 {
     public const float BiteSize = 0.5f;           // seed removed per bite
     public const float NutritionPerBite = 0.35f;
-    public const float GunkAfter = 2f;            // times the spoil time
+    public const float FadeAfter = 2f;            // times the spoil time
 
     // Amount of each seed left. Only TakeBite and AddSeed change it, so Total and MainSeed are worked out then.
     public Dictionary<SeedType, float> Contents { get; }
@@ -82,15 +82,8 @@ public class Food : Entity
         else if (Feeder == null)
         {
             Age += dt;
-            if (!removed && IsSpoiledWildSeed())
+            if (!removed && (IsSpoiledWildSeed() || HasRottedAway()))
             {
-                // Wild seed fades back into the dirt instead of leaving gunk.
-                removed = true;
-                World.Instance.RemoveEntity(this);
-            }
-            else if (!removed && HasTurnedToGunk())
-            {
-                World.Instance.AddEntity(new Gunk(Position, Total));
                 removed = true;
                 World.Instance.RemoveEntity(this);
             }
@@ -172,12 +165,19 @@ public class Food : Entity
         RecountContents();
     }
 
-    // How far gone this seed is: 0 fresh, 1 spoiled, GunkAfter rotted through.
-    // Always 0 for seed that never spoils and for seed in a feeder.
+    // How far gone this seed is: 0 fresh, 1 spoiled, FadeAfter rotted through.
+    // Always 0 for seed that never spoils and for seed in a feeder. SimTuning.SpoilSpeed speeds it up or slows it down.
     public float Rot(SeedType seed)
     {
         float? spoilTime = Seeds.Get(seed).SpoilTime;
-        return spoilTime == null || Feeder != null ? 0f : Age / spoilTime.Value;
+        return spoilTime == null || Feeder != null ? 0f : Age * SimTuning.Now.SpoilSpeed / spoilTime.Value;
+    }
+
+    // Empties the pile at once (tools panel cheat). Birds stop wanting it, and it removes itself next update.
+    public void ClearAway()
+    {
+        Contents.Clear();
+        RecountContents();
     }
 
     // How much the bird likes eating here: 1 on the dirt, the feeder's appeal in a feeder.
@@ -190,11 +190,12 @@ public class Food : Entity
         return Contents.Count > 0 && Contents.Keys.All(seed => seed == SeedType.Wild) && IsSpoiled(SeedType.Wild);
     }
 
-    private bool HasTurnedToGunk()
+    // Everything left has rotted through (seed that never spoils keeps the pile around).
+    private bool HasRottedAway()
     {
         foreach (SeedType seed in Contents.Keys)
         {
-            if (Seeds.Get(seed).SpoilTime == null || Rot(seed) < GunkAfter) return false;
+            if (Seeds.Get(seed).SpoilTime == null || Rot(seed) < FadeAfter) return false;
         }
         return Contents.Count > 0;
     }

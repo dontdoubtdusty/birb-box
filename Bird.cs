@@ -27,7 +27,8 @@ public class Bird : Entity
     public float HungerThreshold { get; private set; } = 0.4f;
     private const float StarveLimit = 25f;         // seconds at zero hunger before leaving
     private float starveTimer = 0f;
-    private const float LifespanMin = 3600f, LifespanMax = 10800f;    // 1 to 3 hours
+    private const float OldSaveLifespan = 3600f;   // saves from before 4.54 had shorter lifespans; those birds get a new one
+    // Lifespan, losing interest, coin chance and call delay are tunable: see SimTuning.
 
     // HOME: the patch a bird keeps coming back to (see BirdMover.HomeForce). Set when it arrives, moved after each meal.
     public Vector3 Home { get; private set; }
@@ -36,7 +37,6 @@ public class Bird : Entity
 
     // LOSING INTEREST: now and then a wandering bird just leaves, sooner when there's nothing it likes to eat.
     private const float InterestCheckInterval = 15f;
-    private const float LoseInterestAfter = 2700f;     // seconds, on average (45 min) while food is about
     private const float ScarceFoodFactor = 4f;         // how much sooner when there's no seed it can eat
     private float interestTimer;
     private bool returnsLater = true;                  // false once it leaves for good (old age)
@@ -58,13 +58,9 @@ public class Bird : Entity
     private float foodSearchTimer;                  // hungry birds look for food only when this runs out
     private const float FoodSearchInterval = 0.5f;
 
-    // COINS
-    private const float CoinDropChance = 0.66f;    // chance to drop a coin after a full meal
-
     // VOICE
     public float VoicePitch { get; private set; }  // each bird sounds a little higher or lower than the rest
     private float callTimer;                        // seconds until it calls out on its own
-    private const float CallDelayMin = 30f, CallDelayMax = 90f;    // time between a bird's own calls
     private const float HushRetryMin = 4f, HushRetryMax = 12f;     // wait after holding a call for a nearby one
     private bool? wasFlying;                        // null until the first update, so a bird spawned in the air doesn't flap
 
@@ -76,7 +72,7 @@ public class Bird : Entity
         Name = name;
         Size = Info.Size;
         Speed = Rng.Range(0.45f, 1f);
-        Lifespan = Rng.Range(LifespanMin, LifespanMax);
+        Lifespan = NewLifespan();
         Hunger = Rng.Range(0.5f, 1f);
         Heading = Rng.Range(0f, MathF.PI * 2f);
         HopPhase = Rng.Range(0f, 10f);
@@ -134,7 +130,7 @@ public class Bird : Entity
         bird.Heading = save.Heading;
         bird.HopPhase = save.HopPhase;
         bird.Age = save.Age;
-        bird.Lifespan = save.Lifespan >= LifespanMin ? save.Lifespan : Rng.Range(LifespanMin, LifespanMax);
+        bird.Lifespan = save.Lifespan >= OldSaveLifespan ? save.Lifespan : NewLifespan();
         bird.Hunger = save.Hunger;
         bird.State = save.State is BirdState.SeekingFood or BirdState.Eating ? BirdState.Wandering : save.State;
         bird.FlightTarget = save.FlightTarget;
@@ -234,7 +230,7 @@ public class Bird : Entity
         interestTimer = InterestCheckInterval;
 
         bool scarce = !World.Instance.GetAllEntities<Food>().Any(food => !food.IsFullyEaten && CanEat(food));
-        float chance = InterestCheckInterval / LoseInterestAfter * (scarce ? ScarceFoodFactor : 1f);
+        float chance = InterestCheckInterval / (SimTuning.Now.LoseInterestMinutes * 60f) * (scarce ? ScarceFoodFactor : 1f);
         if (!Rng.Chance(chance)) return;
 
         StartLeaving(scarce ? $"{Name} found the pickings slim and flew off." : $"{Name} lost interest and flew off.");
@@ -278,7 +274,10 @@ public class Bird : Entity
         callTimer = NextCallDelay();
     }
 
-    private static float NextCallDelay() => Rng.Range(CallDelayMin, CallDelayMax);
+    private static float NextCallDelay() => Rng.Range(SimTuning.Now.CallDelayMin, SimTuning.Now.CallDelayMax);
+
+    // Seconds this bird will live, from the tuned range in minutes.
+    private static float NewLifespan() => Rng.Range(SimTuning.Now.LifespanMinMinutes, SimTuning.Now.LifespanMaxMinutes) * 60f;
 
     // Blank names are ignored, so the bird keeps its old one.
     public void Rename(string newName)
@@ -294,7 +293,7 @@ public class Bird : Entity
     private void TickDownHunger(float dt)
     {
         // The slider value is "seconds per 5% hunger".
-        float rate = 0.05f / BirdSpawner.Instance.HungerTickdownRate;
+        float rate = 0.05f / SimTuning.Now.HungerRate;
         Hunger = MathF.Max(0f, Hunger - rate * dt);
 
         if (Hunger <= 0f) starveTimer += dt;
@@ -378,7 +377,7 @@ public class Bird : Entity
                 TargetFood = null;
                 State = BirdState.Wandering;
                 SetHome(Position);
-                if (Rng.Chance(CoinDropChance))
+                if (Rng.Chance(SimTuning.Now.CoinDropChance))
                 {
                     World.Instance.AddEntity(new Coin(Position + new Vector3(0, 0.3f, 0)));
                 }

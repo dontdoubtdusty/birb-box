@@ -3,7 +3,7 @@ using Raylib_cs;
 
 public enum BoxScene { Birds, Store }
 
-// What the Birb Box is projecting: the bird world or the Gilded Granary.
+// What the Birb Cube is projecting: the bird world or the Gilded Granary.
 // The BIRBS / SHOP rocker on the pedestal's front switches between them (see Rocker and GameEngine).
 //
 // Switching is a "fog swallow": the fog rolls in from the edges until the box is all haze,

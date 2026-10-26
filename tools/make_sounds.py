@@ -1,4 +1,4 @@
-# Synthesizes Birb Box sound effects into WAV files.
+# Synthesizes Birb Cube sound effects into WAV files.
 import numpy as np
 from scipy.io import wavfile
 from scipy.signal import butter, sosfilt, sosfiltfilt

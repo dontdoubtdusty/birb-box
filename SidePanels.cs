@@ -2,7 +2,7 @@ using System.Numerics;
 using Raylib_cs;
 
 // The two brass side columns that frame the hologram. Both are the same width,
-// so the Birb Box stays in the middle of the screen.
+// so the Birb Cube stays in the middle of the screen.
 //  - left:  the seed bucket (BucketPanel draws into BucketSlot)
 //  - right: stats, the round pause/speed buttons, and the world map (Hud draws into StatsSlot, MiniMap into MapSlot)
 // This class owns the column shapes, the slots, and the buttons.

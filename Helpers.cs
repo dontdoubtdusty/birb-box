@@ -85,7 +85,7 @@ public static class Assets
     public static string PathTo(string file) => Path.Combine(AppContext.BaseDirectory, "resources", file);
 
     // The project folder (the one holding BirdsApp.csproj), or null when there isn't one (a copy given to a friend).
-    // The game runs either from bin\ inside the project or from the "Birb Box" folder next to it, so every folder
+    // The game runs either from bin\ inside the project or from the "Birb Cube" folder next to it, so every folder
     // above the game is checked, both itself and a BirdsApp folder inside it.
     public static string? ProjectFolder { get; } = FindProjectFolder();
 

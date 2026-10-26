@@ -3,22 +3,18 @@ using System.Numerics;
 // Creates food: poured by the player from the bucket, scattered by buttons, or dropped naturally over time.
 public class FoodSpawner
 {
-    // SETTINGS (changed from the ImGui panel)
-    public bool NaturalDrops = true;
-    public float DropsPerMinute = 10f;
-    public int MaxFood = 200;
-
-    public const float PileAmount = 2f;        // seed in one poured pile
+    // Natural drops, their rate and the food limit are in SimTuning.
+    public const float PileAmount = 1f;        // seed in one poured pile
     public const float WildPileAmount = 1.5f;  // seed in one natural or scattered pile
 
-    public bool HasRoom => World.Instance.GetAllEntities<Food>().Count < MaxFood;
+    public bool HasRoom => World.Instance.GetAllEntities<Food>().Count < SimTuning.Now.MaxFood;
 
     // Natural drops lean toward the middle of the world, so more of them land where you can see.
     public void Update(float dt)
     {
-        if (!NaturalDrops) return;
+        if (!SimTuning.Now.NaturalDrops) return;
 
-        if (Rng.Chance(DropsPerMinute / 60f * dt))
+        if (Rng.Chance(SimTuning.Now.DropsPerMinute / 60f * dt))
         {
             SpawnFood(World.Instance.RandomGroundPointNearMiddle());
         }
@@ -35,6 +31,15 @@ public class FoodSpawner
         for (int i = 0; i < count; i++)
         {
             SpawnFood(World.Instance.RandomGroundPoint());
+        }
+    }
+
+    // Tools panel cheat: every pile lying on the dirt is gone (seed in feeders stays). Emptied piles remove themselves next update.
+    public static void ClearGroundSeed()
+    {
+        foreach (Food food in World.Instance.GetAllEntities<Food>())
+        {
+            if (food.Feeder == null) food.ClearAway();
         }
     }
 

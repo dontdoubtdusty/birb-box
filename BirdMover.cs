@@ -29,9 +29,8 @@ public class BirdMover
     private const float SeparationRadius = 0.7f;  // personal space
     private const float RockRoom = 0.12f;         // how close a bird's middle gets to a rock's edge
     private const float RockSteerReach = 0.9f;    // how far past a rock's edge birds start steering around it
-    private const float PerchChance = 0.3f;       // chance a pause near a rock becomes a sit on top of it
     private const float PerchReach = 2.5f;        // how near a rock's edge a bird has to be to hop up
-    private const float HomeRadius = 7f;          // a wandering bird roams this far from home before turning back
+    // Perch chance and home radius are tunable: see SimTuning.
     private const float EdgeMargin = 5f;          // birds turn back this far from the world's edge
     // HopPhase speeds: how fast the bird's rhythm runs (BirbAnimator draws from it)
     private const float PeckRate = 6f;
@@ -79,7 +78,7 @@ public class BirdMover
         Vector2 desired;
         if (bird.State == BirdState.SeekingFood && bird.TargetFood != null)
         {
-            desired = DirectionTo(bird.TargetFood.Position) * 2f + SeparationForce() + GunkForce() + RockForce();
+            desired = DirectionTo(bird.TargetFood.Position) * 2f + SeparationForce() + RockForce();
         }
         else
         {
@@ -87,7 +86,6 @@ public class BirdMover
             desired = HeadingVector(bird.Heading)
                     + HeadingVector(wanderAngle) * 0.6f
                     + FlockForce()
-                    + GunkForce()
                     + RockForce()
                     + HomeForce();
         }
@@ -255,23 +253,6 @@ public class BirdMover
         return away / (dist * dist) * 0.15f;
     }
 
-    // A push away from any gunk the bird is close to, stronger the nearer it gets.
-    private Vector2 GunkForce()
-    {
-        Vector2 push = Vector2.Zero;
-
-        foreach (Gunk gunk in World.Instance.GetAllEntities<Gunk>())
-        {
-            Vector2 away = Flat(ParentBird.Position) - Flat(gunk.Position);
-            float dist = away.Length();
-            float reach = gunk.Radius + Gunk.AvoidDistance;
-            if (dist <= 0.001f || dist >= reach) continue;
-
-            push += away / dist * (1f - dist / reach) * 3f;
-        }
-        return push;
-    }
-
     // A push away from rocks the bird is close to, plus a sideways push so it walks around one
     // instead of stopping in front of it. The sideways push goes whichever way the bird is already facing.
     private Vector2 RockForce()
@@ -294,7 +275,7 @@ public class BirdMover
         return push;
     }
 
-    // A pull back toward home once the bird strays past HomeRadius, growing the further it goes,
+    // A pull back toward home once the bird strays past SimTuning.HomeRadius, growing the further it goes,
     // plus a strong push inward near the world's edge, so wandering birds stay where they can be seen again.
     private Vector2 HomeForce()
     {
@@ -305,7 +286,8 @@ public class BirdMover
         {
             Vector2 toHome = Flat(bird.Home) - Flat(bird.Position);
             float dist = toHome.Length();
-            if (dist > HomeRadius) force += toHome / dist * MathF.Min((dist - HomeRadius) / HomeRadius, 1f) * 1.5f;
+            float homeRadius = SimTuning.Now.HomeRadius;
+            if (dist > homeRadius) force += toHome / dist * MathF.Min((dist - homeRadius) / homeRadius, 1f) * 1.5f;
         }
 
         float limit = World.Instance.HalfSize - EdgeMargin;
@@ -322,7 +304,7 @@ public class BirdMover
     private bool TryStartPerch()
     {
         Bird bird = ParentBird;
-        if (bird.IsHungry() || !Rng.Chance(PerchChance)) return false;
+        if (bird.IsHungry() || !Rng.Chance(SimTuning.Now.PerchChance)) return false;
 
         Rock? rock = Rock.At(bird.Position, PerchReach);
         if (rock == null || BirdsOn(rock) >= rock.PerchRoom) return false;

@@ -1,4 +1,4 @@
-# birb-box
+# Birb Cube
 
 A hologram-style 3D bird simulation built with C# (.NET 10), [Raylib-cs](https://github.com/ChrisDill/Raylib-cs) and Dear ImGui via [rlImGui-cs](https://github.com/raylib-extras/rlImGui-cs).
 

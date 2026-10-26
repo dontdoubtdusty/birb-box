@@ -11,11 +11,11 @@ public class UIHandler
     // Shown here under "Controls" and on the Esc menu's Controls page.
     public static readonly string[] ControlLines =
     {
-        "Click the Birb Box logo: power on/off",
-        "Drag sideways: turn the box   Drag up/down: tilt",
+        "Click the Birb Cube logo: power on/off",
+        "Drag sideways: turn the cube   Drag up/down: tilt",
         "Wheel on hologram or map: zoom view",
         "Wheel elsewhere: move closer / farther",
-        "Double-click box: Hologram View (again: leave)",
+        "Double-click cube: Hologram View (again: leave)",
         "Hologram View: wheel leans in to the glass",
         "WASD: pan (Shift = faster)",
         "Hold right mouse: pour bucket",
@@ -23,7 +23,6 @@ public class UIHandler
         "Double-click bird (or its name): follow",
         "Click name on bird card: rename",
         "Click minimap: jump view   +/-: zoom levels",
-        "Click gunk: scrape (needs Muck Scraper)",
         "Click feeder: pick up   Click dirt: set down",
         "Store: click Zoo Cam to go back",
         "Radio: click buttons, drag or scroll knobs",
@@ -52,7 +51,7 @@ public class UIHandler
     {
         ImGui.SetNextWindowPos(new Vector2(12, 150), ImGuiCond.FirstUseEver);
         ImGui.SetNextWindowSize(new Vector2(290, 0), ImGuiCond.FirstUseEver);
-        ImGui.Begin("Birb Box");
+        ImGui.Begin("Birb Cube");
 
         ImGui.Text($"Window center: {engine.View.Center.X:0.0}, {engine.View.Center.Y:0.0}");
         ImGui.Text($"FPS {Raylib.GetFPS()}   frame {Raylib.GetFrameTime() * 1000f:0.0} ms   update {engine.UpdateMs:0.00} ms");
@@ -70,39 +69,78 @@ public class UIHandler
         }
         ImGui.SliderFloat("Sim speed", ref engine.SimSpeed, 0.25f, 4f, "%.2fx");
 
+        SimTuning t = SimTuning.Now, d = SimTuning.Defaults;
+        SettingsData start = Settings.Defaults;
+
         ImGui.SeparatorText("Birds");
-        BirdSpawner birds = engine.BirdSpawner;
-        ImGui.SliderFloat("Hunger rate", ref birds.HungerTickdownRate, 0.5f, 20f, "%.1f s per 5%%");
-        ImGui.SliderFloat("Arrivals", ref birds.ArrivalsPerFoodPerMinute, 0f, 3f, "%.2f per food/min");
-        ImGui.SliderInt("Max birds", ref birds.MaxBirds, 5, 150);
-        ImGui.SliderFloat("Gunk penalty", ref birds.GunkPenalty, 0f, 0.5f, "%.2f per pile");
-        if (ImGui.Button("Call a bird"))
+        Slider("Hunger rate", ref t.HungerRate, d.HungerRate, 0.5f, 20f, "%.1f s per 5%%");
+        Slider("Arrivals", ref t.ArrivalsPerFoodPerMinute, d.ArrivalsPerFoodPerMinute, 0f, 3f, "%.2f per food/min");
+        Slider("Max birds", ref t.MaxBirds, d.MaxBirds, 5, 150);
+        if (ImGui.Button("Call a bird")) engine.BirdSpawner.SpawnArrival();
+        ImGui.SameLine();
+        if (ImGui.Button("Call 10 birds"))
         {
-            birds.SpawnArrival();
+            for (int i = 0; i < 10; i++) engine.BirdSpawner.SpawnArrival();
         }
 
         ImGui.SeparatorText("Food");
         FoodSpawner food = engine.FoodSpawner;
-        ImGui.Checkbox("Natural seed drops", ref food.NaturalDrops);
-        ImGui.SliderFloat("Drops", ref food.DropsPerMinute, 0f, 60f, "%.0f per min");
+        Checkbox("Natural seed drops", ref t.NaturalDrops, d.NaturalDrops);
+        Slider("Drops", ref t.DropsPerMinute, d.DropsPerMinute, 0f, 60f, "%.1f per min");
+        Slider("Max food", ref t.MaxFood, d.MaxFood, 50, 1000);
         ImGui.SetNextItemWidth(100);
         ImGui.InputInt("Amount", ref scatterCount);
         scatterCount = Math.Clamp(scatterCount, 1, 100);
         if (ImGui.Button("Scatter in view")) food.ScatterInView(scatterCount, engine.View);
         ImGui.SameLine();
         if (ImGui.Button("Scatter across world")) food.ScatterAcrossWorld(scatterCount);
-        if (ImGui.Button("Cheat: +10 coins")) engine.Coins += 10;
+
+        ImGui.SeparatorText("Coins");
+        Slider("Drop chance", ref t.CoinDropChance, d.CoinDropChance, 0f, 1f, "%.2f per meal");
+        Slider("Coin lasts", ref t.CoinLifetime, d.CoinLifetime, 5f, 120f, "%.0f s");
+
+        if (ImGui.CollapsingHeader("Bird lifetimes"))
+        {
+            Slider("Lifespan min", ref t.LifespanMinMinutes, d.LifespanMinMinutes, 5f, 300f, "%.0f min");
+            Slider("Lifespan max", ref t.LifespanMaxMinutes, d.LifespanMaxMinutes, 5f, 600f, "%.0f min");
+            Slider("Lose interest", ref t.LoseInterestMinutes, d.LoseInterestMinutes, 5f, 180f, "%.0f min");
+            Slider("Regulars", ref t.RegularChance, d.RegularChance, 0f, 1f, "%.2f of arrivals");
+            ImGui.TextDisabled("Lifespan applies to birds that arrive from now on.");
+        }
+
+        if (ImGui.CollapsingHeader("Bird behavior"))
+        {
+            Slider("Call every min", ref t.CallDelayMin, d.CallDelayMin, 5f, 120f, "%.0f s");
+            Slider("Call every max", ref t.CallDelayMax, d.CallDelayMax, 5f, 240f, "%.0f s");
+            Slider("Rock perch", ref t.PerchChance, d.PerchChance, 0f, 1f, "%.2f chance");
+            Slider("Home radius", ref t.HomeRadius, d.HomeRadius, 2f, 20f, "%.1f");
+        }
+
+        if (ImGui.CollapsingHeader("World"))
+        {
+            Slider("Seed spoils", ref t.SpoilSpeed, d.SpoilSpeed, 0.1f, 10f, "%.2fx");
+            Slider("Grass wears", ref t.WearSpeed, d.WearSpeed, 0f, 5f, "%.2fx");
+            Slider("Grass regrows", ref t.RegrowSpeed, d.RegrowSpeed, 0f, 10f, "%.2fx");
+        }
+        t.Clamp();    // a min slider pushed past its max drags the max along
+
+        if (ImGui.CollapsingHeader("Cheats"))
+        {
+            if (ImGui.Button("+10 coins")) engine.Coins += 10;
+            ImGui.SameLine();
+            if (ImGui.Button("Fill bucket")) FillBucket(engine.Bucket.Bucket);
+            if (ImGui.Button("Clear ground seed")) FoodSpawner.ClearGroundSeed();
+        }
 
         if (ImGui.CollapsingHeader("Hologram"))
         {
             HologramRenderer r = engine.Renderer;
             ImGui.ColorEdit3("Color", ref r.HoloColor);
-            ImGui.SliderFloat("Glow", ref r.GlowStrength, 0f, 3f);
-            ImGui.SliderFloat("Scanlines", ref r.ScanlineStrength, 0f, 0.5f);
-            ImGui.Checkbox("Smooth edges", ref r.SmoothEdges);
-            ImGui.SliderFloat("Width", ref engine.View.CubeScale, 0.5f, ViewWindow.MaxCubeScale, "%.2f");
-            ImGui.SliderFloat("Fog start", ref engine.View.FogStart, 0.3f, 0.99f, "%.2f");
-            ImGui.Checkbox("Projector base", ref r.ShowProjector);
+            Slider("Glow", ref r.GlowStrength, start.Glow, 0f, 3f);
+            Slider("Scanlines", ref r.ScanlineStrength, start.Scanlines, 0f, 0.5f);
+            Slider("Width", ref engine.View.CubeScale, start.CubeWidth, 0.5f, ViewWindow.MaxCubeScale);
+            Slider("Fog start", ref engine.View.FogStart, start.FogStart, 0.3f, 0.99f);
+            Checkbox("Projector base", ref r.ShowProjector, start.ShowProjector);
         }
 
         if (ImGui.CollapsingHeader("Controls"))
@@ -111,6 +149,53 @@ public class UIHandler
         }
 
         ImGui.End();
+    }
+
+    // ---------------- SLIDERS WITH DEFAULTS ----------------
+    // Each one is tinted brass while it's off its default, shows the default on hover, and goes back to it on right-click.
+
+    private static readonly Vector4 ChangedTint = new Vector4(0.42f, 0.30f, 0.10f, 1f);
+
+    private static void Slider(string label, ref float value, float def, float min, float max, string format = "%.2f")
+    {
+        bool changed = MathF.Abs(value - def) > 0.0001f;
+        if (changed) ImGui.PushStyleColor(ImGuiCol.FrameBg, ChangedTint);
+        ImGui.SliderFloat(label, ref value, min, max, format);
+        if (changed) ImGui.PopStyleColor();
+        if (DefaultHint($"{def:0.###}")) value = def;
+    }
+
+    private static void Slider(string label, ref int value, int def, int min, int max)
+    {
+        bool changed = value != def;
+        if (changed) ImGui.PushStyleColor(ImGuiCol.FrameBg, ChangedTint);
+        ImGui.SliderInt(label, ref value, min, max);
+        if (changed) ImGui.PopStyleColor();
+        if (DefaultHint(def.ToString())) value = def;
+    }
+
+    private static void Checkbox(string label, ref bool value, bool def)
+    {
+        bool changed = value != def;
+        if (changed) ImGui.PushStyleColor(ImGuiCol.FrameBg, ChangedTint);
+        ImGui.Checkbox(label, ref value);
+        if (changed) ImGui.PopStyleColor();
+        if (DefaultHint(def ? "on" : "off")) value = def;
+    }
+
+    // The tooltip for the item just drawn. True when it was right-clicked.
+    private static bool DefaultHint(string def)
+    {
+        if (!ImGui.IsItemHovered()) return false;
+        ImGui.SetTooltip($"Default: {def}   (right-click to reset)");
+        return ImGui.IsItemClicked(ImGuiMouseButton.Right);
+    }
+
+    // Cheat: tops the bucket up with an even share of every bagged seed, unstirred.
+    private static void FillBucket(SeedBucket bucket)
+    {
+        float share = (SeedBucket.Capacity - bucket.Total) / Seeds.Bags.Length;
+        foreach (SeedType seed in Seeds.Bags) bucket.Pour(seed, share);
     }
 
     // ---------------- BIRD TRACKER ----------------

@@ -20,9 +20,15 @@ Thumbs.db
 Radio/
 
 # Your saved terrarium (and a save set aside because it couldn't be read)
-birbbox-save*.json
-birbbox-save*.json.tmp
+birbcube-save*.json
+birbcube-save*.json.tmp
 
 # Your settings (volumes, fullscreen, name tags, hand color)
+birbcube-settings.json
+birbcube-settings.json.tmp
+
+# Old files from when the game was called Birb Box (no longer read)
+birbbox-save*.json
+birbbox-save*.json.tmp
 birbbox-settings.json
 birbbox-settings.json.tmp

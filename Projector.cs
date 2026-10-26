@@ -1,4 +1,4 @@
-// The Birb Box's power: off, starting up, on, or shutting down. Clicking the logo flips it (see GameEngine).
+// The Birb Cube's power: off, starting up, on, or shutting down. Clicking the logo flips it (see GameEngine).
 // Like a real projector it takes a moment to start: the lens behind the logo lights first, then the beams
 // sputter on, then the cube rises up out of its floor. Shutting down runs the same steps backward, faster.
 // The world keeps simulating either way; only what's shown and clickable changes.

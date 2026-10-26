@@ -102,14 +102,14 @@ public class RadioPlayer
             Directory.CreateDirectory(Folder);
             string note = Path.Combine(Folder, "Put music here.txt");
             File.WriteAllText(note,
-                "Birb Box radio\r\n\r\n" +
+                "Birb Cube radio\r\n\r\n" +
                 "Put music files in this folder: mp3, wav, flac, m4a, aac, wma or ogg.\r\n" +
                 "Each sub-folder becomes its own station on the dial. Loose files here make one more, called \"Radio\".\r\n" +
                 "Folder stations keep broadcasting while you listen to something else, so you tune in mid-song.\r\n\r\n" +
                 "To name a station and pick its frequency, put a station.txt in its folder:\r\n" +
                 "    name: Emberwing FM\r\n" +
                 "    frequency: 92.3\r\n\r\n" +
-                "Live web stations come from Radio Browser; pick their genres in web-stations.txt.\r\n" +
+                "Live web stations come from Radio Browser; pick genres or your own stations in web-stations.txt.\r\n" +
                 "The radio looks at this folder again every time you switch it on.\r\n");
         }
         catch (Exception e)

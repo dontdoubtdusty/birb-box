@@ -1,7 +1,7 @@
 using System.Numerics;
 using Raylib_cs;
 
-// The Gilded Granary: a little self-serve general store the Birb Box can project in place of the birds
+// The Gilded Granary: a little self-serve general store the Birb Cube can project in place of the birds
 // (see BoxMode). The people who built it studied old shops closely and got most of it right,
 // but it's still a ship's store underneath.
 //
@@ -90,14 +90,20 @@ public class SeedStore
         HoveredItem = null;
     }
 
-    // From a save: how long until each item is back on the shelf, in shelf order. The scraper stays sold once owned.
-    public void RestoreTimers(List<float> timers, bool scraperOwned)
+    // From a save: how long until each item is back on the shelf, in shelf order.
+    // Saves from before 4.79 also had the Muck Scraper, just before the two feeders, so its timer is skipped.
+    public void RestoreTimers(List<float> timers)
     {
         SelectedItem = null;
+        if (timers.Count == Stock.Count + 1)
+        {
+            timers = new List<float>(timers);
+            timers.RemoveAt(Stock.Count - 2);
+        }
         for (int i = 0; i < Stock.Count; i++)
         {
-            Stock[i].RestockTimer = i < timers.Count ? timers[i] : 0f;
-            if (Stock[i].IsTool) Stock[i].RestockTimer = scraperOwned ? float.PositiveInfinity : 0f;
+            float timer = i < timers.Count ? timers[i] : 0f;
+            Stock[i].RestockTimer = float.IsFinite(timer) ? timer : 0f;
         }
     }
 
@@ -121,7 +127,7 @@ public class SeedStore
         }
     }
 
-    // Pays for the item. Seed goes into that seed's bag on the bucket panel; the scraper is kept for good;
+    // Pays for the item. Seed goes into that seed's bag on the bucket panel;
     // a feeder waits until the box shows the birds, then follows the mouse to be set down (FeederPlacer).
     // Returns false (and says why) if there aren't enough coins.
     public bool TryBuy(ShelfItem item)
@@ -138,13 +144,7 @@ public class SeedStore
         if (SelectedItem == item) SelectedItem = null;
         Keeper.Celebrate();
 
-        if (item.IsTool)
-        {
-            engine.HasScraper = true;
-            item.RestockTimer = float.PositiveInfinity;    // there's only one, and it's yours to keep
-            EventLog.Add("Bought the Muck Scraper. Click gunk in the box to scrape it up.");
-        }
-        else if (item.IsFeeder)
+        if (item.IsFeeder)
         {
             engine.Placer.AddBought(item.Feeder);
             item.RestockTimer = RestockTime;
@@ -172,8 +172,7 @@ public class SeedStore
     }
 
     // Jars on the top two shelves, sacks on the bottom one, spaced evenly along the curve,
-    // cycling through the bagged seeds. The Muck Scraper stands on the floor by the corn barrel,
-    // the Almoner's Tray between the barrel and the shelves, and the Turret Feeder past the other end of the shelves.
+    // cycling through the bagged seeds. The Almoner's Tray stands between the corn barrel and the shelves, and the Turret Feeder past the other end of the shelves.
     private void StockShelves()
     {
         SeedType[] seeds = Seeds.Bags;
@@ -184,7 +183,6 @@ public class SeedStore
             AddRow(ShelfHeights[row], (int)(arcLength / 0.32f), ItemKind.Jar, seeds, ref n);
         }
         AddRow(ShelfHeights[0], (int)(arcLength / 0.45f), ItemKind.Sack, seeds, ref n);
-        Stock.Add(new ShelfItem(SeedType.Wild, OnCircle(55f * MathF.PI / 180f, 1.3f, 0f), ItemKind.Scraper));
         Stock.Add(new ShelfItem(SeedType.Wild, OnCircle(88f * MathF.PI / 180f, 1.15f, 0f), ItemKind.Feeder, FeederStyle.Tray));
         Stock.Add(new ShelfItem(SeedType.Wild, OnCircle(262f * MathF.PI / 180f, 1.28f, 0f), ItemKind.Feeder, FeederStyle.Tube));
     }
@@ -199,16 +197,15 @@ public class SeedStore
     }
 }
 
-public enum ItemKind { Jar, Sack, Scraper, Feeder }
+public enum ItemKind { Jar, Sack, Feeder }
 
-// One thing for sale: a jar or sack of seed, the Muck Scraper (a tool, bought once and kept), or a feeder.
+// One thing for sale: a jar or sack of seed, or a feeder.
 // A sack holds five jars' worth of seed for the price of four.
 public class ShelfItem
 {
     public const float JarAmount = 10f;
     public const float SackAmount = 50f;
     public const int SackPriceInJars = 4;
-    public const int ScraperPrice = 5;
 
     public SeedType Seed;       // only used by jars and sacks
     public FeederStyle Feeder;  // only used by feeders
@@ -225,7 +222,6 @@ public class ShelfItem
     }
 
     public bool IsSack => Kind == ItemKind.Sack;
-    public bool IsTool => Kind == ItemKind.Scraper;
     public bool IsFeeder => Kind == ItemKind.Feeder;
     public bool OnShelf => RestockTimer <= 0f;
     public float Amount => IsSack ? SackAmount : JarAmount;
@@ -233,15 +229,13 @@ public class ShelfItem
 
     public int Price => Kind switch
     {
-        ItemKind.Scraper => ScraperPrice,
         ItemKind.Feeder => Feeders.Get(Feeder).Price,
         _ => Seeds.Get(Seed).JarPrice * (IsSack ? SackPriceInJars : 1),
     };
 
-    // For the event log, e.g. "a jar of Millet", "the Muck Scraper" or "the Turret Feeder"
+    // For the event log, e.g. "a jar of Millet" or "the Turret Feeder"
     public string Title => Kind switch
     {
-        ItemKind.Scraper => "the Muck Scraper",
         ItemKind.Feeder => $"the {Feeders.Get(Feeder).Name}",
         _ => $"a {KindName.ToLower()} of {Seeds.Get(Seed).Name}",
     };
@@ -251,14 +245,12 @@ public class ShelfItem
     private float CenterHeight => Kind switch
     {
         ItemKind.Sack => 0.17f,
-        ItemKind.Scraper => 0.3f,
         ItemKind.Feeder => Feeder == FeederStyle.Tube ? 0.22f : 0.05f,
         _ => 0.12f,
     };
     public float PickRadius => Kind switch
     {
         ItemKind.Sack => 0.18f,
-        ItemKind.Scraper => 0.2f,
         ItemKind.Feeder => Feeder == FeederStyle.Tube ? 0.22f : 0.17f,
         _ => 0.13f,
     };

@@ -5,7 +5,7 @@ using Raylib_cs;
 //  - a wide plinth, a body ringed with buttons, a plain band, and the polished brass bezel ring on top
 //  - inside the bezel it's hollow: a deep well, lit by the hologram floating above it
 //  - the projector lens inside the well, right behind the logo, throwing the beams up to the cube (see FieldEdges)
-//  - the Birb Box logo on a brass plaque at the front. It's the power button, and it glows with the lens.
+//  - the Birb Cube logo on a brass plaque at the front. It's the power button, and it glows with the lens.
 //  - two glowing windows on either side of the logo: Birbs in the cube (left) and Coins (right)
 //  - a row of LEDs on the plinth below the logo, one per bird type, lit while that type is in the cube
 //  - in the band under the ring, above the logo, the BIRB / SHOP rocker switch (its own file, Rocker)
@@ -414,7 +414,7 @@ public class Pedestal
         shapes.Box(new Vector3(0, PlateY, z), new Vector3(PlateWidth, PlateHeight, PlateDepth), LipBrass);
     }
 
-    // The Birb Box logo, a textured square laid on the plate's front face, keeping the image's shape.
+    // The Birb Cube logo, a textured square laid on the plate's front face, keeping the image's shape.
     // grow: 1 is its normal size. lift: how far in front of the plate's resting face it floats, so layers don't
     // flicker (less while the plate is pushed in).
     private static void DrawLogo(Texture2D texture, float r, float grow, float lift, Color tint)

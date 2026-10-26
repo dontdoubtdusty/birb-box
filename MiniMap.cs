@@ -2,7 +2,7 @@ using System.Numerics;
 using Raylib_cs;
 
 // The world map screen at the bottom of the right side column (SidePanels gives it MapSlot).
-// It shows food, feeders, gunk, birds and the view square. Click or drag on it to move the view,
+// It shows rocks, food, feeders, birds and the view square. Click or drag on it to move the view,
 // scroll on it to zoom, or use the +/- buttons to jump between the fixed zoom levels.
 // While the box shows the store, it becomes a zoo camera: a live look at the birds. Clicking it goes back to them.
 public class MiniMap
@@ -200,11 +200,6 @@ public class MiniMap
         foreach (Feeder feeder in World.Instance.GetAllEntities<Feeder>())
         {
             Raylib.DrawRectangleV(ToMap(feeder.Position) - new Vector2(3, 3), new Vector2(6, 6), Palette.BrassLight);
-        }
-
-        foreach (Gunk gunk in World.Instance.GetAllEntities<Gunk>())
-        {
-            Raylib.DrawCircleV(ToMap(gunk.Position), 2f, Gunk.Color);
         }
 
         foreach (Bird bird in World.Instance.GetAllEntities<Bird>())

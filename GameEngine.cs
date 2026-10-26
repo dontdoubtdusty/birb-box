@@ -8,7 +8,7 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Box 4.75 Alpha";
+    public const string Version = "Birb Cube 4.83 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
@@ -54,11 +54,10 @@ public class GameEngine
 
     // ECONOMY
     public int Coins = 0;
-    public bool HasScraper = false;    // bought once at the store; lets clicks scrape up gunk
 
     // POURING (hold right mouse over the floor)
     private const float PileSpacing = 0.35f;     // cursor travel between piles
-    private const float PileInterval = 0.25f;    // seconds between piles while holding still
+    private const float PileInterval = 0.5f;     // seconds between piles while holding still
     private Vector3? lastPilePoint;              // box space, null when not pouring
     private float pileTimer = 0f;
     private bool warnedEmptyBucket = false;
@@ -511,8 +510,8 @@ public class GameEngine
         }
     }
 
-    // A click sets down a carried feeder. Otherwise it picks up a coin, selects a bird, selects a feeder
-    // (its card has a Move button), or scrapes up gunk. Clicking empty floor deselects.
+    // A click sets down a carried feeder. Otherwise it picks up a coin, selects a bird, or selects a feeder
+    // (its card has a Move button). Clicking empty floor deselects.
     private void HandleClick()
     {
         if (Placer.Carried != null)
@@ -542,14 +541,6 @@ public class GameEngine
         if (hitFeeder != null)
         {
             SelectedFeeder = hitFeeder;
-            return;
-        }
-
-        Gunk? hitGunk = PickGunk();
-        if (hitGunk != null)
-        {
-            if (HasScraper) hitGunk.ScrapeUp();
-            else EventLog.Add("That gunk won't come up by hand. The Gilded Granary sells a scraper.");
             return;
         }
 
@@ -671,21 +662,6 @@ public class GameEngine
         return best;
     }
 
-    // The gunk under the mouse, found from where the mouse points on the floor.
-    private Gunk? PickGunk()
-    {
-        Vector3? point = FloorPointUnderMouse();
-        if (point == null) return null;
-
-        Vector3 world = View.ToWorld(point.Value);
-        foreach (Gunk gunk in World.GetAllEntities<Gunk>())
-        {
-            float dist = Vector2.Distance(new Vector2(world.X, world.Z), new Vector2(gunk.Position.X, gunk.Position.Z));
-            if (dist <= gunk.Radius + 0.1f) return gunk;
-        }
-        return null;
-    }
-
     private Bird? PickBird(Ray ray)
     {
         Bird? best = null;
@@ -762,7 +738,7 @@ public class GameEngine
         // While developing, screenshots go in the project folder; with no project around, next to the .exe.
         string folder = Path.Combine(Assets.ProjectFolder ?? AppContext.BaseDirectory, "screenshots");
         Directory.CreateDirectory(folder);
-        string name = $"birbbox_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.png";
+        string name = $"birbcube_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.png";
 
         Image shot = Raylib.LoadImageFromScreen();
         bool saved = Raylib.ExportImage(shot, Path.Combine(folder, name));

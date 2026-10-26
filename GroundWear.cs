@@ -6,7 +6,7 @@ using System.Numerics;
 // Simulation only: WorldDrawer turns this into a texture for the floor shader whenever Version changes.
 public class GroundWear
 {
-    // TUNING (per second of sim time)
+    // TUNING (per second of sim time; SimTuning.WearSpeed and RegrowSpeed scale them from the tools panel)
     public const int CellsPerUnit = 2;               // grid resolution: 2 cells per world unit
     private const float WalkWear = 0.004f;           // a bird walking or standing about
     private const float EatWear = 0.012f;            // a bird pecking and scratching at seed
@@ -73,19 +73,19 @@ public class GroundWear
             if (bird.IsFlying) continue;
             if (bird.State is BirdState.Arriving or BirdState.Leaving) continue;
             float rate = bird.State == BirdState.Eating ? EatWear : WalkWear;
-            AddWear(bird.Position, rate * dt);
+            AddWear(bird.Position, rate * SimTuning.Now.WearSpeed * dt);
         }
 
         foreach (Food food in world.GetAllEntities<Food>())
         {
             if (food.Feeder != null || !food.IsLanded) continue;
-            AddWear(food.Position, SeedWear * dt);
+            AddWear(food.Position, SeedWear * SimTuning.Now.WearSpeed * dt);
         }
 
         regrowTimer += dt;
         if (regrowTimer >= RegrowInterval)
         {
-            float amount = Regrow * regrowTimer;
+            float amount = Regrow * SimTuning.Now.RegrowSpeed * regrowTimer;
             for (int i = 0; i < Cells.Length; i++)
             {
                 if (Cells[i] > 0f) Cells[i] = MathF.Max(0f, Cells[i] - amount);

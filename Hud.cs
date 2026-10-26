@@ -222,7 +222,7 @@ public class Hud
         int x = (int)statsRect.X + Pad;
         int y = (int)statsRect.Y + Pad;
 
-        UiText.Draw("BIRB BOX", x, y, HeaderSize, accent);
+        UiText.Draw("BIRB CUBE", x, y, HeaderSize, accent);
         string help = "Tab: tools  RMB: pour";
         UiText.Draw(help, (int)(statsRect.X + statsRect.Width) - Pad - UiText.Measure(help, HeaderSize), y, HeaderSize, Palette.DimText);
         y += HeaderSize + 8;

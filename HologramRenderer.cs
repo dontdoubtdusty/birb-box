@@ -22,7 +22,8 @@ using Raylib_cs;
 // StoreRenderer, Pedestal and Backdrop. This file sets up the passes and the shaders they share.
 //
 // Smooth edges: the window's anti-aliasing (MSAA) doesn't reach an off-screen texture, so instead the scene
-// is drawn at twice the screen size. Shrinking it back down blends each 2x2 block of pixels into one.
+// is drawn bigger than the screen (Quality: 2x on High, 1.5x on Medium, 1x on Low) and shrunk back down,
+// which blends neighboring pixels together. Lower quality draws far fewer pixels.
 public class HologramRenderer
 {
     // LOOK SETTINGS (changed from the ImGui panel)
@@ -30,7 +31,7 @@ public class HologramRenderer
     public float GlowStrength = 0.7f;
     public float ScanlineStrength = 0.12f;
     public bool ShowProjector = true;          // the pedestal, its lens and the beams
-    public bool SmoothEdges = true;
+    public float Quality = 2f;         // the hologram is drawn at this many times the screen size (1, 1.5 or 2; Esc menu Settings)
     public float WallStrength = 1f;    // the scanline walls of the field; 0 hides them
 
     private const int MaxSceneSize = 8192;    // biggest texture to ask the graphics card for
@@ -115,11 +116,11 @@ public class HologramRenderer
     {
         int width = Raylib.GetRenderWidth();
         int height = Raylib.GetRenderHeight();
-        bool fits = width * 2 <= MaxSceneSize && height * 2 <= MaxSceneSize;
-        int scale = SmoothEdges && fits ? 2 : 1;
+        float scale = Quality;
+        while (scale > 1f && (width * scale > MaxSceneSize || height * scale > MaxSceneSize)) scale -= 0.5f;
         Camera3D roomCamera = holoCamera.Camera;
         Camera3D camera = holoCamera.HologramCamera;    // everything in the hologram pass is seen through this one
-        EnsureTargetSize(width * scale, height * scale);
+        EnsureTargetSize((int)(width * scale), (int)(height * scale));
 
         // These draw into their own small textures, so they must happen before the scene pass.
         if (ShowProjector) pedestal.RefreshReadouts(view, GameEngine.Instance.Coins);

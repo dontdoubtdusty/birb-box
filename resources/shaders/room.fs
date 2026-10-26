@@ -8,7 +8,7 @@
 //    dark below, brighter overhead with a bright band near the horizon, so its curves catch light the way
 //    real brass does, plus sharp highlights from the lamps and the light above
 //  - dissolve (above 0) drops a dithered share of the pixels, to fade something out without see-through overlaps
-//  - the Birb Box's own light while it's on: one light just above the cube's floor (lighting the well,
+//  - the Birb Cube's own light while it's on: one light just above the cube's floor (lighting the well,
 //    the rim and the table nearby) and one at the projector lens, which only reaches inside the well
 
 in vec3 fragPosition;
@@ -100,7 +100,7 @@ void main()
         color += mix(vec3(1.0), colDiffuse.rgb, 0.5) * shineLight * HighlightStrength * shine;
     }
 
-    // The Birb Box's light, added after the shine so polished brass still picks it up.
+    // The Birb Cube's light, added after the shine so polished brass still picks it up.
     // A little is added on its own too, so even dark surfaces take on the hologram's color.
     float insideWell = 1.0 - smoothstep(wellRadius - 0.05, wellRadius + 0.05, length(fragPosition.xz));
     vec3 boxLight = holoLightColor * pointLight(holoLight, normal, HoloReach)

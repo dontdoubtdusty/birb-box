@@ -6,11 +6,10 @@ using System.Numerics;
 public class Coin : Entity
 {
     public const float Radius = 0.24f;
-    public const float Lifetime = 30f;
     private const float OffscreenDrainRate = 2f;  // life drains this many times faster when hidden
     private const float FadeTime = 5f;            // last seconds spent fading out
 
-    public float LifeLeft { get; private set; } = Lifetime;
+    public float LifeLeft { get; private set; }    // starts at SimTuning.CoinLifetime
     public bool IsLanded => Position.Y <= Radius;
 
     // 1 while fresh, drops to 0 over the last few seconds
@@ -22,6 +21,7 @@ public class Coin : Entity
     public Coin(Vector3 position)
     {
         Position = position;
+        LifeLeft = SimTuning.Now.CoinLifetime;
         // A little hop out of the bird in a random direction
         float angle = Rng.Range(0f, MathF.PI * 2f);
         velocity = new Vector3(MathF.Sin(angle) * 0.6f, 2.5f, MathF.Cos(angle) * 0.6f);

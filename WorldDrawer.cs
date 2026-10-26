@@ -1,7 +1,7 @@
 using System.Numerics;
 using Raylib_cs;
 
-// Draws the bird world's contents inside the hologram: floor, feeders, food, gunk, coins and birds.
+// Draws the bird world's contents inside the hologram: floor, feeders, food, coins and birds.
 // Used by both the main scene pass and the zoo camera. Nothing in here changes the simulation.
 public class WorldDrawer
 {
@@ -9,6 +9,7 @@ public class WorldDrawer
     private int locIsFloor;
     private int locWorldHalfSize;
     private int locFlatShade;
+    private int locMoss;
 
     // The ground wear map (GroundWear) as a two-channel texture, handed to the floor as its second texture (texture1):
     // the first channel is the wear, the second (read as alpha in the shader) the lush grass around rocks
@@ -32,6 +33,7 @@ public class WorldDrawer
         locIsFloor = Raylib.GetShaderLocation(holoShader, "isFloor");
         locWorldHalfSize = Raylib.GetShaderLocation(holoShader, "worldHalfSize");
         locFlatShade = Raylib.GetShaderLocation(holoShader, "flatShade");
+        locMoss = Raylib.GetShaderLocation(holoShader, "moss");
 
         // A square floor big enough for the widest the cube can be; the shader's fog cuts off the rest.
         float floorSize = view.HalfSize * ViewWindow.MaxCubeScale * 2f;
@@ -111,7 +113,6 @@ public class WorldDrawer
         DrawRocks(view);
         DrawFeeders(view, ringColor);
         DrawFood(view);
-        DrawGunk(view);
         DrawCoins(view);
         DrawBirds(view, selected, hovered, ringColor);
     }
@@ -119,10 +120,11 @@ public class WorldDrawer
     // Each pile is drawn as a scatter of small grains, shaped and spread by its seed type (GrainLook in Seeds.cs).
     // The grains are only for show: each bite eaten removes GrainsPerBite of them.
     // A grain's spot comes from its pile, seed and number, so the rest stay put while others disappear.
-    // As seed goes bad its grains darken toward gunk and slump flatter and closer together.
+    // As seed goes bad its grains darken and slump flatter and closer together, until the pile fades into the dirt.
     // Seed in a tray stays inside its rim; seed in a tube is shown by the tube itself (FeederModel).
     private const int GrainsPerBite = 6;
     private const float TraySpread = 0.24f * Feeders.WorldScale;
+    private static readonly Color RotColor = new Color(78, 74, 40, 255);    // the dark brown spoiling seed turns
 
     private void DrawFood(ViewWindow view)
     {
@@ -138,9 +140,9 @@ public class WorldDrawer
                 GrainLook look = info.Grain;
                 float spread = food.Feeder != null ? MathF.Min(look.Spread, TraySpread) : look.Spread;
                 Model model = look.Mesh == GrainMesh.Block ? grainBlock : grainRound;
-                float gone = Math.Clamp((food.Rot(seed) - 0.5f) / (Food.GunkAfter - 0.5f), 0f, 1f);    // 0 fresh, 1 gunk
+                float gone = Math.Clamp((food.Rot(seed) - 0.5f) / (Food.FadeAfter - 0.5f), 0f, 1f);    // 0 fresh, 1 rotted through
                 Vector3 size = look.Size * new Vector3(1f, 1f - 0.5f * gone, 1f);
-                Color color = Palette.Mix(info.Color, Gunk.Color, gone);
+                Color color = Palette.Mix(info.Color, RotColor, gone);
                 int grains = (int)MathF.Ceiling(amount / Food.BiteSize * GrainsPerBite - 0.01f);
 
                 for (int g = 0; g < grains; g++)
@@ -160,41 +162,11 @@ public class WorldDrawer
         }
     }
 
-    // Gunk is a flat dark blob with a few lumps around it.
-    private void DrawGunk(ViewWindow view)
-    {
-        const int Lumps = 5;
-        foreach (Gunk gunk in World.Instance.GetAllEntities<Gunk>())
-        {
-            if (!view.Contains(gunk.Position, 0.5f)) continue;
-
-            Vector3 local = view.ToLocal(gunk.Position);
-            float r = gunk.Radius;
-            Vector3 blob = new Vector3(r * 2f, 0.05f, r * 1.7f);
-            float blobTurn = Rng.Fixed(gunk.EntityID, 0, 0, 1) * 360f;
-            Raylib.DrawModelEx(grainRound, view.BoxToScene(local + new Vector3(0, 0.02f, 0) * view.Zoom), Vector3.UnitY,
-                               blobTurn + view.YawDegrees, blob * view.Zoom, Gunk.Color);
-            DrawStats.CountModel();
-
-            for (int i = 0; i < Lumps; i++)
-            {
-                float angle = Rng.Fixed(gunk.EntityID, 1, i, 1) * MathF.PI * 2f;
-                float distance = r * 0.7f * Rng.Fixed(gunk.EntityID, 1, i, 2);
-                float lumpSize = r * (0.3f + 0.3f * Rng.Fixed(gunk.EntityID, 1, i, 3));
-                float shade = Rng.Fixed(gunk.EntityID, 1, i, 4) * 0.3f - 0.2f;
-
-                Vector3 offset = new Vector3(MathF.Cos(angle) * distance, 0.04f, MathF.Sin(angle) * distance);
-                Vector3 lump = new Vector3(lumpSize, lumpSize * 0.5f, lumpSize);
-                Raylib.DrawModelEx(grainRound, view.BoxToScene(local + offset * view.Zoom), Vector3.UnitY,
-                                   view.YawDegrees, lump * view.Zoom, Raylib.ColorBrightness(Gunk.Color, shade));
-                DrawStats.CountModel();
-            }
-        }
-    }
-
     // A rock is one squashed dome (its true shape, see Rock.HeightAt) with a few lower lumps around its sides,
-    // all faceted like the birbs. Lumps, turn and shade come from the rock's Look, so each rock always looks the same.
+    // all faceted like the birbs. Lumps, turn, shade and how mossy its top is come from the rock's Look,
+    // so each rock always looks the same. The moss itself is drawn by hologram.fs.
     private static readonly Color StoneColor = new Color(120, 114, 104, 255);
+    private const float MossMin = 0.4f, MossMax = 1f;
 
     private void DrawRocks(ViewWindow view)
     {
@@ -208,6 +180,8 @@ public class WorldDrawer
             float shade = Rng.Fixed(look, 0, 0, 1) * 0.3f - 0.15f;
             Color stone = Raylib.ColorBrightness(Palette.Mix(StoneColor, new Color(150, 128, 104, 255), Rng.Fixed(look, 0, 0, 2) * 0.6f), shade);
             float turn = Rng.Fixed(look, 0, 0, 3) * 360f;
+            float moss = float.Lerp(MossMin, MossMax, Rng.Fixed(look, 2, 0, 0));
+            Raylib.SetShaderValue(holoShader, locMoss, moss, ShaderUniformDataType.Float);
 
             Vector3 dome = new Vector3(rock.Radius * 2f, rock.Height * 2f, rock.Radius * 2f);
             Raylib.DrawModelEx(rockModel, view.BoxToScene(local), Vector3.UnitY, turn + view.YawDegrees, dome * view.Zoom, stone);
@@ -230,6 +204,7 @@ public class WorldDrawer
             }
         }
         Raylib.SetShaderValue(holoShader, locFlatShade, 0, ShaderUniformDataType.Int);
+        Raylib.SetShaderValue(holoShader, locMoss, 0f, ShaderUniformDataType.Float);
     }
 
     // Feeders standing in view (a ring under the selected one), plus the see-through one following the mouse while placing.

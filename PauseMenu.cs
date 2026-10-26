@@ -6,7 +6,7 @@ using Raylib_cs;
 public class PauseMenu
 {
     private enum Page { Main, Settings, Controls, ConfirmQuit, ConfirmNewWorld }
-    private enum Choice { Resume, Designer, Fullscreen, Settings, FullscreenType, NameTags, HandYellow, Controls, NewWorld, Quit, Back, YesQuit, YesNewWorld }
+    private enum Choice { Resume, Designer, Fullscreen, Settings, FullscreenType, NameTags, HandYellow, Quality, Controls, NewWorld, Quit, Back, YesQuit, YesNewWorld }
 
     public bool IsOpen { get; private set; }
     public bool QuitRequested { get; private set; }
@@ -133,6 +133,7 @@ public class PauseMenu
             case Choice.FullscreenType: engine.SetTrueFullscreen(!engine.TrueFullscreen); break;
             case Choice.NameTags: CycleNameTags(engine.Renderer.ChatMessages); break;
             case Choice.HandYellow: engine.Hands.Yellow = !engine.Hands.Yellow; break;
+            case Choice.Quality: CycleQuality(engine.Renderer); break;
             case Choice.Controls: page = Page.Controls; break;
             case Choice.NewWorld: page = Page.ConfirmNewWorld; break;
             case Choice.YesNewWorld:
@@ -161,6 +162,7 @@ public class PauseMenu
                     (Choice.FullscreenType, engine.TrueFullscreen ? "Fullscreen type: True" : "Fullscreen type: Window"),
                     (Choice.NameTags, NameTagsLabel(engine.Renderer.ChatMessages.NameLabels)),
                     (Choice.HandYellow, engine.Hands.Yellow ? "Hands: Groening yellow (on)" : "Hands: Groening yellow"),
+                    (Choice.Quality, QualityLabel(engine.Renderer.Quality)),
                     (Choice.Back, "Back"),
                 };
             case Page.ConfirmQuit:
@@ -192,6 +194,19 @@ public class PauseMenu
         };
     }
 
+    // High, then medium, then low, then back around.
+    private static void CycleQuality(HologramRenderer renderer)
+    {
+        renderer.Quality = renderer.Quality >= 2f ? 1.5f : renderer.Quality >= 1.5f ? 1f : 2f;
+    }
+
+    private static string QualityLabel(float quality) => quality switch
+    {
+        >= 2f => "Hologram quality: High",
+        >= 1.5f => "Hologram quality: Medium",
+        _ => "Hologram quality: Low",
+    };
+
     private static string NameTagsLabel(NameLabelMode mode) => mode switch
     {
         NameLabelMode.Named => "Name tags: Birds you named",
@@ -205,7 +220,7 @@ public class PauseMenu
         {
             case Page.Controls: return "CONTROLS";
             case Page.Settings: return "SETTINGS";
-            case Page.ConfirmQuit: return "QUIT BIRB BOX?";
+            case Page.ConfirmQuit: return "QUIT BIRB CUBE?";
             case Page.ConfirmNewWorld: return "START A NEW WORLD?";
             default: return "PAUSED";
         }

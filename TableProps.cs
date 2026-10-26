@@ -1,7 +1,7 @@
 using System.Numerics;
 using Raylib_cs;
 
-// The things sitting on the dining table around the Birb Box and the Gilded Granary.
+// The things sitting on the dining table around the Birb Cube and the Gilded Granary.
 // They're there to show how big the toys are, so they're kept to real sizes (1 unit is about 7.5 cm).
 //
 // Nothing can sit in front of the pedestals (the hologram scene is drawn over the room),
@@ -67,7 +67,7 @@ public class TableProps
 
     // ---------------- MUG ----------------
 
-    // The #7B171B mug with the Birb Box logo on the front, half full of coffee.
+    // The #7B171B mug with the Birb Cube logo on the front, half full of coffee.
     private const float MugRadius = 0.55f, MugHeight = 1.3f;
 
     private void DrawMug(UnitShapes shapes)

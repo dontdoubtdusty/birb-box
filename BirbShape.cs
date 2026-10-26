@@ -20,7 +20,8 @@ public enum PartRole
     Beak,
     Wing,
     Tail,
-    Leg
+    Leg,
+    Eye
 }
 
 public class BirbPart

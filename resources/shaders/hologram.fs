@@ -27,6 +27,7 @@ uniform vec3 holoColor;
 uniform float time;
 uniform int isFloor;
 uniform int flatShade;       // 1 while drawing birbs: each triangle gets one flat shade (the faceted look)
+uniform float moss;          // 0 normally; while drawing a rock, how mossy its tops are (0 to 1)
 
 out vec4 finalColor;
 
@@ -123,6 +124,16 @@ void main()
     {
         normal = normalize(cross(dFdx(fragPosition), dFdy(fragPosition)));
         if (dot(normal, viewPos - fragPosition) < 0.0) normal = -normal;
+    }
+
+    // Moss settles on a rock's upward-facing facets, in soft patches fixed in the world
+    if (moss > 0.0)
+    {
+        vec2 world = boxPos.xz / viewZoom + viewCenter;
+        float up = smoothstep(0.55, 0.85, normal.y);
+        float patches = smoothstep(0.35, 0.6, noise(world * 2.5) * 0.7 + noise(world * 7.0) * 0.3);
+        vec3 mossColor = vec3(0.24, 0.38, 0.14) * (0.85 + 0.3 * noise(world * 18.0));
+        base.rgb = mix(base.rgb, mossColor, up * patches * moss);
     }
 
     if (isFloor == 1)

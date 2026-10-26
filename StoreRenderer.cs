@@ -1,7 +1,7 @@
 using System.Numerics;
 using Raylib_cs;
 
-// Draws the Gilded Granary inside the Birb Box, when the box is showing the store (see BoxMode).
+// Draws the Gilded Granary inside the Birb Cube, when the box is showing the store (see BoxMode).
 // Everything uses the hologram shader, so it gets the same tint, scan bands and edge fog as the birds.
 // Nothing in here changes the store.
 //
@@ -192,11 +192,6 @@ public class StoreRenderer
             if (!item.OnShelf) continue;
 
             bool lit = item == store.HoveredItem || item == store.SelectedItem;
-            if (item.IsTool)
-            {
-                DrawScraper(item, lit);
-                continue;
-            }
             if (item.IsFeeder)
             {
                 // Feeders are shown at their real size, the same as in the bird world
@@ -217,13 +212,6 @@ public class StoreRenderer
                 Cylinder(item.Position + new Vector3(0, 0.2f, 0), 0.085f, 0.04f, Lighten(Palette.BrassLight, lit));
             }
         }
-    }
-
-    // The Muck Scraper stands on its blade: a flat steel blade with a long wooden handle.
-    private void DrawScraper(ShelfItem item, bool lit)
-    {
-        Box(item.Position + new Vector3(0, 0.045f, 0), new Vector3(0.18f, 0.09f, 0.02f), Lighten(SteelLight, lit));
-        Cylinder(item.Position + new Vector3(0, 0.08f, 0), 0.014f, 0.5f, Lighten(WoodLight, lit));
     }
 
     // The hovered or selected item is drawn lighter.

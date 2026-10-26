@@ -1,7 +1,7 @@
 using System.Numerics;
 using Raylib_cs;
 
-// The room the Birb Box sits in: a cabin on a space station during the night cycle.
+// The room the Birb Cube sits in: a cabin on a space station during the night cycle.
 // A dark dining table with a woven runner, a chair at each end, and a panelled back wall
 // with a wide window, two warm lamps and the Royal Guild of Fowlers' crest.
 // The things sitting on the table (mug, books, candle holder...) are in TableProps; the radio is in Radio.
@@ -9,14 +9,14 @@ using Raylib_cs;
 // It's drawn straight to the screen first; the hologram scene is laid over it afterward,
 // so nothing in here can appear in front of the pedestals. It never turns with the hologram.
 //
-// The Birb Box's pedestal is drawn right after this, in the same pass, by HologramRenderer.
+// The Birb Cube's pedestal is drawn right after this, in the same pass, by HologramRenderer.
 //
 // Scale: 1 unit is about 7.5 cm. The table is 30 x 19 units (about 2.25 m x 1.4 m).
 public class Backdrop
 {
     public const float TableY = -2.7f;              // the tabletop, where the pedestal stands
 
-    // TABLE (scene units). Centered a little right of the Birb Box, and deep enough for the pedestal's plinth.
+    // TABLE (scene units). Centered a little right of the Birb Cube, and deep enough for the pedestal's plinth.
     public static readonly Vector3 TableCenter = new Vector3(2.5f, TableY, -0.5f);
     public const float TableLength = 30f;           // along X
     public const float TableDepth = 19f;            // along Z
@@ -112,7 +112,7 @@ public class Backdrop
         Raylib.SetShaderValue(roomShader, locDissolve, dissolve, ShaderUniformDataType.Float);
     }
 
-    // The Birb Box's own light on the room: where it comes from and how bright (color times power; black when off).
+    // The Birb Cube's own light on the room: where it comes from and how bright (color times power; black when off).
     // Set once a frame, before the room and the pedestal are drawn (see room.fs).
     public void SetProjectorLights(Vector3 holoLight, Vector3 holoColor, Vector3 lensLight, Vector3 lensColor, float wellRadius)
     {
@@ -244,7 +244,7 @@ public class Backdrop
         }
     }
 
-    // A red woven runner from the back of the table, under the Birb Box, and down over the front edge,
+    // A red woven runner from the back of the table, under the Birb Cube, and down over the front edge,
     // with gold bands, gold diamonds on the hanging end, and a fringe.
     private void DrawRunner()
     {
