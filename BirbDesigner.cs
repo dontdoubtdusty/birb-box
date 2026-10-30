@@ -81,6 +81,8 @@ public class BirbDesigner
             case BirdPose.Hop: phase += dt * HopRate; break;
             case BirdPose.Walk: phase += dt * WalkRate; break;
             case BirdPose.Peck: phase += dt * PeckRate; break;
+            case BirdPose.Sip: phase += dt * BirdMover.SipRate; break;
+            case BirdPose.Bathe: phase += dt * BirdMover.BathRate; break;
         }
     }
 

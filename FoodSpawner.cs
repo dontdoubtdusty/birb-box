@@ -62,7 +62,7 @@ public class FoodSpawner
         if (!HasRoom) return;
 
         contents ??= new() { [SeedType.Wild] = WildPileAmount };
-        if (position.Y <= 0f) position = Rock.PushOut(position);    // seed placed straight on the ground lands beside a rock, not in it
+        if (position.Y <= 0f) position = Pool.PushOut(Rock.PushOut(position));    // seed placed straight on the ground lands beside a rock or the pool, not in it
         Feeder? below = position.Y > 0f ? FeederBelow(position) : null;
         World.Instance.AddEntity(new Food(position, contents) { LandOn = below });
     }

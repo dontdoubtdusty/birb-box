@@ -33,6 +33,17 @@ public class SimTuning
     public float WearSpeed = 1f;                   // times as fast as the wear rates in GroundWear.cs
     public float RegrowSpeed = 1f;                 // times as fast as the regrowth in GroundWear.cs
 
+    // DAY AND NIGHT (see WorldClock.cs)
+    public float DayMinutes = 15f;                 // one full day and night, in sim minutes (a RimWorld day, rounded down)
+    public float NightBrightness = 1f;             // times the night light: lower is darker (the day isn't touched)
+    public float RoostChance = 0.25f;              // chance a bird stays the night (perched on a rock or the ground) instead of flying off
+    public int MaxRoosting = 5;                    // at most this many birds stay the night
+
+    // THE POOL (see Pool.cs and the WATER section of BirdMover.cs)
+    public float DrinkChance = 0.08f;              // chance a pause near the pool becomes a walk down to sip
+    public float BathChance = 0.04f;               // chance it becomes a bath instead
+    public int MaxBathers = 3;                     // at most this many birds bathe at once
+
     // SPROUTS (see Sprout.cs)
     public float SproutChancePerSeed = 0.05f;      // chance each rotted seed comes up as a sprout (1 seed 5%, 10 seed 40%)
     public float SproutMinutes = 15f;              // how long a sprout lives, give or take a little
@@ -59,6 +70,13 @@ public class SimTuning
         SpoilSpeed = MathF.Max(0.01f, SpoilSpeed);
         WearSpeed = MathF.Max(0f, WearSpeed);
         RegrowSpeed = MathF.Max(0f, RegrowSpeed);
+        DayMinutes = MathF.Max(1f, DayMinutes);
+        NightBrightness = Math.Clamp(NightBrightness, 0.2f, 3f);
+        RoostChance = Math.Clamp(RoostChance, 0f, 1f);
+        MaxRoosting = Math.Clamp(MaxRoosting, 0, 100);
+        DrinkChance = Math.Clamp(DrinkChance, 0f, 1f);
+        BathChance = Math.Clamp(BathChance, 0f, 1f);
+        MaxBathers = Math.Clamp(MaxBathers, 0, 50);
         SproutChancePerSeed = Math.Clamp(SproutChancePerSeed, 0f, 1f);
         SproutMinutes = MathF.Max(1f, SproutMinutes);
         MaxSprouts = Math.Clamp(MaxSprouts, 0, 200);

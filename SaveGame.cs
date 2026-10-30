@@ -101,6 +101,7 @@ public class SaveGame
             GameVersion = GameEngine.Version,
             SavedAt = DateTime.Now,
             SimTime = engine.SimTime,
+            ClockDays = engine.Clock.Days,
             Coins = engine.Coins,
             FrostcrestSeen = Seeds.FrostcrestSeen,
             VisitedStore = engine.Store.VisitedBefore,
@@ -121,6 +122,7 @@ public class SaveGame
             Log = EventLog.Entries.ToList(),
             GroundWear = engine.Wear.ToSave(),
             Rocks = new(),
+            Pool = Pool.Current?.ToSave(),
         };
 
         // Seed sitting in a feeder is saved with its feeder, and seed on a sprout's heads with its sprout.
@@ -134,6 +136,7 @@ public class SaveGame
                 case Feeder feeder: data.Feeders.Add(feeder.ToSave()); break;
                 case Coin coin: data.LooseCoins.Add(coin.ToSave()); break;
                 case Rock rock: data.Rocks.Add(rock.ToSave()); break;
+                // the pool is saved on its own, above
             }
         }
         return data;
@@ -151,6 +154,10 @@ public class SaveGame
         engine.HoveredBird = null;
 
         engine.SimTime = data.SimTime;
+        // A new world starts at dawn on Day 1; a save from before days (it has birds) at mid-morning of Day 1
+        if (data.ClockDays is double days) engine.Clock.Days = days;
+        else engine.Clock.Reset(data.Birds.Count > 0 ? WorldClock.OldSaveStartHour : WorldClock.StartHour);
+        engine.Clock.Refresh();                                         // before the birds load, so roosting birds stay roosting
         engine.Coins = data.Coins;
         Seeds.FrostcrestSeen = data.FrostcrestSeen;
         engine.Store.VisitedBefore = data.VisitedStore;
@@ -178,32 +185,41 @@ public class SaveGame
         foreach (FeederSave feeder in data.Feeders) Feeder.FromSave(feeder).PlaceAt(world.PullInside(feeder.Position));
         world.FlushChanges();
 
-        // Rocks next, so nothing else ends up inside one. A new world, or a save from before rocks, gets a fresh set
-        // (placed clear of the feeders). The lush grass around them is worked out from where they are.
+        // Rocks and the pool next, so nothing else ends up inside them. A new world gets the pool first and then rocks
+        // around it (clear of the feeders). A save from before rocks gets fresh rocks; one from before the pool (4.93)
+        // gets a pool placed clear of its rocks, feeders and sprouts. The lush grass around them is worked out from where they are.
         if (data.Rocks != null) foreach (RockSave rock in data.Rocks) world.AddEntity(Rock.FromSave(rock));
+        if (data.Pool != null) world.AddEntity(Pool.FromSave(data.Pool));
         world.FlushChanges();
+        if (data.Rocks == null && data.Pool == null) Pool.PlaceNew(world);
         if (data.Rocks == null) Rock.PlaceNew(world);
+        if (data.Rocks != null && data.Pool == null) Pool.PlaceNew(world, avoid: data.Sprouts.Select(sprout => sprout.Position));
         engine.Wear.RebuildLush(world);
 
-        // Sprouts, kept off the rocks (their heads come in with them)
+        // Sprouts, kept off the rocks and out of the water (their heads come in with them)
         foreach (SproutSave sprout in data.Sprouts)
         {
-            sprout.Position = Rock.PushOut(world.PullInside(sprout.Position), Sprout.Reach);
+            sprout.Position = Pool.PushOut(Rock.PushOut(world.PullInside(sprout.Position), Sprout.Reach), Sprout.Reach);
             Sprout.FromSave(sprout).AddToWorld(world);
         }
 
-        // Seed lying on the ground is moved off any rock; seed still falling rolls off by itself.
+        // Seed lying on the ground is moved off any rock and out of the water; seed still falling rolls off or sinks by itself.
         foreach (FoodSave food in data.Seed)
         {
             food.Position = world.PullInside(food.Position);
-            if (food.Position.Y <= 0f) food.Position = Rock.PushOut(food.Position);
+            if (food.Position.Y <= 0f) food.Position = Pool.PushOut(Rock.PushOut(food.Position));
             world.AddEntity(Food.FromSave(food));
         }
-        foreach (CoinSave coin in data.LooseCoins) { coin.Position = Rock.PushOut(world.PullInside(coin.Position), Coin.Radius); world.AddEntity(Coin.FromSave(coin)); }
+        foreach (CoinSave coin in data.LooseCoins)
+        {
+            coin.Position = Pool.PushOut(Rock.PushOut(world.PullInside(coin.Position), Coin.Radius), Coin.Radius);
+            world.AddEntity(Coin.FromSave(coin));
+        }
         foreach (BirdSave save in data.Birds)
         {
             Bird bird = Bird.FromSave(save);
             BringBirdInside(bird, world);
+            if (!bird.IsFlying) bird.Position = Pool.PushOut(bird.Position);    // a bird that was wading steps out onto the shore
             world.AddEntity(bird);
         }
         world.FlushChanges();
@@ -246,6 +262,7 @@ public class SaveData
 
     // THE PLAYER
     public float SimTime { get; set; }
+    public double? ClockDays { get; set; }                            // the world's calendar (WorldClock.Days); null before 4.92
     public int Coins { get; set; }
     public bool FrostcrestSeen { get; set; }
     public bool VisitedStore { get; set; }
@@ -268,6 +285,7 @@ public class SaveData
     public List<SproutSave> Sprouts { get; set; } = new();
     public string GroundWear { get; set; } = "";                      // worn grass, one byte per cell (GroundWear.ToSave)
     public List<RockSave>? Rocks { get; set; }                        // null in a new world or a save from before rocks: new ones are placed
+    public PoolSave? Pool { get; set; }                               // null in a new world or a save from before the pool (4.93): one is placed
     public List<BirdSave> Regulars { get; set; } = new();             // birds away for now that may come back (BirdSpawner)
 }
 
@@ -317,6 +335,8 @@ public class BirdSave
     public float Build { get; set; }                 // 0 in a save from before looks: rolled on load
     public float Shade { get; set; }
     public float Warmth { get; set; }
+    public bool Roosting { get; set; }               // staying the night (Bird.Roosting)
+    public bool NightAway { get; set; }              // a regular who flew off to roost for the night: comes back first at dawn
 }
 
 public class FoodSave
@@ -348,6 +368,17 @@ public class RockSave
     public float Radius { get; set; }
     public float Height { get; set; }
     public int Look { get; set; }
+}
+
+public class PoolSave
+{
+    public List<LobeSave> Lobes { get; set; } = new();
+}
+
+public class LobeSave
+{
+    public Vector2 Center { get; set; }
+    public float Radius { get; set; }
 }
 
 public class SproutSave

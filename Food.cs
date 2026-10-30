@@ -160,6 +160,19 @@ public class Food : Entity
     // and this pile is gone; otherwise it starts a heap of its own here.
     private void Land(float speed)
     {
+        // Seed landing in the pool sinks, with a small ripple and a plip
+        Pool? pool = Pool.Current;
+        if (Feeder == null && Plant == null && pool != null && pool.DistanceAt(Position) < 0f)
+        {
+            pool.AddRipple(Position, 0.25f + 0.1f * MathF.Min(speed, 5f));
+            if (GameEngine.Instance.View.Contains(Position)) Sounds.PlaySip(Position);
+            Layers.Clear();
+            RecountContents();
+            removed = true;
+            World.Instance.RemoveEntity(this);
+            return;
+        }
+
         Food? heap = PileToJoin();
         if (heap == null)
         {

@@ -1,7 +1,7 @@
 // A short history of things that happened, shown in the "Bird log" window.
 public static class EventLog
 {
-    private const int MaxEntries = 60;
+    private const int MaxEntries = 120;    // dusk and dawn add a line per bird going to roost or coming back
     private static readonly List<string> entries = new();
 
     public static IReadOnlyList<string> Entries => entries;
@@ -17,7 +17,7 @@ public static class EventLog
 
     public static void Add(string message)
     {
-        entries.Add($"[{Clock.Format(GameEngine.Instance.SimTime)}] {message}");
+        entries.Add($"[{WorldClock.Instance.Stamp}] {message}");    // "[Day 3 18:42] ..." in the world's own time
 
         if (entries.Count > MaxEntries)
         {

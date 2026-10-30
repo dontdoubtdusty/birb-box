@@ -1,7 +1,7 @@
 using System.Numerics;
 using Raylib_cs;
 
-// Draws the bird world's contents inside the hologram: floor, feeders, seed heaps, sprouts, coins and birds.
+// Draws the bird world's contents inside the hologram: floor (with the pool's water), feeders, seed heaps, sprouts, splash droplets, coins and birds.
 // Used by both the main scene pass and the zoo camera. Nothing in here changes the simulation.
 // A partial class: the seed is drawn in SeedDrawing.cs (which also owns the grain batches), the sprouts in SproutDrawing.cs.
 public partial class WorldDrawer
@@ -11,6 +11,9 @@ public partial class WorldDrawer
     private int locWorldHalfSize;
     private int locFlatShade;
     private int locMoss;
+    private int locPoolLobeCount, locPoolLobes, locRippleCount, locRipples, locRippleLife;    // the pool, drawn by the floor (see DrawFloor)
+    private readonly Vector3[] poolLobes = new Vector3[Pool.MaxLobes];
+    private readonly Vector4[] ripples = new Vector4[Pool.MaxRipples];
 
     // The ground wear map (GroundWear) as a two-channel texture, handed to the floor as its second texture (texture1):
     // the first channel is the wear, the second (read as alpha in the shader) the lush grass around rocks
@@ -34,6 +37,11 @@ public partial class WorldDrawer
         locWorldHalfSize = Raylib.GetShaderLocation(holoShader, "worldHalfSize");
         locFlatShade = Raylib.GetShaderLocation(holoShader, "flatShade");
         locMoss = Raylib.GetShaderLocation(holoShader, "moss");
+        locPoolLobeCount = Raylib.GetShaderLocation(holoShader, "poolLobeCount");
+        locPoolLobes = Raylib.GetShaderLocation(holoShader, "poolLobes");
+        locRippleCount = Raylib.GetShaderLocation(holoShader, "rippleCount");
+        locRipples = Raylib.GetShaderLocation(holoShader, "ripples");
+        locRippleLife = Raylib.GetShaderLocation(holoShader, "rippleLife");
 
         // A square floor big enough for the widest the cube can be; the shader's fog cuts off the rest.
         float floorSize = view.HalfSize * ViewWindow.MaxCubeScale * 2f;
@@ -66,11 +74,36 @@ public partial class WorldDrawer
     public void DrawFloor(ViewWindow view)
     {
         RefreshWearTexture(GameEngine.Instance.Wear);
+        SetPoolUniforms();
         Raylib.SetShaderValue(holoShader, locWorldHalfSize, World.Instance.HalfSize, ShaderUniformDataType.Float);
         Raylib.SetShaderValue(holoShader, locIsFloor, 1, ShaderUniformDataType.Int);
         Raylib.DrawModelEx(floorModel, Vector3.Zero, Vector3.UnitY, view.YawDegrees, Vector3.One, Color.White);
         DrawStats.CountModel();
         Raylib.SetShaderValue(holoShader, locIsFloor, 0, ShaderUniformDataType.Int);
+    }
+
+    // Hands the floor shader the pool's shape and its ripple rings (hologram.fs draws the water as part of the floor).
+    private void SetPoolUniforms()
+    {
+        Pool? pool = Pool.Current;
+        int lobeCount = pool?.Lobes.Count ?? 0;
+        int rippleCount = pool != null ? Math.Min(pool.Ripples.Count, Pool.MaxRipples) : 0;
+        for (int i = 0; i < lobeCount; i++)
+        {
+            Pool.Lobe lobe = pool!.Lobes[i];
+            poolLobes[i] = new Vector3(lobe.Center.X, lobe.Center.Y, lobe.Radius);
+        }
+        for (int i = 0; i < rippleCount; i++)
+        {
+            Pool.Ripple ripple = pool!.Ripples[i];
+            ripples[i] = new Vector4(ripple.Spot.X, ripple.Spot.Y, ripple.Age, ripple.Strength);
+        }
+
+        Raylib.SetShaderValue(holoShader, locPoolLobeCount, lobeCount, ShaderUniformDataType.Int);
+        if (lobeCount > 0) Raylib.SetShaderValueV(holoShader, locPoolLobes, poolLobes, ShaderUniformDataType.Vec3, lobeCount);
+        Raylib.SetShaderValue(holoShader, locRippleCount, rippleCount, ShaderUniformDataType.Int);
+        if (rippleCount > 0) Raylib.SetShaderValueV(holoShader, locRipples, ripples, ShaderUniformDataType.Vec4, rippleCount);
+        Raylib.SetShaderValue(holoShader, locRippleLife, Pool.RippleLife, ShaderUniformDataType.Float);
     }
 
     // Copies the wear map into its texture when it has changed (a few times a second at most).

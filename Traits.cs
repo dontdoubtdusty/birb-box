@@ -1,6 +1,6 @@
 // A bird's personality: 2 or 3 traits, fixed for its whole life (Step 12a).
 //
-// Each trait is one degree on a scale (Nerve, Appetite, Roaming, Voice). A bird holds at most one degree of
+// Each trait is one degree on a scale (Nerve, Appetite, Roaming, Voice, Hours). A bird holds at most one degree of
 // each scale, so opposite traits never roll together. A scale the bird has no trait on is average.
 // Traits only nudge numbers the simulation already has (personal space, hunger, home radius, call delay...).
 // The numbers live in TraitEffects; each trait in the table below says which ones it changes.
@@ -11,7 +11,8 @@ public enum TraitScale
     Nerve,
     Appetite,
     Roaming,
-    Voice
+    Voice,
+    Hours        // when it keeps to its roost (added at 4.92 with day and night)
 }
 
 public enum Trait
@@ -19,7 +20,8 @@ public enum Trait
     FaintHearted, Wary, StoutHearted,    // Nerve
     Dainty, BigEater,                // Appetite
     Hearthbound, Wayfarer,               // Roaming
-    Hushed, TownCrier                    // Voice
+    Hushed, TownCrier,                   // Voice
+    EarlyRiser, NightOwl                 // Hours
 }
 
 // Which birds a bird is easy around: on a rock it hops up to, and at a pile or feeder it picks to eat from.
@@ -52,10 +54,15 @@ public class TraitEffects
     public float HomeRadius = 1f;         // times: how far it roams from home (SimTuning.HomeRadius)
     public float LoseInterest = 1f;       // times: how soon it gets bored and leaves (2 = twice as soon)
     public float ReturnWeight = 1f;       // times: how likely it is to be the regular that comes back
+    public float RoostChance = 1f;        // times: how likely it is to stay the night instead of flying off (SimTuning.RoostChance)
 
     // VOICE
     public float CallDelay = 1f;          // times: seconds between its own calls
     public float IgnoreHush = 0f;         // chance it calls anyway when another bird just called nearby
+
+    // HOURS
+    public float HourShift = 0f;          // hours: when it wakes and goes to roost, earlier (-) or later (+) than most
+    public bool NightOwl = false;         // never roosts; the only kind of bird that arrives at night
 }
 
 // One trait: its name, the line shown when hovering it, its scale, how common it is, and what it changes.
@@ -93,6 +100,7 @@ public static class Traits
         [TraitScale.Appetite] = new Trait?[] { Trait.Dainty, null, Trait.BigEater },
         [TraitScale.Roaming] = new Trait?[] { Trait.Hearthbound, null, Trait.Wayfarer },
         [TraitScale.Voice] = new Trait?[] { Trait.Hushed, null, Trait.TownCrier },
+        [TraitScale.Hours] = new Trait?[] { Trait.EarlyRiser, null, Trait.NightOwl },
     };
 
     public static IReadOnlyList<Trait?> Stops(TraitScale scale) => stops[scale];
@@ -124,11 +132,11 @@ public static class Traits
         // ROAMING
         [Trait.Hearthbound] = new TraitInfo("Hearthbound", TraitScale.Roaming, 1f,
             "Keeps to its own patch of grass, rarely tires of it, and nearly always comes home.",
-            e => { e.HomeRadius = 0.5f; e.LoseInterest = 0.4f; e.ReturnWeight = 3f; }),
+            e => { e.HomeRadius = 0.5f; e.LoseInterest = 0.4f; e.ReturnWeight = 3f; e.RoostChance = 2f; }),
 
         [Trait.Wayfarer] = new TraitInfo("Wayfarer", TraitScale.Roaming, 1f,
             "Ranges wide, tires of a place quickly, and may never pass this way again.",
-            e => { e.HomeRadius = 2f; e.LoseInterest = 2.5f; e.ReturnWeight = 0.4f; }),
+            e => { e.HomeRadius = 2f; e.LoseInterest = 2.5f; e.ReturnWeight = 0.4f; e.RoostChance = 0.5f; }),
 
         // VOICE
         [Trait.Hushed] = new TraitInfo("Hushed", TraitScale.Voice, 1f,
@@ -138,16 +146,25 @@ public static class Traits
         [Trait.TownCrier] = new TraitInfo("Town Crier", TraitScale.Voice, 1f,
             "Has news for everyone, often, and will not wait its turn.",
             e => { e.CallDelay = 0.4f; e.IgnoreHush = 0.6f; }),
+
+        // HOURS
+        [Trait.EarlyRiser] = new TraitInfo("Early Riser", TraitScale.Hours, 1f,
+            "Up before the first glow and singing about it. Off to roost while the others are still at supper.",
+            e => { e.HourShift = -0.75f; }),
+
+        [Trait.NightOwl] = new TraitInfo("Night Owl", TraitScale.Hours, 0.6f,
+            "Keeps lantern hours. Wanders the dark garden long after the rest have gone to roost.",
+            e => { e.NightOwl = true; }),
     };
 
     // How each species leans: a trait's commonness is multiplied by this when a bird of that kind rolls.
     // Missing means 1 (no lean).
     private static readonly Dictionary<BirdType, Dictionary<Trait, float>> leans = new()
     {
-        [BirdType.Emberwing] = new() { [Trait.StoutHearted] = 2.5f, [Trait.FaintHearted] = 0.4f, [Trait.TownCrier] = 1.5f },
-        [BirdType.DuskDove] = new() { [Trait.FaintHearted] = 2.5f, [Trait.Wary] = 1.5f, [Trait.StoutHearted] = 0.4f, [Trait.Hushed] = 1.5f },
-        [BirdType.Gildfinch] = new() { [Trait.Dainty] = 2f, [Trait.TownCrier] = 1.5f, [Trait.Wayfarer] = 1.5f },
-        [BirdType.Frostcrest] = new() { [Trait.Wayfarer] = 2f, [Trait.Hushed] = 2f, [Trait.Wary] = 1.5f },
+        [BirdType.Emberwing] = new() { [Trait.StoutHearted] = 2.5f, [Trait.FaintHearted] = 0.4f, [Trait.TownCrier] = 1.5f, [Trait.EarlyRiser] = 1.5f },
+        [BirdType.DuskDove] = new() { [Trait.FaintHearted] = 2.5f, [Trait.Wary] = 1.5f, [Trait.StoutHearted] = 0.4f, [Trait.Hushed] = 1.5f, [Trait.NightOwl] = 2.5f, [Trait.EarlyRiser] = 0.5f },
+        [BirdType.Gildfinch] = new() { [Trait.Dainty] = 2f, [Trait.TownCrier] = 1.5f, [Trait.Wayfarer] = 1.5f, [Trait.EarlyRiser] = 1.5f },
+        [BirdType.Frostcrest] = new() { [Trait.Wayfarer] = 2f, [Trait.Hushed] = 2f, [Trait.Wary] = 1.5f, [Trait.NightOwl] = 1.5f },
     };
 
     public static TraitInfo Get(Trait trait) => info[trait];
@@ -178,6 +195,16 @@ public static class Traits
     {
         float lean = leans.TryGetValue(type, out var forType) && forType.TryGetValue(trait, out float l) ? l : 1f;
         return info[trait].Commonness * lean;
+    }
+
+    // The same personality made a Night Owl (birds that arrive at night all are): its Hours trait swapped,
+    // or, with no room left for one, another trait dropped at random, so it still has 2 or 3.
+    public static List<Trait> AsNightOwl(IEnumerable<Trait> traits)
+    {
+        List<Trait> kept = traits.Where(trait => info[trait].Scale != TraitScale.Hours).ToList();
+        if (kept.Count >= 3) kept.RemoveAt(Rng.Next(kept.Count));
+        kept.Add(Trait.NightOwl);
+        return Clean(kept);
     }
 
     // The numbers for a set of traits. No traits gives an average bird.

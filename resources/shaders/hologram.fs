@@ -1,7 +1,7 @@
 #version 330
 
 // Used for everything INSIDE the hologram: the grass-and-dirt floor, food, birbs and the Gilded Granary.
-// It adds simple lighting, the hologram tint, rim glow, scan bands, and the edge fog.
+// It adds simple lighting (following the time of day, see WorldClock), the hologram tint, rim glow, scan bands, and the edge fog.
 
 in vec3 fragPosition;
 in vec2 fragTexCoord;
@@ -29,8 +29,28 @@ uniform int isFloor;
 uniform int flatShade;       // 1 while drawing birbs: each triangle gets one flat shade (the faceted look)
 uniform float moss;          // 0 normally; while drawing a rock, how mossy its tops are (0 to 1)
 uniform int useVertexColor;  // 1 only in the grain shader (grain.vs), which hands each grain's color over in fragColor
+uniform vec3 lightDir;       // toward the sun (or the moon at night), in scene space
+uniform vec3 ambientLight;   // light from all around: 0.45 at midday, dim blue at night
+uniform vec3 directLight;    // light from the sun or moon: 0.65 at midday, golden when low, faint at night
+uniform vec3 hazeColor;      // what fading things shift toward near the fog: hologram-tinted by day, deep blue at night
+uniform int poolLobeCount;   // the pool (Pool.cs): how many circles make up its shape, 0 for none
+uniform vec3 poolLobes[3];   // each circle's world X, world Z and radius
+uniform int rippleCount;     // ripple rings on the water right now
+uniform vec4 ripples[8];     // each ring's world X, world Z, age in seconds, strength 0 to 1
+uniform float rippleLife;    // seconds a ring lasts (Pool.RippleLife)
+uniform float edgeWidth;     // how far in from the cube's walls (box units) things start turning to pure hologram
+uniform float edgeStrength;  // how strong that edge look is: 0 off, 1 the normal look, up to 2 (0 while drawing the store)
 
 out vec4 finalColor;
+
+// EDGE LOOK: shares and sizes the edge look reaches at the wall, at edgeStrength 1
+const float EdgeTint = 0.7;          // how far the color goes to plain hologram blue
+const float EdgeGaps = 0.45;         // share of each stripe that's see-through
+const float EdgeSeeThrough = 0.45;   // how much fainter the solid stripes get
+const float EdgeRim = 0.6;           // extra rim glow
+const float EdgeCutGlow = 0.9;       // the bright line where the fog cuts through
+const float StripesPerUnit = 24.0;   // horizontal stripes per box unit of height
+const float StripeDrift = 0.5;       // how fast the stripes drift upward (stripes per second)
 
 float hash(vec2 p)
 {
@@ -101,6 +121,54 @@ vec3 groundColor(vec2 world)
     return ground;
 }
 
+// ---------------- THE POOL ----------------
+// The same shape math as Pool.DistanceAt: how far a world spot is from the shore, below 0 in the water.
+
+float smoothMin(float a, float b, float k)
+{
+    float h = max(k - abs(a - b), 0.0) / k;
+    return min(a, b) - h * h * k * 0.25;
+}
+
+float waterDistance(vec2 world)
+{
+    float d = 100000.0;
+    for (int i = 0; i < 3; i++)
+    {
+        if (i >= poolLobeCount) break;
+        float here = length(world - poolLobes[i].xy) - poolLobes[i].z;
+        d = (i == 0) ? here : smoothMin(d, here, 0.9);
+    }
+    return d;
+}
+
+// How high the water surface stands at a world spot: two slow drifting swells, plus the ripple rings.
+// Only its slope is used (for the glints); the surface itself is drawn flat.
+float waterHeight(vec2 world)
+{
+    float h = noise(world * 1.7 + time * vec2(0.11, 0.07)) * 0.012
+            + noise(world * 4.1 - time * vec2(0.09, 0.14)) * 0.005;
+    for (int i = 0; i < 8; i++)
+    {
+        if (i >= rippleCount) break;
+        float age = ripples[i].z;
+        float r = length(world - ripples[i].xy);
+        float front = 0.15 + age * 0.6;                              // the ring spreads outward
+        float fadeOut = 1.0 - age / rippleLife;
+        float ring = exp(-pow((r - front) / 0.12, 2.0)) * sin((r - front) * 40.0);
+        h += ring * ripples[i].w * fadeOut * fadeOut * 0.015;
+    }
+    return h;
+}
+
+// The water's color at a world spot before lighting: lighter and showing a little ground in the shallows, deep teal in the middle.
+vec3 waterColor(float d, vec3 ground)
+{
+    float depth = smoothstep(0.0, 1.4, -d);
+    vec3 water = mix(vec3(0.15, 0.25, 0.25), vec3(0.025, 0.07, 0.10), depth);
+    return mix(water, ground * 0.5, (1.0 - smoothstep(0.0, 0.3, -d)) * 0.45);
+}
+
 void main()
 {
     // fragPosition is in scene space, already turned with the hologram.
@@ -138,16 +206,63 @@ void main()
         base.rgb = mix(base.rgb, mossColor, up * patches * moss);
     }
 
+    // The pool is part of the floor: water where waterDistance is below 0, damp dark ground along the shore.
+    float wet = 0.0;                     // 1 on the water, 0 on land (soft across the waterline)
+    float waterline = 0.0;               // 1 right at the waterline, for its faint glow
+    float rippleShine = 0.0;
     if (isFloor == 1)
     {
-        base = vec4(groundColor(boxPos.xz / viewZoom + viewCenter), 1.0);
+        vec2 world = boxPos.xz / viewZoom + viewCenter;
+        vec3 ground = groundColor(world);
         normal = vec3(0.0, 1.0, 0.0);
+
+        float d = poolLobeCount > 0 ? waterDistance(world) : 100000.0;
+        if (d < 0.5)
+        {
+            // A little ragged noise so the shore isn't a perfect curve; aa softens the waterline over about a pixel
+            d += (noise(world * 5.0) - 0.5) * 0.06;
+            float aa = max(fwidth(d), 0.002);
+            wet = 1.0 - smoothstep(-aa, aa, d);
+            waterline = exp(-pow(d / max(0.025, aa * 1.2), 2.0));
+
+            // Damp ground along the shore: darker and a touch cooler toward the water
+            float damp = 1.0 - smoothstep(0.0, 0.4, d);
+            ground = mix(ground, ground * vec3(0.55, 0.6, 0.62), damp * 0.8);
+
+            // The surface's slope (from the swells and ripples) tips the normal, in world axes, then turned into scene space
+            const float e = 0.03;
+            float h0 = waterHeight(world);
+            vec2 slope = vec2(waterHeight(world + vec2(e, 0.0)) - h0, waterHeight(world + vec2(0.0, e)) - h0) / e;
+            vec3 n = normalize(vec3(-slope.x, 1.0, -slope.y));
+            vec3 sceneNormal = normalize(vec3(c * n.x + s * n.z, n.y, -s * n.x + c * n.z));
+            normal = normalize(mix(normal, sceneNormal, wet));
+            rippleShine = clamp(length(slope) * 4.0, 0.0, 1.0) * wet;
+
+            ground = mix(ground, waterColor(d, ground), wet);
+        }
+        base = vec4(ground, 1.0);
     }
 
-    // Simple directional light
-    vec3 lightDir = normalize(vec3(0.4, 1.0, 0.3));
-    float diffuse = max(dot(normal, lightDir), 0.0);
-    vec3 color = base.rgb * (0.45 + 0.65 * diffuse);
+    // Light from all around, plus the sun (or moon) from its side
+    float diffuse = max(dot(normal, normalize(lightDir)), 0.0);
+    vec3 color = base.rgb * (ambientLight + directLight * diffuse);
+
+    // On the water: the sun's (or moon's) glint off the moving surface, a faint sky sheen at low angles,
+    // a few slow sparkles, and the waterline's soft hologram glow
+    if (wet > 0.0 || waterline > 0.0)
+    {
+        vec3 toCamera = normalize(viewPos - fragPosition);
+        vec3 halfway = normalize(normalize(lightDir) + toCamera);
+        float glint = pow(max(dot(normal, halfway), 0.0), 160.0);
+        float sheen = pow(1.0 - max(dot(normal, toCamera), 0.0), 4.0);
+        vec2 world = boxPos.xz / viewZoom + viewCenter;
+        vec2 cell = floor(world * 5.0);
+        float sparkle = step(0.9, hash(cell)) * pow(max(sin(time * (1.0 + hash(cell + 3.1) * 1.5) + hash(cell + 9.7) * 6.28), 0.0), 24.0)
+                      * (1.0 - smoothstep(0.08, 0.14, length(fract(world * 5.0) - 0.5)));
+        color += directLight * (glint * 0.45 + sparkle * 0.3 + rippleShine * 0.06) * wet;
+        color += ambientLight * sheen * 0.12 * wet;
+        color += holoColor * waterline * 0.1;
+    }
 
     // Hologram tint: blend part of the color toward the hologram hue
     float lum = dot(color, vec3(0.299, 0.587, 0.114));
@@ -163,6 +278,21 @@ void main()
         color += holoColor * rim * 0.45;
     }
 
+    // Edge look: things nearing a wall turn into plain hologram, like a projected figure (not the floor).
+    // 'holo' is 0 more than edgeWidth from every wall and edgeStrength right at a wall.
+    float holo = 0.0;
+    vec2 q = abs(boxPos.xz) / holoHalfWidth;
+    float edge = max(q.x, q.y);
+    if (isFloor == 0 && edgeStrength > 0.0)
+    {
+        float toWall = holoHalfWidth * (1.0 - edge);
+        holo = (1.0 - smoothstep(0.0, max(edgeWidth, 0.01), toWall)) * edgeStrength;
+        vec3 toCamera = normalize(viewPos - fragPosition);
+        float rim = pow(1.0 - max(dot(normal, toCamera), 0.0), 2.0);
+        color = mix(color, holoColor * (0.35 + lum * 1.4), min(holo * EdgeTint, 1.0));
+        color += holoColor * rim * EdgeRim * holo;
+    }
+
     // Fine horizontal scan bands drifting upward
     float bands = 0.5 + 0.5 * sin(boxPos.y * 55.0 - time * 4.0);
     color += holoColor * bands * 0.04;
@@ -176,8 +306,6 @@ void main()
     // 'edge' is 0 in the middle and 1 at a side or corner (same math as ViewWindow.EdgeAmount), so the ground
     // fills the square. Past 1 fade is 0, so the floor beyond the walls gets discarded.
     // Swallow moves both ends of the fade inward, past the middle, so the fog closes in from the sides.
-    vec2 q = abs(boxPos.xz) / holoHalfWidth;
-    float edge = max(q.x, q.y);
     float clearUntil = mix(fogStart, -0.4, swallow);
     float goneBy = mix(1.0, 0.0, swallow);
     float fade = 1.0 - smoothstep(clearUntil, goneBy, edge);
@@ -188,10 +316,26 @@ void main()
     fade *= 1.0 - smoothstep(revealY - 0.6, revealY, boxPos.y);
     fade *= smoothstep(0.0, 0.4, reveal);
 
-    // As things fade, they also shift toward a dim hologram-colored haze
-    color = mix(color, holoColor * 0.3, (1.0 - fade) * 0.6);
+    // As things fade, they also shift toward a dim haze (hologram-colored by day, deep blue at night)
+    color = mix(color, hazeColor, (1.0 - fade) * 0.6);
 
-    float alpha = base.a * fade;
+    // Edge look, part two: horizontal see-through stripes that open up toward the wall,
+    // and a bright line where the fog is cutting the thing off (brightest halfway through the fade)
+    float solid = 1.0;
+    if (holo > 0.0)
+    {
+        float stripe = boxPos.y * StripesPerUnit - time * StripeDrift;
+        float across = abs(fract(stripe) - 0.5) * 2.0;    // 0 in a stripe's middle, 1 at its ends
+        // Stripes fade out on faces pointing up or down (a rock's top), where they'd spread into wide blotches
+        float side = 1.0 - smoothstep(0.55, 0.9, abs(normal.y));
+        float gap = min(holo * EdgeGaps, 0.85) * side;
+        float aa = fwidth(stripe) * 2.0;                   // soft over about a pixel, so the stripes don't shimmer
+        solid = 1.0 - smoothstep(1.0 - gap - aa, 1.0 - gap + aa, across) * smoothstep(0.0, 0.05, gap);
+        solid *= 1.0 - min(holo * EdgeSeeThrough, 0.6);
+        color += holoColor * fade * (1.0 - fade) * 4.0 * EdgeCutGlow * min(holo, 1.0);
+    }
+
+    float alpha = base.a * fade * solid;
     if (alpha < 0.01) discard;
 
     finalColor = vec4(color, alpha);

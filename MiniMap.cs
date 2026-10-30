@@ -87,7 +87,7 @@ public class MiniMap
         if (dragging)
         {
             engine.View.JumpTo(MapToWorld(mouse));
-            engine.FollowSelected = false;
+            engine.FollowedBird = null;
         }
     }
 
@@ -183,7 +183,17 @@ public class MiniMap
         Raylib.BeginScissorMode((int)mapArea.X, (int)mapArea.Y, MapSize, MapSize);
         Raylib.DrawRectangleRec(mapArea, new Color(51, 38, 26, 255));
 
-        // Rocks at their real size, under everything else
+        // The pool at its real size (its circles; the blend between them is too small to see here), then rocks, under everything else
+        if (Pool.Current is Pool pool)
+        {
+            foreach (Pool.Lobe lobe in pool.Lobes)
+            {
+                Vector3 c = new Vector3(lobe.Center.X, 0f, lobe.Center.Y);
+                Vector2 center = ToMap(c);
+                float radius = MathF.Max(1.5f, Vector2.Distance(center, ToMap(c + new Vector3(lobe.Radius, 0f, 0f))));
+                Raylib.DrawCircleV(center, radius, new Color(40, 78, 92, 255));
+            }
+        }
         foreach (Rock rock in World.Instance.GetAllEntities<Rock>())
         {
             Vector2 center = ToMap(rock.Position);

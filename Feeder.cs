@@ -213,7 +213,7 @@ public class FeederPlacer
         EventLog.Add($"Picked up the {feeder.Info.Name}. Click the dirt to set it down.");
     }
 
-    // Returns false (and says why) if another feeder or a rock is in the way.
+    // Returns false (and says why) if another feeder, a rock or the pool is in the way.
     public bool TryPlace(Vector3 groundPoint)
     {
         if (Carried == null) return false;
@@ -231,6 +231,12 @@ public class FeederPlacer
         if (Rock.At(groundPoint, Carried.Info.FootRadius + MinSpacing) != null)
         {
             EventLog.Add("Too close to a rock.");
+            return false;
+        }
+
+        if (Pool.IsWater(groundPoint, Carried.Info.FootRadius + MinSpacing))
+        {
+            EventLog.Add("Too close to the water.");
             return false;
         }
 

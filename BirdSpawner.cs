@@ -11,6 +11,11 @@ public class BirdSpawner
     public float AirArrivalChance = 0.35f;           // the rest walk in from the edge
 
     private const float ArrivalCheckInterval = 1f;    // seconds between arrival rolls
+
+    // DAY AND NIGHT (see WorldClock.ArrivalShare): arrivals follow the time of day. At night only Night Owls come,
+    // at this share of the day's rate. In the morning a bird that flew off for the night is almost always the one that comes back.
+    private const float NightOwlShare = 0.15f;
+    private const float BackFromNightChance = 0.9f;
     private float arrivalTimer = 0f;
     private float sinceLastArrival = 0f;
 
@@ -55,10 +60,12 @@ public class BirdSpawner
 
         // The square root gives diminishing returns: 30 piles pull about 5x as hard as one, not 30x.
         float chance = MathF.Sqrt(totalPull) * SimTuning.Now.ArrivalsPerFoodPerMinute / 60f * elapsed;
+        bool night = IsNightArrival();
+        chance *= night ? NightOwlShare : WorldClock.Instance.ArrivalShare;
 
         if (Rng.Chance(chance))
         {
-            SpawnArrival(PickByPull(pull, totalPull));
+            SpawnArrival(PickByPull(pull, totalPull), night);
             sinceLastArrival = 0f;
         }
     }
@@ -89,13 +96,19 @@ public class BirdSpawner
         return last;
     }
 
-    // With no type given, picks one of the common birds.
+    // Too dark for day birds to come: only Night Owls arrive now.
+    private static bool IsNightArrival() => WorldClock.Instance.ArrivalShare < NightOwlShare;
+
+    // With no type given, picks one of the common birds. nightOwl: a night arrival, always a Night Owl
+    // (null: decided by the time of day, for the tools panel's buttons).
     // Often it's a regular of that kind coming back instead of a new bird.
-    public Bird SpawnArrival(BirdType? type = null)
+    public Bird SpawnArrival(BirdType? type = null, bool? nightOwl = null)
     {
         BirdType birdType = type ?? GetRandomBirdType();
-        Bird? regular = TakeRegular(birdType);
+        bool night = nightOwl ?? IsNightArrival();
+        Bird? regular = TakeRegular(birdType, night);
         Bird bird = regular ?? CreateBird(birdType);
+        if (night && regular == null) bird.BecomeNightOwl();
         bird.State = BirdState.Arriving;
         bird.ArriveHungry();
         string who = regular != null ? $"{bird.Name} is back, and" : bird.Name;
@@ -104,7 +117,7 @@ public class BirdSpawner
         if (bird.Type == BirdType.Frostcrest || Rng.Chance(AirArrivalChance))
         {
             SetupAirArrival(bird);
-            EventLog.Add($"{who} flew down from the sky.");
+            EventLog.Add(night ? $"{who} flew in out of the night." : $"{who} flew down from the sky.");
         }
         else
         {
@@ -148,10 +161,10 @@ public class BirdSpawner
         FlyDownTo(bird, landing);
     }
 
-    // Starts the bird high up and a way off, flying down to land at this spot (moved off any rock).
+    // Starts the bird high up and a way off, flying down to land at this spot (moved off any rock and out of the water).
     private static void FlyDownTo(Bird bird, Vector3 landing)
     {
-        landing = Rock.PushOut(landing, 0.3f);
+        landing = Pool.PushOut(Rock.PushOut(landing, 0.3f), 0.4f);
         landing.Y = bird.GroundY;
 
         float angle = Rng.Range(0f, MathF.PI * 2f);
@@ -164,11 +177,12 @@ public class BirdSpawner
     }
 
     // The Birb Designer's Release button: a new bird wearing a saved design flies down near a spot (the middle of the view).
-    // Always a new bird, never a regular coming back.
+    // Always a new bird, never a regular coming back. At night it comes as a Night Owl, like every night arrival.
     public Bird Release(BirdType type, BirdLook look, Vector3 spot)
     {
         Bird bird = CreateBird(type);
         bird.UseLook(look);
+        if (IsNightArrival()) bird.BecomeNightOwl();    // so it doesn't fly off to roost the moment it lands
         bird.State = BirdState.Arriving;
         bird.ArriveHungry();
 
@@ -201,12 +215,19 @@ public class BirdSpawner
 
     // Half the time, if any bird of this kind is away, one of them comes back. Null means a new bird comes instead.
     // Hearthbound birds are likelier to be the one, Wayfarers less (TraitEffects.ReturnWeight).
-    private Bird? TakeRegular(BirdType type)
+    // By day, a bird that flew off for the night nearly always comes back first. At night only Night Owls come back.
+    private Bird? TakeRegular(BirdType type, bool night)
     {
         List<BirdSave> away = regulars.Where(save => save.Type == type).ToList();
-        if (away.Count == 0 || !Rng.Chance(SimTuning.Now.RegularChance)) return null;
+        if (night) away = away.Where(save => Traits.EffectsOf(save.Traits).NightOwl).ToList();
+        if (away.Count == 0) return null;
 
-        BirdSave pick = PickByReturnWeight(away);
+        List<BirdSave> backFromNight = away.Where(save => save.NightAway).ToList();
+        BirdSave pick;
+        if (!night && backFromNight.Count > 0 && Rng.Chance(BackFromNightChance)) pick = PickByReturnWeight(backFromNight);
+        else if (Rng.Chance(SimTuning.Now.RegularChance)) pick = PickByReturnWeight(away);
+        else return null;
+
         regulars.Remove(pick);
         Bird bird = Bird.FromSave(pick);
         bird.StartNewVisit();

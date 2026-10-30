@@ -2,7 +2,7 @@ using System.Numerics;
 using Raylib_cs;
 
 // Draws the seed piles inside the hologram, as part of WorldDrawer. Also owns the two grain batches
-// (round and block) that the sprouts (SproutDrawing.cs) add to as well.
+// (round and block) that the sprouts (SproutDrawing.cs) and the pool's splash droplets add to as well.
 public partial class WorldDrawer
 {
     // Each pile is drawn as a heap of small grains, shaped by its seed type (GrainLook in Seeds.cs) and laid out by SeedHeap:
@@ -55,6 +55,7 @@ public partial class WorldDrawer
             else AddStream(food, local, view);
         }
         AddSprouts(view);
+        AddDroplets(view);
 
         if (roundCount > 0)
         {
@@ -239,6 +240,21 @@ public partial class WorldDrawer
         float around = Pick(layer, g, 15) * MathF.Tau;
         Vector3 axis = Vector3.Normalize(new Vector3(MathF.Cos(around), 0.6f, MathF.Sin(around)));
         return Quaternion.CreateFromAxisAngle(axis, radians);
+    }
+
+    // The pool's splash droplets (thrown up by bathing birds) as tiny pale grains, in the round batch.
+    private static readonly Vector3 DropletColor = new Vector3(0.62f, 0.82f, 0.9f);
+
+    private void AddDroplets(ViewWindow view)
+    {
+        Pool? pool = Pool.Current;
+        if (pool == null) return;
+        foreach (Pool.Droplet droplet in pool.Droplets)
+        {
+            if (!view.Contains(droplet.Position, 0.2f)) continue;
+            Vector3 stretch = new Vector3(1f, 1.4f, 1f) * droplet.Size * view.Zoom;    // a little long, like a falling drop
+            AddGrain(GrainMesh.Round, view.ToLocal(droplet.Position), Quaternion.Identity, stretch, DropletColor, view);
+        }
     }
 
     // A fixed random number for one grain; the same layer, grain and purpose always give the same number

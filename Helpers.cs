@@ -73,12 +73,6 @@ public static class Rng
     }
 }
 
-// Seconds as a clock: 125 -> "02:05".
-public static class Clock
-{
-    public static string Format(float seconds) => $"{(int)(seconds / 60):00}:{(int)(seconds % 60):00}";
-}
-
 // Files in the resources folder, found next to the .exe so the game starts from any folder or shortcut.
 public static class Assets
 {

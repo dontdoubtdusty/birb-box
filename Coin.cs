@@ -38,7 +38,7 @@ public class Coin : Entity
             Position += velocity * dt;
             if (Position.Y < Radius)
             {
-                Position = Rock.PushOut(new Vector3(Position.X, Radius, Position.Z), Radius);
+                Position = Pool.PushOut(Rock.PushOut(new Vector3(Position.X, Radius, Position.Z), Radius), Radius);    // a coin over the water washes up on the shore
                 velocity = Vector3.Zero;
                 if (onScreen) Sounds.PlayCoinLand();
             }

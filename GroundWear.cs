@@ -2,7 +2,7 @@ using System.Numerics;
 
 // How worn the ground is, all over the world: 0 is full grass, 1 is bare dirt.
 // Birds on the ground and seed lying on it slowly wear the grass away; it grows back on its own.
-// Around each rock the grass is lusher (Lush): it wears more slowly there, and the floor shader draws it greener.
+// Around each rock and along the pool's shore the grass is lusher (Lush): it wears more slowly there, and the floor shader draws it greener.
 // Simulation only: WorldDrawer turns this into a texture for the floor shader whenever Version changes.
 public class GroundWear
 {
@@ -16,6 +16,7 @@ public class GroundWear
     private const float RegrowInterval = 0.5f;       // regrowth is applied in steps this far apart
     private const float LushRing = 0.9f;             // world units past a rock's edge that the lush grass reaches
     private const float LushWearCut = 0.6f;          // fully lush grass wears this much slower (0.6 = 60% slower)
+    private const float PoolLushShare = 1.6f;        // the pool's lush ring is this many times a rock's
 
     public int Size { get; private set; }            // cells along each side
     public float HalfSize { get; private set; }      // the world's half size this grid covers
@@ -35,7 +36,7 @@ public class GroundWear
         Version++;
     }
 
-    // Works out the lush ring around every rock. Called whenever the rocks are placed or loaded.
+    // Works out the lush ring around every rock and the pool. Called whenever they're placed or loaded.
     public void RebuildLush(World world)
     {
         Array.Clear(Lush);
@@ -60,7 +61,33 @@ public class GroundWear
                 }
             }
         }
+        AddPoolLush(Pool.Current);
         Version++;
+    }
+
+    // The grass along the pool's shore grows lusher too, in a slightly wider ring than around a rock.
+    private void AddPoolLush(Pool? pool)
+    {
+        if (pool == null) return;
+        float ring = LushRing * PoolLushShare;
+        foreach (Pool.Lobe lobe in pool.Lobes)
+        {
+            float reach = lobe.Radius + ring + 1f;
+            int x0 = Math.Max(0, (int)((lobe.Center.X - reach + HalfSize) * CellsPerUnit));
+            int x1 = Math.Min(Size - 1, (int)((lobe.Center.X + reach + HalfSize) * CellsPerUnit));
+            int z0 = Math.Max(0, (int)((lobe.Center.Y - reach + HalfSize) * CellsPerUnit));
+            int z1 = Math.Min(Size - 1, (int)((lobe.Center.Y + reach + HalfSize) * CellsPerUnit));
+            for (int z = z0; z <= z1; z++)
+            {
+                for (int x = x0; x <= x1; x++)
+                {
+                    Vector2 world = new Vector2((x + 0.5f) / CellsPerUnit - HalfSize, (z + 0.5f) / CellsPerUnit - HalfSize);
+                    float t = Math.Clamp(1f - pool.DistanceAt(world) / ring, 0f, 1f);
+                    int i = z * Size + x;
+                    Lush[i] = MathF.Max(Lush[i], t * t * (3f - 2f * t));
+                }
+            }
+        }
     }
 
     // Adds wear from everything standing or lying on the ground, and lets the grass grow back.

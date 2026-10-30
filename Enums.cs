@@ -23,5 +23,9 @@ public enum BirdPose
     Walk,         // getting around one step at a time
     Peck,         // head down at the ground or at food
     LookAround,   // standing still, turning its head
-    Fly
+    Fly,
+    Roost,        // asleep for the night: fluffed up, head tucked, eyes shut
+    Sip,          // drinking at the pool's edge: head down to scoop, then up to swallow
+    Bathe,        // crouched in the shallows, wings fluttering
+    ShakeOff      // just out of a bath: fluffed up and shivering the water off
 }

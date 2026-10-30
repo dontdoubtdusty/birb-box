@@ -2,10 +2,11 @@ using System.Numerics;
 using Raylib_cs;
 
 // The fixed on-screen HUD, drawn with plain Raylib on top of the hologram:
-// the stats screen in the right side column (see SidePanels), and the selected bird or feeder card
+// the stats screen in the right side column (see SidePanels; with the time of day: a 24-hour dial, the word for it,
+// the day and the season), and the selected bird or feeder card
 // floating at the top of the middle area. The world map is its own class (MiniMap).
 // Clickable parts of the bird card: the name (click to rename), and the Follow and Center buttons.
-// The bird card also shows its personality as four sliders, one per trait scale (hover one for its trait's flavor line),
+// The bird card also shows its personality as five sliders, one per trait scale (hover one for its trait's flavor line),
 // and its favorite seed.
 // The feeder card shows the seed inside and has Move and Center buttons.
 public class Hud
@@ -15,7 +16,7 @@ public class Hud
     private const int Pad = 10;
     private const int HeaderSize = 12;
     private const int NameSize = 20;
-    private const int CardWidth = 300, CardHeight = 280;
+    private const int CardWidth = 300, CardHeight = 302;
     private const int TraitSize = 16;                                         // the "Fond of" line
     private const int FlavorSize = 14, FlavorLineHeight = 17;
 
@@ -31,6 +32,14 @@ public class Hud
     private Bird? pipBird;                                                  // whose spots they are
     private const int SeedLineHeight = 20;
     private const int CardButtonHeight = 24, CardButtonGap = 6;
+
+    // THE CLOCK DIAL: 24 hours around, midnight at the bottom and noon at the top. The lit arc runs from sunrise to sunset,
+    // so it grows in summer and shrinks in winter; a dimmer band on either side is the first and last glow.
+    private const float DialRadius = 30f;
+    private const int DialTimeSize = 12;
+    private static readonly Color DialNight = new Color(18, 26, 48, 255);
+    private static readonly Color DialGlow = new Color(120, 84, 110, 255);
+    private static readonly Color DialDay = new Color(196, 158, 92, 255);
 
     // Screen rectangles, recalculated every frame so they follow window resizes.
     private Rectangle statsRect;
@@ -179,7 +188,7 @@ public class Hud
         Vector2 mouse = Raylib.GetMousePosition();
         if (Raylib.CheckCollisionPointRec(mouse, followButton))
         {
-            engine.FollowSelected = !engine.FollowSelected;
+            engine.FollowedBird = engine.FollowedBird == bird ? null : bird;
         }
         else if (Raylib.CheckCollisionPointRec(mouse, centerButton))
         {
@@ -200,7 +209,7 @@ public class Hud
 
         Vector2 mouse = Raylib.GetMousePosition();
         if (Raylib.CheckCollisionPointRec(mouse, followButton)) engine.MoveSelectedFeeder();
-        else if (Raylib.CheckCollisionPointRec(mouse, centerButton)) engine.View.JumpTo(new Vector2(selected.Position.X, selected.Position.Z));
+        else if (Raylib.CheckCollisionPointRec(mouse, centerButton)) engine.JumpToSpot(selected.Position);
     }
 
     // Header, name, label, fill bar, one line per seed (at least one, for "Empty"), the birds eating there, buttons.
@@ -293,9 +302,59 @@ public class Hud
         DrawRow("Food", foodCount.ToString(), x, y);
         y += 22;
         DrawRow("Coins", engine.Coins.ToString(), x, y);
-        y += 22;
+        y += 24;
 
-        DrawRow("Time", Clock.Format(engine.SimTime), x, y);
+        // The time of day: the word in the hologram color, then the day and season
+        WorldClock clock = engine.Clock;
+        UiText.Draw(clock.Phase.ToString(), x, y, 20, accent);
+        string date = clock.DateText;
+        int dateX = x + UiText.Measure(clock.Phase.ToString(), 20) + 10;
+        UiText.Draw(date, dateX, y + 4, 16, Palette.DimText);
+
+        Vector2 center = new Vector2(statsRect.X + statsRect.Width - Pad - DialRadius, statsRect.Y + Pad + HeaderSize + 8 + DialRadius + 4);
+        DrawDial(clock, center, accent);
+    }
+
+    // The 24-hour dial: night all round, the glow and the daylight as arcs, an hour hand, and the time in the middle.
+    private static void DrawDial(WorldClock clock, Vector2 center, Color accent)
+    {
+        Raylib.DrawCircleV(center, DialRadius, DialNight);
+        DrawDialArc(center, clock.FirstGlow, clock.LastGlow, DialGlow);
+        DrawDialArc(center, clock.Sunrise, clock.Sunset, DialDay);
+        Raylib.DrawCircleV(center, DialRadius - 7f, Palette.PanelFill);
+        Raylib.DrawCircleLines((int)center.X, (int)center.Y, DialRadius, Palette.Brass);
+
+        // A notch every 6 hours
+        for (int h = 0; h < 24; h += 6)
+        {
+            Vector2 dir = DialDirection(h);
+            Raylib.DrawLineEx(center + dir * (DialRadius - 4f), center + dir * DialRadius, 2f, Palette.BrassLight);
+        }
+
+        Vector2 hand = DialDirection(clock.Hour);
+        Raylib.DrawLineEx(center + hand * 4f, center + hand * (DialRadius - 2f), 2f, accent);
+        Raylib.DrawCircleV(center + hand * (DialRadius - 3.5f), 3f, accent);
+
+        string time = clock.TimeText;
+        UiText.Draw(time, (int)(center.X - UiText.Measure(time, DialTimeSize) / 2f), (int)center.Y - DialTimeSize / 2, DialTimeSize, Palette.Text);
+    }
+
+    // An arc of the dial's ring from one hour to another, going clockwise.
+    private static void DrawDialArc(Vector2 center, float fromHour, float toHour, Color color)
+    {
+        float start = DialAngle(fromHour);
+        float end = DialAngle(toHour);
+        if (end < start) end += 360f;
+        Raylib.DrawRing(center, DialRadius - 7f, DialRadius, start, end, 32, color);
+    }
+
+    // Raylib's angles: 0 points right and they grow clockwise on screen. Midnight is at the bottom (90), noon at the top.
+    private static float DialAngle(float hour) => 90f + hour / 24f * 360f;
+
+    private static Vector2 DialDirection(float hour)
+    {
+        float radians = DialAngle(hour) * MathF.PI / 180f;
+        return new Vector2(MathF.Cos(radians), MathF.Sin(radians));
     }
 
     private void DrawRow(string label, string value, int x, int y)
@@ -319,7 +378,7 @@ public class Hud
 
         DrawNameField(bird, x, y, nameHovered, accent);
         y += 24;
-        UiText.Draw(bird.State.ToString(), x, y, 20, Palette.DimText);
+        UiText.Draw(bird.Roosting ? "Roosting" : bird.State.ToString(), x, y, 20, Palette.DimText);
         if (bird.Visits > 1)
         {
             string visit = $"Visit {bird.Visits}";
@@ -344,7 +403,8 @@ public class Hud
         Raylib.DrawRectangle(x, y + 3, 4, 12, favorite.Color);
         UiText.Draw($"Fond of {favorite.Name}", x + 10, y, TraitSize, Palette.DimText);
 
-        UiDraw.Button(followButton, engine.FollowSelected ? "Following" : "Follow", accent, lit: engine.FollowSelected);
+        bool following = engine.FollowedBird == bird;
+        UiDraw.Button(followButton, following ? "Following" : "Follow", accent, lit: following);
         UiDraw.Button(centerButton, "Center", accent);
 
         if (hoveredTrait is Trait trait) DrawFlavor(trait, accent);

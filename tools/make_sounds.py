@@ -327,6 +327,37 @@ def projector_stop():
     return lowpass(out, 6000)
 
 
+# ---------------- THE POOL ----------------
+
+# A drop or beak touching water: a tiny bubble whose pitch jumps up as it closes, plus a soft tick.
+def plip(start_hz, end_hz, length=0.05):
+    n = int(RATE * length)
+    t = np.arange(n) / RATE
+    f = start_hz + (end_hz - start_hz) * (1 - np.exp(-t * 90))
+    phase = 2 * np.pi * np.cumsum(f) / RATE
+    bubble = np.sin(phase) * np.exp(-t * 70)
+    tick = bandpass(rng.normal(0, 1, n), 2000, 7000) * np.exp(-t * 400) * 0.3
+    return bubble + tick
+
+
+# A bird sipping at the pool's edge: one small plip.
+def sip(lo, hi):
+    out = np.zeros(int(RATE * 0.12))
+    place(out, plip(lo, hi), 0.005)
+    return lowpass(out, 7000)
+
+
+# A bird bathing: a soft rush of splashing water with a few droplets falling back.
+def splash(seconds):
+    n = int(RATE * seconds)
+    t = np.arange(n) / RATE
+    rush = bandpass(rng.normal(0, 1, n), 700, 5000) * np.exp(-t * 9) * np.minimum(1, t / 0.01)
+    out = rush * 0.5
+    for _ in range(6):
+        place(out, plip(rng.uniform(500, 900), rng.uniform(1100, 1900), 0.04) * rng.uniform(0.2, 0.5), rng.uniform(0.03, seconds - 0.06))
+    return lowpass(out, 6500)
+
+
 os.makedirs(OUT, exist_ok=True)
 save("coin_land.wav", coin_land(), 0.7)
 save("coin_pickup.wav", coin_pickup(), 0.7)
@@ -350,4 +381,9 @@ save("radio_static.wav", radio_static(), 0.6)
 save("radio_button.wav", radio_button(), 0.6)
 save("projector_start.wav", projector_start(), 0.6)
 save("projector_stop.wav", projector_stop(), 0.6)
+# The pool (4.93): numbered like the calls, so recordings can replace them
+save("sip_1.wav", sip(700, 1500), 0.4)
+save("sip_2.wav", sip(850, 1800), 0.4)
+save("splash_1.wav", splash(0.35), 0.5)
+save("splash_2.wav", splash(0.45), 0.5)
 print("done")

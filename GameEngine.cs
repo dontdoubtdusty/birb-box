@@ -8,7 +8,7 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Cube 4.91 Alpha";
+    public const string Version = "Birb Cube 4.95 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
@@ -39,6 +39,7 @@ public class GameEngine
     public GameWindow Window { get; private set; }
     public MousePicking Mouse { get; private set; }
     public Pouring Pour { get; private set; }
+    public WorldClock Clock { get; private set; }
 
     // SIMULATION STATE
     public bool Paused = false;
@@ -59,15 +60,14 @@ public class GameEngine
     // ECONOMY
     public int Coins = 0;
 
-    // SELECTION. Choosing a different bird (or none) always switches following off.
-    // A bird or a feeder can be selected, never both: picking one clears the other.
+    // SELECTION. A bird or a feeder can be selected, never both: picking one clears the other.
+    // Following is separate from selecting (see FollowedBird), so clicking away keeps the camera on its bird.
     private Bird? selectedBird;
     public Bird? SelectedBird
     {
         get => selectedBird;
         set
         {
-            if (value != selectedBird) FollowSelected = false;
             selectedBird = value;
             if (value != null) selectedFeeder = null;
         }
@@ -86,7 +86,9 @@ public class GameEngine
 
     // PLACING FEEDERS: where a carried feeder would go (box space), or null when the mouse isn't over clear floor
     public Vector3? PlacingSpot { get; private set; }
-    public bool FollowSelected = false;
+    // FOLLOWING: the bird the view slides along with, selected or not. Only a manual move of the view
+    // (WASD, dragging the world map, Center on something else) or the bird leaving the world stops it.
+    public Bird? FollowedBird;
 
     // HOLOGRAM VIEW: the bird world's zoom when it was entered; the wheel zooms the world back out only this far
     private float holoBaseZoom = 1f;
@@ -106,7 +108,7 @@ public class GameEngine
         public bool InStore;
         public bool BirdsShowing;      // the bird scene is up, not mid-switch, and the box is ready
         public bool MouseOverBox;      // over the hologram itself, not a control in front of it
-        public bool FollowedBird;      // this frame's double-click picked a bird to follow
+        public bool DoubleClickFollowed;   // this frame's double-click picked a bird to follow
 
         public readonly bool MouseOverRocker => RockerHalf != null;
     }
@@ -143,6 +145,7 @@ public class GameEngine
         Window = new GameWindow();
         Mouse = new MousePicking(Camera, View, World);
         Pour = new Pouring();
+        Clock = new WorldClock();
     }
 
     public void Run()
@@ -347,8 +350,8 @@ public class GameEngine
             if (Camera.InHologramView && wheel < 0f) View.Zoom = MathF.Max(View.Zoom, holoBaseZoom);
         }
         // A double-click on a bird follows it; anywhere else on the box it enters or leaves the Hologram View
-        input.FollowedBird = input.BirdsShowing && !overControl && FollowBirdOnDoubleClick();
-        UpdateHologramView(overControl || input.FollowedBird, input.MouseOverBox && input.BoxReady && !Mode.IsSwitching);
+        input.DoubleClickFollowed = input.BirdsShowing && !overControl && FollowBirdOnDoubleClick();
+        UpdateHologramView(overControl || input.DoubleClickFollowed, input.MouseOverBox && input.BoxReady && !Mode.IsSwitching);
         // Both hands part as the cube grows, and turn around to press it back together as it shrinks
         if (Camera.IsChangingView) Hands.Spread(Camera.Growth, closing: !Camera.InHologramView);
 
@@ -360,7 +363,7 @@ public class GameEngine
 
         if (!input.KeyboardBlocked && input.BirdsShowing && View.HandlePanInput(dt))
         {
-            FollowSelected = false;    // manual panning takes over from following
+            FollowedBird = null;    // manual panning takes over from following
         }
     }
 
@@ -384,19 +387,21 @@ public class GameEngine
                 PressRocker(input.RockerHalf.Value, input.BoxReady);
             }
             else if (input.InStore && input.BoxReady) ClickInStore();
-            else if (input.BirdsShowing && !input.FollowedBird) HandleClick();    // the double-click's second click already picked its bird
+            else if (input.BirdsShowing && !input.DoubleClickFollowed) HandleClick();    // the double-click's second click already picked its bird
         }
         bool pourBlocked = input.MouseBlocked || !input.BirdsShowing || input.MouseOverRocker;
         Pour.Update(dt, pourBlocked, Mouse, Bucket.Bucket, FoodSpawner, View);
     }
 
-    // The bird world moves on (unless paused), then birds that left are forgotten by the selection.
+    // The bird world and its clock move on (unless paused), then birds that left are forgotten by the selection.
     private void UpdateSimulation(float dt)
     {
         if (!Paused)
         {
             float simDt = dt * SimSpeed;
             SimTime += simDt;
+            Clock.Advance(simDt);
+            Clock.Refresh();
 
             UpdateEntities(simDt);
             BirdSpawner.CheckFrostcrestSeen(View);
@@ -406,13 +411,15 @@ public class GameEngine
         }
 
         World.FlushChanges();
+        Clock.Refresh();    // also while paused, so the tools panel's hour slider shows at once
 
         if (SelectedBird != null && !World.Contains(SelectedBird)) SelectedBird = null;
+        if (FollowedBird != null && !World.Contains(FollowedBird)) FollowedBird = null;
         if (SelectedFeeder != null && !SelectedFeeder.InWorld) SelectedFeeder = null;
         if (HoveredBird != null && !World.Contains(HoveredBird)) HoveredBird = null;
     }
 
-    // The screen panels and labels, and the view following the selected bird.
+    // The screen panels and labels, and the view following its bird.
     private void UpdatePanels(float dt, FrameInput input)
     {
         Sides.Update(this, input.MouseOverImGui);
@@ -421,9 +428,9 @@ public class GameEngine
         Renderer.ChatMessages.Update(View, dt);
         Bucket.Update(dt, input.MouseOverImGui);
 
-        if (FollowSelected && SelectedBird != null && !input.InStore)
+        if (FollowedBird != null && !input.InStore)
         {
-            View.Follow(SelectedBird.Position, dt);
+            View.Follow(FollowedBird.Position, dt);
         }
     }
 
@@ -463,7 +470,7 @@ public class GameEngine
         Bird? bird = Mouse.PickBird(Mouse.RayInBox());
         if (bird == null) return false;
         SelectedBird = bird;
-        FollowSelected = true;    // after selecting, since choosing a new bird switches following off
+        FollowedBird = bird;
         return true;
     }
 
@@ -614,9 +621,18 @@ public class GameEngine
 
     // ---------------- ASKED FOR BY THE PANELS ----------------
 
+    // Center on a bird. Centering on any bird but the followed one stops following.
     public void JumpToBird(Bird bird)
     {
+        if (bird != FollowedBird) FollowedBird = null;
         View.JumpTo(new Vector2(bird.Position.X, bird.Position.Z));
+    }
+
+    // Center on a spot (the feeder card's Center). Stops following, like any manual move of the view.
+    public void JumpToSpot(Vector3 worldPos)
+    {
+        FollowedBird = null;
+        View.JumpTo(new Vector2(worldPos.X, worldPos.Z));
     }
 
     // The feeder card's Move button: lift the selected feeder so the next click on the dirt sets it down.

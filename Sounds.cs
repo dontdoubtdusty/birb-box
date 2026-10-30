@@ -44,10 +44,14 @@ public static class Sounds
     private static SoundPool flapTakeoff = null!;
     private static SoundPool flapLand = null!;
     private static SoundPool[] pecks = null!;
+    private static SoundPool[] sips = null!;       // a bird drinking at the pool (sip_1.wav, sip_2.wav...)
+    private static SoundPool[] splashes = null!;   // a bird bathing (splash_1.wav, ...)
 
     private const float CallVolume = 0.15f;
     private const float FlapVolume = 0.35f;
     private const float PeckVolume = 0.18f;
+    private const float SipVolume = 0.12f;
+    private const float SplashVolume = 0.16f;
 
     // CROWD HUSH: a bird holds its call if another bird called within this distance in the last few seconds
     private const float HushRadius = 5f;
@@ -89,6 +93,8 @@ public static class Sounds
         flapTakeoff = new SoundPool("sounds/flap_takeoff.wav");
         flapLand = new SoundPool("sounds/flap_land.wav");
         pecks = LoadNumbered("peck");
+        sips = LoadNumbered("sip");
+        splashes = LoadNumbered("splash");
     }
 
     // Every file named <prefix>_1.wav, <prefix>_2.wav, ... until a number is missing.
@@ -122,6 +128,8 @@ public static class Sounds
         flapTakeoff.Unload();
         flapLand.Unload();
         foreach (SoundPool pool in pecks) pool.Unload();
+        foreach (SoundPool pool in sips) pool.Unload();
+        foreach (SoundPool pool in splashes) pool.Unload();
 
         Raylib.CloseAudioDevice();
     }
@@ -241,6 +249,19 @@ public static class Sounds
     {
         if (pecks.Length == 0) return;
         PlayBird(pecks[Rng.Next(pecks.Length)], position, PeckVolume, Rng.Range(0.85f, 1.15f));
+    }
+
+    // At the pool: a tiny sip as the beak touches the water, and a splash while bathing.
+    public static void PlaySip(Vector3 position)
+    {
+        if (sips.Length == 0) return;
+        PlayBird(sips[Rng.Next(sips.Length)], position, SipVolume, Rng.Range(0.9f, 1.15f));
+    }
+
+    public static void PlaySplash(Vector3 position)
+    {
+        if (splashes.Length == 0) return;
+        PlayBird(splashes[Rng.Next(splashes.Length)], position, SplashVolume, Rng.Range(0.85f, 1.15f));
     }
 
     private static void PlayBird(SoundPool pool, Vector3 position, float volume, float pitch)

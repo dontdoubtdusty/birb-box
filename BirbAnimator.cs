@@ -70,6 +70,10 @@ public class BirbAnimator
     private const float FluffTime = 1.2f, FluffAmount = 0.12f;
     private const float StretchTime = 1.4f, StretchAngle = 60f;
 
+    // ROOSTING (asleep for the night)
+    private const float RoostFluff = 0.1f;        // how puffed up
+    private const float RoostSquash = 0.06f;      // how much lower and rounder it sits
+
     // What the animator remembers about one bird between frames.
     private class BirdAnim
     {
@@ -129,7 +133,7 @@ public class BirbAnimator
             shown.TailPitch += MathF.Sin(done * MathF.PI) * style.TailFlick;
             shown.Squash -= MathF.Sin(MathF.Min(1f, done * 2f) * MathF.PI) * LandSquash;    // squash in the first half
         }
-        AddBlink(a, ref shown, dt);
+        if (a.Pose != BirdPose.Roost) AddBlink(a, ref shown, dt);    // asleep: the eyes stay shut
         AddIdleAct(a, ref shown, dt);
         return shown;
     }
@@ -250,6 +254,50 @@ public class BirbAnimator
                 m.HeadYaw = LookTurn(time, style.LookStep, seed: 0f) * style.LookAngle;
                 m.HeadTilt = LookTurn(time, style.LookStep, seed: 50f) * style.LookAngle * 0.35f;
                 m.HeadPitch = -5f;
+                break;
+
+            case BirdPose.Roost:
+                // Puffed up and low, head drawn in and tipped down, eyes shut, breathing slowly
+                m.Fluff = RoostFluff;
+                m.Squash = -RoostSquash;
+                m.HeadPitch = 18f;
+                m.HeadForward = -0.04f;
+                m.TailPitch = -4f;
+                m.BodyLift = MathF.Sin(time * 1.2f) * 0.015f;
+                m.EyeClose = 1f;
+                break;
+
+            case BirdPose.Sip:
+                // One sip per turn of the phase: the head scoops down into the water (body tipping forward),
+                // then comes up and tips back to swallow, the way birds drink
+                float turn = phase / MathF.Tau - MathF.Floor(phase / MathF.Tau);
+                float down = MathF.Sin(Math.Clamp(turn / 0.55f, 0f, 1f) * MathF.PI);
+                float up = MathF.Sin(Math.Clamp((turn - 0.55f) / 0.45f, 0f, 1f) * MathF.PI);
+                m.BodyPitch = 30f * down;
+                m.HeadPitch = 50f * down - 30f * up;
+                m.BeakDip = 8f * down;
+                m.TailPitch = 8f * down - 3f * up;
+                break;
+
+            case BirdPose.Bathe:
+                // Crouched low in the shallows, chest dipping, wings half open and fluttering, tail flicking
+                m.Squash = -0.15f;
+                m.Fluff = 0.06f;
+                m.BodyPitch = 15f + MathF.Sin(phase) * 12f;
+                m.HeadPitch = 10f + MathF.Sin(phase) * 15f;
+                m.HeadTilt = MathF.Sin(phase * 0.5f) * 15f;
+                m.WingSpread = style.WingSpread * 0.45f;
+                m.WingFlap = MathF.Sin(phase * 1.7f) * style.FlapAngle * 0.4f;
+                m.TailPitch = 12f + MathF.Sin(phase * 0.9f) * 10f;
+                break;
+
+            case BirdPose.ShakeOff:
+                // Fluffed right up and shivering the water off: quick small shakes of the body, head and tail
+                m.Fluff = 0.13f;
+                m.BodyLift = MathF.Sin(time * 55f) * 0.012f;
+                m.HeadYaw = MathF.Sin(time * 30f) * 12f;
+                m.WingFlap = MathF.Sin(time * 40f) * 6f;
+                m.TailPitch = MathF.Sin(time * 35f) * 8f;
                 break;
 
             case BirdPose.Fly:

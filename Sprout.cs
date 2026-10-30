@@ -126,7 +126,7 @@ public class Sprout : Entity
 
         float angle = Rng.Range(0f, MathF.Tau);
         float distance = Rng.Range(0.15f, ShedReach);
-        Vector3 spot = Rock.PushOut(Position + new Vector3(MathF.Cos(angle) * distance, 0f, MathF.Sin(angle) * distance));
+        Vector3 spot = Pool.PushOut(Rock.PushOut(Position + new Vector3(MathF.Cos(angle) * distance, 0f, MathF.Sin(angle) * distance)));
         spot.Y = ShedHeight;
         World.Instance.AddEntity(new Food(spot, new() { [Seed] = taken }) { LandOn = FoodSpawner.FeederBelow(spot) });
         return true;
@@ -169,7 +169,7 @@ public class Sprout : Entity
         if (world.GetAllEntities<Sprout>().Count >= SimTuning.Now.MaxSprouts) return false;
 
         spot = Rock.PushOut(new Vector3(spot.X, 0f, spot.Z), Reach);
-        if (!world.IsInside(spot, -1f)) return false;
+        if (!world.IsInside(spot, -1f) || Pool.IsWater(spot, Reach + 0.2f)) return false;    // never in or right at the water
 
         Vector2 here = new Vector2(spot.X, spot.Z);
         foreach (Sprout other in world.GetAllEntities<Sprout>())

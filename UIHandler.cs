@@ -128,7 +128,19 @@ public class UIHandler
             Slider("Grass wears", ref t.WearSpeed, d.WearSpeed, 0f, 5f, "%.2fx");
             Slider("Grass regrows", ref t.RegrowSpeed, d.RegrowSpeed, 0f, 10f, "%.2fx");
         }
+
+        if (ImGui.CollapsingHeader("Water"))
+        {
+            Slider("Sip chance", ref t.DrinkChance, d.DrinkChance, 0f, 1f, "%.2f per pause");
+            Slider("Bath chance", ref t.BathChance, d.BathChance, 0f, 1f, "%.2f per pause");
+            Slider("Max bathers", ref t.MaxBathers, d.MaxBathers, 0, 15);
+        }
         t.Clamp();    // a min slider pushed past its max drags the max along
+
+        if (ImGui.CollapsingHeader("Day and night"))
+        {
+            DrawClockTools(engine.Clock, t, d);
+        }
 
         if (ImGui.CollapsingHeader("Cheats"))
         {
@@ -138,6 +150,9 @@ public class UIHandler
             if (ImGui.Button("Clear ground seed")) FoodSpawner.ClearGroundSeed();
             ImGui.SameLine();
             if (ImGui.Button("Sprout in view")) SproutInView(engine.View);
+            if (ImGui.Button("Send a bird to bathe")) SendToWater(engine.View, bath: true);
+            ImGui.SameLine();
+            if (ImGui.Button("...to sip")) SendToWater(engine.View, bath: false);
         }
 
         if (ImGui.CollapsingHeader("Hologram"))
@@ -148,6 +163,8 @@ public class UIHandler
             Slider("Scanlines", ref r.ScanlineStrength, start.Scanlines, 0f, 0.5f);
             Slider("Width", ref engine.View.CubeScale, start.CubeWidth, 0.5f, ViewWindow.MaxCubeScale);
             Slider("Fog start", ref engine.View.FogStart, start.FogStart, 0.3f, 0.99f);
+            Slider("Edge width", ref r.EdgeWidth, start.EdgeWidth, 0.1f, 2.5f);
+            Slider("Edge strength", ref r.EdgeStrength, start.EdgeStrength, 0f, 2f);
             Checkbox("Projector base", ref r.ShowProjector, start.ShowProjector);
         }
 
@@ -164,6 +181,17 @@ public class UIHandler
 
     private static readonly Vector4 ChangedTint = new Vector4(0.42f, 0.30f, 0.10f, 1f);
 
+    // Cheat: the wandering, not hungry bird in view nearest the pool sets off for it now (to bathe or to sip), whatever its chances.
+    // Says so in the log if no bird could go.
+    private static void SendToWater(ViewWindow view, bool bath)
+    {
+        Bird? pick = World.Instance.GetAllEntities<Bird>()
+            .Where(b => b.State == BirdState.Wandering && !b.IsFlying && !b.Roosting && !b.IsHungry() && view.Contains(b.Position))
+            .OrderBy(b => Pool.Distance(b.Position))
+            .FirstOrDefault();
+        if (pick == null || !pick.Mover.StartWaterVisit(bath)) EventLog.Add("No bird in view could go to the water.");
+    }
+
     // Cheat: a grown sprout of a random seed somewhere near the middle of the view, its heads about to fill.
     private static void SproutInView(ViewWindow view)
     {
@@ -173,6 +201,35 @@ public class UIHandler
             Vector3 spot = new Vector3(view.Center.X + Rng.Range(-reach, reach), 0f, view.Center.Y + Rng.Range(-reach, reach));
             if (Sprout.TryPlant(spot, Seeds.All[Rng.Next(Seeds.All.Length)], grown: true)) return;
         }
+    }
+
+    // The world's clock (see WorldClock): today's sun times, the day's length and how dark night gets,
+    // and dev controls to set the hour, skip ahead, or hold the clock still.
+    private static void DrawClockTools(WorldClock clock, SimTuning t, SimTuning d)
+    {
+        ImGui.Text($"{clock.DateText}, year {clock.Year}  {clock.TimeText}  ({clock.Phase})");
+        ImGui.Text($"Sunrise {Hours(clock.Sunrise)}  sunset {Hours(clock.Sunset)}  first glow {Hours(clock.FirstGlow)}  last {Hours(clock.LastGlow)}");
+        ImGui.Text($"Sun {clock.SunElevation:0} deg above the horizon");
+
+        float hour = clock.Hour;
+        if (ImGui.SliderFloat("Hour", ref hour, 0f, 23.99f, "%.2f")) clock.SetHour(hour);
+        if (ImGui.Button("Next day")) clock.NextDay();
+        ImGui.SameLine();
+        if (ImGui.Button("Next season")) clock.NextSeason();
+        ImGui.SameLine();
+        ImGui.Checkbox("Hold the clock", ref clock.Held);
+
+        Slider("Day length", ref t.DayMinutes, d.DayMinutes, 1f, 60f, "%.1f min");
+        Slider("Night light", ref t.NightBrightness, d.NightBrightness, 0.2f, 3f, "%.2fx");
+        Slider("Stay the night", ref t.RoostChance, d.RoostChance, 0f, 1f, "%.2f chance");
+        Slider("Max roosting", ref t.MaxRoosting, d.MaxRoosting, 0, 30);
+    }
+
+    // 5.5 -> "05:30"
+    private static string Hours(float hour)
+    {
+        int minutes = (int)(hour * 60f);
+        return $"{minutes / 60:00}:{minutes % 60:00}";
     }
 
     private static void Slider(string label, ref float value, float def, float min, float max, string format = "%.2f")
@@ -240,7 +297,7 @@ public class UIHandler
                 if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
                 {
                     engine.SelectedBird = bird;
-                    engine.FollowSelected = true;
+                    engine.FollowedBird = bird;
                 }
                 else
                 {

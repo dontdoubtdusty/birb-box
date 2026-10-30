@@ -123,7 +123,7 @@ public class Rock : Entity
         }
     }
 
-    // Clear of the other rocks (by gap; a nestled rock only needs to not overlap) and of every feeder.
+    // Clear of the other rocks (by gap; a nestled rock only needs to not overlap), of every feeder, and of the pool.
     private static bool IsClear(World world, List<Rock> placed, Vector3 spot, float radius, float gap)
     {
         Vector2 flat = new Vector2(spot.X, spot.Z);
@@ -137,6 +137,7 @@ public class Rock : Entity
             float need = feeder.Info.FootRadius + radius + FeederGap;
             if (Vector2.Distance(flat, new Vector2(feeder.Position.X, feeder.Position.Z)) < need) return false;
         }
+        if (Pool.Distance(spot) < radius + Pool.RockGap) return false;    // clear of the water, with room to walk between
         return true;
     }
 }

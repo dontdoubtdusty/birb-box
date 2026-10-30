@@ -75,6 +75,8 @@ public static class Settings
             ShowProjector = engine.Renderer.ShowProjector,
             CubeWidth = engine.View.CubeScale,
             FogStart = engine.View.FogStart,
+            EdgeWidth = engine.Renderer.EdgeWidth,
+            EdgeStrength = engine.Renderer.EdgeStrength,
             RadioDial = engine.Radio.Player.Tuning,
         };
     }
@@ -100,6 +102,8 @@ public static class Settings
         engine.Renderer.ShowProjector = data.ShowProjector;
         engine.View.CubeScale = Math.Clamp(data.CubeWidth, 0.5f, ViewWindow.MaxCubeScale);
         engine.View.FogStart = Math.Clamp(data.FogStart, 0.3f, 0.99f);
+        engine.Renderer.EdgeWidth = Math.Clamp(data.EdgeWidth, 0.1f, 2.5f);
+        engine.Renderer.EdgeStrength = Math.Clamp(data.EdgeStrength, 0f, 2f);
         if (data.RadioDial is float dial) engine.Radio.Player.Tuning = Math.Clamp(dial, 0f, 1f);
 
         engine.Window.SetTrueFullscreen(data.TrueFullscreen);
@@ -130,5 +134,7 @@ public class SettingsData
     public bool ShowProjector { get; set; } = true;
     public float CubeWidth { get; set; } = 0.7f;
     public float FogStart { get; set; } = 0.97f;
+    public float EdgeWidth { get; set; } = 0.8f;      // the hologram edge look (hologram.fs): how far in from the walls, in box units
+    public float EdgeStrength { get; set; } = 1f;     // ...and how strong
     public float? RadioDial { get; set; } = null;    // 0..1 along the dial; missing means the radio's own start
 }
