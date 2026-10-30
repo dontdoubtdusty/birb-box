@@ -32,6 +32,7 @@ public class BirdMover
     private float waterTimer;            // seconds left of what it's doing there
     private float splashTimer;           // seconds until its next splash while bathing
     private float wadeRippleTimer;       // seconds until wading leaves its next small ripple
+    private Puddle? puddle;              // sipping at this rain puddle instead of the pool (see Puddles.cs)
     public bool IsBathTrip => water != WaterVisit.None && bathTrip && !shaking;
 
     // TUNING
@@ -54,6 +55,8 @@ public class BirdMover
     private const float SinkShare = 0.55f;        // how much of its standing height goes under the surface at WadeDepth
     private const float WaterGiveUp = 15f;        // seconds to reach the water before it gives up
     private const float ShakeTime = 1.3f;         // shaking off after a bath
+    private const float PuddleReach = 5f;         // how far from a rain puddle a bird will walk over to sip from it
+    private const float PuddleMinFill = 0.4f;     // a puddle must be at least this full to drink from
     public const float SipRate = 4.5f;            // HopPhase speed while sipping: one full turn is one sip
     public const float BathRate = 14f;            // HopPhase speed while bathing (the wing flutter)
     // HopPhase speeds: how fast the bird's rhythm runs (BirbAnimator draws from it)
@@ -552,17 +555,24 @@ public class BirdMover
     // ---------------- WATER (see Pool.cs) ----------------
 
     // Sometimes, instead of pausing, a wandering bird that isn't hungry and isn't far from the pool walks down to it:
-    // to bathe in the shallows (if fewer than SimTuning.MaxBathers are), or just to sip at the shore.
-    // Its spot is the shore nearest to it, nudged a little along so birds don't all crowd one spot. Returns true when it sets off.
+    // to bathe in the shallows (if fewer than SimTuning.MaxBathers are, and it isn't raining), or just to sip at the shore.
+    // Its spot is the shore nearest to it, nudged a little along so birds don't all crowd one spot.
+    // A rain puddle nearer than the pool is only for sipping. Returns true when it sets off.
     private bool TryStartWaterVisit()
     {
         Bird bird = ParentBird;
+        if (bird.IsHungry() || bird.Roosting) return false;
         Pool? pool = Pool.Current;
-        if (pool == null || bird.IsHungry() || bird.Roosting) return false;
+        float toPool = pool?.DistanceAt(bird.Position) ?? float.MaxValue;
+        Puddle? near = Weather.Instance.Puddles.Nearest(bird.Position, PuddleReach, PuddleMinFill);
 
-        if (pool.DistanceAt(bird.Position) > WaterReach) return false;
+        if (near != null && near.EdgeDistance(bird.Position) < toPool)
+        {
+            return Rng.Chance(SimTuning.Now.DrinkChance) && StartPuddleVisit(near);
+        }
+        if (pool == null || toPool > WaterReach) return false;
 
-        bool bath = Bathers() < SimTuning.Now.MaxBathers && Rng.Chance(SimTuning.Now.BathChance);
+        bool bath = !Weather.Instance.IsRaining && Bathers() < SimTuning.Now.MaxBathers && Rng.Chance(SimTuning.Now.BathChance);
         if (!bath && !Rng.Chance(SimTuning.Now.DrinkChance)) return false;
         return StartWaterVisit(bath);
     }
@@ -583,6 +593,7 @@ public class BirdMover
         Vector3 spot3 = new Vector3(spot.X, 0f, spot.Y);
         if (Rock.At(spot3, RockRoom + 0.1f) != null) return false;
 
+        puddle = null;
         water = WaterVisit.Going;
         bathTrip = bath;
         waterStand = stand;
@@ -593,13 +604,37 @@ public class BirdMover
         return true;
     }
 
-    // One step of the visit. Returns false when it's over (or cut short by hunger, bedtime or leaving),
-    // so the bird carries on as usual this frame.
+    // Sets off to sip at a rain puddle: to the edge nearest it, standing so the beak reaches over the water.
+    private bool StartPuddleVisit(Puddle target)
+    {
+        Bird bird = ParentBird;
+        Vector2 here = Flat(bird.Position);
+        Vector2 away = here - target.Spot;
+        away = away.LengthSquared() > 0.0001f ? Vector2.Normalize(away) : HeadingVector(bird.Heading);
+        float stand = MathF.Max(0.04f, bird.BeakReach * 0.6f);
+        Vector2 spot = target.Spot + away * (target.Radius + stand);
+        Vector3 spot3 = new Vector3(spot.X, 0f, spot.Y);
+        if (Rock.At(spot3, RockRoom + 0.1f) != null || Pool.IsWater(spot3, 0.1f)) return false;
+
+        puddle = target;
+        water = WaterVisit.Going;
+        bathTrip = false;
+        waterStand = stand;
+        shaking = false;
+        waterSpot = spot3;
+        waterTimer = WaterGiveUp + Vector2.Distance(here, spot) / MathF.Max(0.2f, bird.Speed);
+        pauseTimer = 0f;
+        return true;
+    }
+
+    // One step of the visit. Returns false when it's over (or cut short by hunger, bedtime or leaving,
+    // or its puddle drying up), so the bird carries on as usual this frame.
     private bool UpdateWaterVisit(float dt)
     {
         Bird bird = ParentBird;
         Pool? pool = Pool.Current;
-        bool canStay = pool != null && bird.State == BirdState.Wandering && !bird.IsHungry() && !bird.Roosting;
+        bool hasWater = puddle != null ? Weather.Instance.Puddles.Contains(puddle) && puddle.Fill > 0.15f : pool != null;
+        bool canStay = hasWater && bird.State == BirdState.Wandering && !bird.IsHungry() && !bird.Roosting;
         if (!canStay)
         {
             water = WaterVisit.None;
@@ -624,13 +659,13 @@ public class BirdMover
 
             case WaterVisit.Sipping:
                 // Facing the water: head down to scoop, then up to swallow. A ripple where the beak touches.
-                TurnToward(-pool!.OutwardAt(Flat(bird.Position)), dt);
+                TurnToward(puddle != null ? puddle.Spot - Flat(bird.Position) : -pool!.OutwardAt(Flat(bird.Position)), dt);
                 float before = bird.HopPhase;
                 bird.HopPhase += dt * SipRate;
                 if (SipDips(before) != SipDips(bird.HopPhase))
                 {
                     Vector2 beak = Flat(bird.Position) + HeadingVector(bird.Heading) * bird.BeakReach;
-                    pool.AddRipple(new Vector3(beak.X, 0f, beak.Y), 0.35f);
+                    pool?.AddRipple(new Vector3(beak.X, 0f, beak.Y), 0.35f);    // the floor shader draws ripples on puddles too
                     Sounds.PlaySip(bird.Position);
                 }
                 bird.Pose = BirdPose.Sip;

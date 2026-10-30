@@ -6,6 +6,9 @@ using Raylib_cs;
 //  - left:  the seed bucket (BucketPanel draws into BucketSlot)
 //  - right: stats, the round pause/speed buttons, and the world map (Hud draws into StatsSlot, MiniMap into MapSlot)
 // This class owns the column shapes, the slots, and the buttons.
+// In the Hologram View each column slides off its side of the screen and peeks back while the mouse is near that edge
+// (or on the column), so nothing but the garden is in view (UpdateSlide). Everything inside a column is laid out from
+// its slots, so it all slides along and clicks still land where things are drawn.
 public class SidePanels
 {
     // LAYOUT
@@ -13,10 +16,15 @@ public class SidePanels
     private const int RimPad = 12;          // brass showing around each screen
     private const int SlotGap = 14;         // between screens in the same column
     public const int ColumnWidth = BucketPanel.PanelWidth + RimPad * 2;
-    public const int StatsHeight = 124;
+    public const int StatsHeight = 146;     // room for the time of day and the weather under the counts
     private const int ButtonRadius = 15;
     private const int ButtonSpacing = 40;
     private const int ButtonRowGap = 10;    // between the stats screen and the buttons under it
+
+    // SLIDING AWAY (the Hologram View)
+    private const float PeekBand = 28f;     // pixels from the screen's edge that bring a column back
+    private const float KeepReach = 24f;    // a shown column stays while the mouse is this close to it
+    private const float SlideTime = 0.25f;  // seconds to slide all the way in or out
 
     // The speed buttons. Pause is its own button, to the left of these.
     private static readonly float[] Speeds = { 0.5f, 1f, 2f, 4f };
@@ -29,6 +37,7 @@ public class SidePanels
     public Rectangle MapSlot { get; private set; }
 
     private readonly Vector2[] buttonCenters = new Vector2[Speeds.Length + 1];   // [0] is pause
+    private float leftShown = 1f, rightShown = 1f;    // 1 in place, 0 slid off the screen
 
     // ---------------- UPDATE (no drawing) ----------------
 
@@ -54,6 +63,33 @@ public class SidePanels
         }
     }
 
+    // Slides each column in or out. hideable: the Hologram View is showing, so a column only stays while the mouse
+    // is at its edge of the screen or on it (or holding the button down on it, so a drag on the map isn't cut short).
+    public void UpdateSlide(float dt, bool hideable)
+    {
+        Vector2 mouse = Raylib.GetMousePosition();
+        bool held = Raylib.IsMouseButtonDown(MouseButton.Left);
+        bool wantLeft = !hideable || mouse.X <= PeekBand || (leftShown > 0.5f && (held || Near(mouse, LeftColumn)));
+        bool wantRight = !hideable || mouse.X >= Raylib.GetScreenWidth() - PeekBand
+                         || (rightShown > 0.5f && (held || Near(mouse, RightColumn)));
+        float step = dt / SlideTime;
+        leftShown = Math.Clamp(leftShown + (wantLeft ? step : -step), 0f, 1f);
+        rightShown = Math.Clamp(rightShown + (wantRight ? step : -step), 0f, 1f);
+    }
+
+    private static bool Near(Vector2 mouse, Rectangle r)
+    {
+        Rectangle grown = new Rectangle(r.X - KeepReach, r.Y - KeepReach, r.Width + KeepReach * 2, r.Height + KeepReach * 2);
+        return Raylib.CheckCollisionPointRec(mouse, grown);
+    }
+
+    // How far a column is pushed toward its edge: none when shown, all the way off the screen when hidden (eased).
+    private static float SlideOffset(float shown)
+    {
+        float hidden = 1f - shown;
+        return (Margin + ColumnWidth + 8f) * hidden * hidden * (3f - 2f * hidden);
+    }
+
     // True when the mouse is over either column, so clicks and the wheel don't fall through to the hologram.
     public bool IsMouseOver()
     {
@@ -65,13 +101,14 @@ public class SidePanels
     public void Layout()
     {
         int width = Raylib.GetScreenWidth();
+        float leftX = Margin - SlideOffset(leftShown);
 
         // Left column: just the bucket
-        BucketSlot = new Rectangle(Margin + RimPad, Margin + RimPad, BucketPanel.PanelWidth, BucketPanel.PanelHeight);
-        LeftColumn = new Rectangle(Margin, Margin, ColumnWidth, BucketPanel.PanelHeight + RimPad * 2);
+        BucketSlot = new Rectangle(leftX + RimPad, Margin + RimPad, BucketPanel.PanelWidth, BucketPanel.PanelHeight);
+        LeftColumn = new Rectangle(leftX, Margin, ColumnWidth, BucketPanel.PanelHeight + RimPad * 2);
 
         // Right column: stats, buttons, map, top to bottom
-        float rightX = width - Margin - ColumnWidth;
+        float rightX = width - Margin - ColumnWidth + SlideOffset(rightShown);
         float y = Margin + RimPad;
         StatsSlot = new Rectangle(rightX + RimPad, y, BucketPanel.PanelWidth, StatsHeight);
         y += StatsHeight + ButtonRowGap + ButtonRadius;

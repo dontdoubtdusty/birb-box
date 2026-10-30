@@ -69,6 +69,12 @@ public class Bird : Entity
     private const float EveningCalls = 2.5f;           // times the call delay toward dusk (fewer calls)
     private const float NightOwlNightCalls = 1.5f;     // a Night Owl at night calls a little less than by day
 
+    // RAIN (see Weather.cs): in steady rain a bird that isn't Rain-proud calls less and tires of the garden sooner.
+    // These are at full rain; drizzle does a share of it.
+    private const float RainCalls = 2.5f;              // times the call delay
+    private const float RainLeave = 2.5f;              // times as likely to lose interest
+    public bool MindsRain => !Nature.RainProud && Weather.Instance.IsRaining;
+
     // STATE
     public BirdState State { get; set; } = BirdState.Wandering;
     public BirdPose Pose { get; set; } = BirdPose.Idle;    // set by the mover, drawn by BirbAnimator
@@ -344,9 +350,12 @@ public class Bird : Entity
 
         bool scarce = !World.Instance.GetAllEntities<Food>().Any(food => !food.IsFullyEaten && CanEat(food));
         float chance = InterestCheckInterval / (SimTuning.Now.LoseInterestMinutes * 60f) * (scarce ? ScarceFoodFactor : 1f) * Nature.LoseInterest;
+        bool rain = MindsRain;
+        if (rain) chance *= float.Lerp(1f, RainLeave, Weather.Instance.Rain);
         if (!Rng.Chance(chance)) return;
 
-        StartLeaving(scarce ? $"{Name} found the pickings slim and flew off." : $"{Name} lost interest and flew off.");
+        if (rain) StartLeaving($"{Name} went looking for shelter from the rain.");
+        else StartLeaving(scarce ? $"{Name} found the pickings slim and flew off." : $"{Name} lost interest and flew off.");
     }
 
     // Moves its home patch to here, kept well inside the world.
@@ -427,6 +436,13 @@ public class Bird : Entity
         callTimer = NextCallDelay();
     }
 
+    // Makes it Rain-proud: some birds that arrive in the rain are (see BirdSpawner.SpawnArrival).
+    public void BecomeRainProud()
+    {
+        SetPersonality(Traits.AsRainProud(personality));
+        callTimer = NextCallDelay();
+    }
+
     // Calls out now and then, and flaps when it leaves or touches the ground.
     // If another bird called close by a moment ago, it holds its call and tries again a little later
     // (a Town Crier sometimes calls anyway).
@@ -452,7 +468,10 @@ public class Bird : Entity
         callTimer = NextCallDelay();
     }
 
-    private float NextCallDelay() => Rng.Range(SimTuning.Now.CallDelayMin, SimTuning.Now.CallDelayMax) * Nature.CallDelay * CallsByTimeOfDay();
+    private float NextCallDelay() => Rng.Range(SimTuning.Now.CallDelayMin, SimTuning.Now.CallDelayMax) * Nature.CallDelay * CallsByTimeOfDay() * CallsByWeather();
+
+    // Out in the rain most birds keep quiet; a Rain-proud one sings as usual.
+    private float CallsByWeather() => Nature.RainProud ? 1f : float.Lerp(1f, RainCalls, Weather.Instance.Rain);
 
     // The dawn chorus fills the garden with calls; toward dusk it goes quiet. A Night Owl keeps calling at night.
     private float CallsByTimeOfDay()

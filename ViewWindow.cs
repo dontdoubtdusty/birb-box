@@ -23,6 +23,14 @@ public class ViewWindow
     public float CubeScale = 0.7f;          // half the cube's width as a share of the pedestal; 0.7 puts its corners over the bezel ring
     public const float MaxCubeScale = 0.74f;
     public float FogStart = 0.97f;          // share of the way to the sides that stays clear; a thin fog fills the rest
+
+    // THE HOLOGRAM VIEW'S FOG (hologram.fs has the same numbers). Standing in the garden, the fog at the sides widens a
+    // little, and things also fade with how far they are from the eye along the ground, so the far fog is round like a
+    // horizon and no wall of the cube ever shows.
+    public const float ObserverFogStart = 0.85f;
+    public const float ObserverFogNear = 4.5f, ObserverFogFar = 8f;   // box units from the eye
+    public float Immersion;                 // set each frame from HoloCamera: 0 in the room view, 1 standing in the garden
+    public float FogStartShown => FogStart + (MathF.Min(FogStart, ObserverFogStart) - FogStart) * Immersion;
     public float HalfWidth => HalfSize * CubeScale;          // the cube spans -HalfWidth..HalfWidth on X and Z
     public float CornerReach => HalfWidth * MathF.Sqrt(2f);  // from the middle out to a corner
     public float PanSpeed = 8f;
@@ -58,6 +66,19 @@ public class ViewWindow
     public static float EdgeAmount(float x, float z, float halfWidth)
     {
         return MathF.Max(MathF.Abs(x), MathF.Abs(z)) / halfWidth;
+    }
+
+    // How much of something at this box position shows through the fog (1 clear, 0 gone), seen from an eye at eyeBox
+    // (also in box units). The same math as the fog in hologram.fs, so labels fade with what they float over.
+    public float FogFade(Vector3 boxPos, Vector3 eyeBox)
+    {
+        float start = FogStartShown;
+        float side = Math.Clamp((EdgeAmount(boxPos.X, boxPos.Z, HalfWidth) - start) / (1f - start), 0f, 1f);
+        float fade = 1f - side * side * (3f - 2f * side);
+
+        float fromEye = Vector2.Distance(new Vector2(boxPos.X, boxPos.Z), new Vector2(eyeBox.X, eyeBox.Z));
+        float far = Math.Clamp((fromEye - ObserverFogNear) / (ObserverFogFar - ObserverFogNear), 0f, 1f);
+        return fade * (1f - Immersion * far * far * (3f - 2f * far));
     }
 
     // Is this world position inside the cube (plus an optional margin, in world units)?

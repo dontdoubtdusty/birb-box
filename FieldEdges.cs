@@ -52,13 +52,16 @@ public class FieldEdges
 
     // Draws the edges of a cube standing on (0, 0, 0), in the hologram pass.
     // level: how far the projector has the cube up (0 to 1); the walls and ceiling rise with it and everything brightens.
-    // wallStrength 0 hides the scanline walls.
+    // wallStrength 0 hides the scanline walls. shown: 1 normally, fading to 0 as the camera steps into the garden
+    // (the Hologram View), where no edge of the cube should show; nothing is drawn at 0.
     public void Draw(float halfWidth, float height, float yaw, float curtainHeight, float level,
-                     Vector3 holoColor, float wallStrength, Vector3 cameraPos)
+                     Vector3 holoColor, float wallStrength, Vector3 cameraPos, float shown = 1f)
     {
+        if (shown <= 0.001f) return;
+        float risen = height * level;
+        level *= shown;    // from here on only the brightness
         Color middle = Palette.ToColor(holoColor, Palette.GlowAlpha(30, level));
         Color halo = Palette.ToColor(holoColor, Palette.GlowAlpha(16, level));
-        float risen = height * level;
 
         Span<Vector3> corners = stackalloc Vector3[4];
         for (int i = 0; i < 4; i++) corners[i] = Corner(halfWidth, yaw, i);

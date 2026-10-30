@@ -122,6 +122,15 @@ public class GroundWear
         Version++;
     }
 
+    // How worn the ground is at a world position (0 grass, 1 bare dirt); 0 outside the grid.
+    public float At(Vector3 pos)
+    {
+        int x = (int)((pos.X + HalfSize) * CellsPerUnit);
+        int z = (int)((pos.Z + HalfSize) * CellsPerUnit);
+        if (x < 0 || z < 0 || x >= Size || z >= Size) return 0f;
+        return Cells[z * Size + x];
+    }
+
     // Wears a soft round patch around a world position, strongest in the middle.
     private void AddWear(Vector3 pos, float amount)
     {

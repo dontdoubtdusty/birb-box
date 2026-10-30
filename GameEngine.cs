@@ -8,7 +8,7 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Cube 4.95 Alpha";
+    public const string Version = "Birb Cube 4.97 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
@@ -40,6 +40,7 @@ public class GameEngine
     public MousePicking Mouse { get; private set; }
     public Pouring Pour { get; private set; }
     public WorldClock Clock { get; private set; }
+    public Weather Weather { get; private set; }
 
     // SIMULATION STATE
     public bool Paused = false;
@@ -89,9 +90,6 @@ public class GameEngine
     // FOLLOWING: the bird the view slides along with, selected or not. Only a manual move of the view
     // (WASD, dragging the world map, Center on something else) or the bird leaving the world stops it.
     public Bird? FollowedBird;
-
-    // HOLOGRAM VIEW: the bird world's zoom when it was entered; the wheel zooms the world back out only this far
-    private float holoBaseZoom = 1f;
 
     // What this frame's input is free to do and what the mouse is on. Filled in as Update goes, phase by phase,
     // so each phase can see what the ones before it found.
@@ -146,6 +144,7 @@ public class GameEngine
         Mouse = new MousePicking(Camera, View, World);
         Pour = new Pouring();
         Clock = new WorldClock();
+        Weather = new Weather();
     }
 
     public void Run()
@@ -231,6 +230,7 @@ public class GameEngine
         if (!input.KeyboardBlocked && Raylib.IsKeyPressed(KeyboardKey.B))
         {
             Designer.Toggle(this);
+            if (Designer.IsOpen) Camera.LeaveHologramView();    // the Designer works from the room view
         }
         if (Designer.IsOpen)
         {
@@ -259,8 +259,9 @@ public class GameEngine
     // Bird sounds fade out while the store is showing or the box is off.
     private void UpdateBackground(float dt)
     {
-        Sounds.Update(dt, Menu.IsOpen || Designer.IsOpen, Mode.Showing == BoxScene.Birds && Projector.IsOn, Projector.Lens);
-        Radio.Update(dt, ducked: Menu.IsOpen);    // keeps playing, quieter, behind the Esc menu
+        Sounds.Update(dt, Menu.IsOpen || Designer.IsOpen, Mode.Showing == BoxScene.Birds && Projector.IsOn, Projector.Lens, Weather.Rain,
+                      Camera.Immersion);
+        Radio.Update(dt, ducked: Menu.IsOpen, Camera.Immersion);    // keeps playing, quieter, behind the Esc menu and in the Hologram View
         Projector.Update(dt);                     // keeps starting up or shutting down behind the menu too
         Saves.Update(dt, this);                   // autosave, on real time
     }
@@ -271,6 +272,8 @@ public class GameEngine
     private FrameInput ReadInput()
     {
         FrameInput input = new FrameInput();
+        // In the Hologram View the side columns slide off the screen and peek back when the mouse nears an edge
+        Sides.UpdateSlide(Raylib.GetFrameTime(), hideable: Camera.RoomHidden && !Menu.IsOpen);
         Sides.Layout();
         input.TypingName = Hud.IsEditingName;
         Hud.UpdateTyping(this);
@@ -298,12 +301,15 @@ public class GameEngine
         // While a drag is turning the ring, the hands stay on the ring: none reaches for a button or knob the mouse passes
         input.HandsFree = !Camera.IsTurning;
 
-        // The radio has the mouse while it's over the radio or turning one of its knobs
-        Radio.HandleInput(Mouse.RayInRoom(), input.MouseBlocked);
-        input.MouseBlocked |= Radio.UsingMouse;
-        if (input.HandsFree) ReachForRadio();
+        // In the Hologram View the room has faded away, so the radio and the power button can't be reached
+        bool roomHidden = Camera.RoomHidden;
 
-        input.MouseOverLogo = !input.MouseBlocked && Pedestal.RayHitsLogo(Mouse.RayInRoom(), View);
+        // The radio has the mouse while it's over the radio or turning one of its knobs
+        Radio.HandleInput(Mouse.RayInRoom(), input.MouseBlocked || roomHidden);
+        input.MouseBlocked |= Radio.UsingMouse;
+        if (input.HandsFree && !roomHidden) ReachForRadio();
+
+        input.MouseOverLogo = !input.MouseBlocked && !roomHidden && Pedestal.RayHitsLogo(Mouse.RayInRoom(), View);
         Projector.LogoHovered = input.MouseOverLogo;
         if (input.MouseOverLogo && input.HandsFree) Hands.Press(HandSide.Right, Pedestal.LogoFace(View), Vector3.UnitZ, pushed: Camera.IsHolding);
     }
@@ -315,7 +321,7 @@ public class GameEngine
     private void UpdateScene(float dt, ref FrameInput input)
     {
         input.BoxReady = Projector.Ready;
-        if (!input.MouseBlocked && Rocker.RayHits(Mouse.RayInRoom(), View, out BoxScene half)) input.RockerHalf = half;
+        if (!input.MouseBlocked && !Camera.RoomHidden && Rocker.RayHits(Mouse.RayInRoom(), View, out BoxScene half)) input.RockerHalf = half;
         if (input.RockerHalf != null && input.HandsFree)
         {
             Vector3 face = Rocker.FacePoint(View, input.RockerHalf.Value, out Vector3 facing);
@@ -335,23 +341,20 @@ public class GameEngine
 
     // The camera, the wheel, double-clicks, the ring and panning.
     // Room view: the wheel zooms the hologram (and map) when the mouse is over the birds, otherwise the outer camera.
-    // Hologram View: see HologramWheelZoomsWorld.
+    // Hologram View: the wheel always zooms the bird world (the camera stays where it stands in the garden).
     private void UpdateCameraAndRing(float dt, ref FrameInput input)
     {
         bool overControl = input.MouseBlocked || input.MouseOverRocker || input.MouseOverLogo;
         input.MouseOverBox = !overControl && View.RayHitsHologram(Mouse.RayInBox());
         float wheel = Raylib.GetMouseWheelMove();
         bool wheelZoomsWorld = input.BirdsShowing
-            && (Camera.InHologramView ? !input.MouseBlocked && HologramWheelZoomsWorld(wheel) : input.MouseOverBox);
+            && (Camera.InHologramView ? !input.MouseBlocked : input.MouseOverBox);
         Camera.Update(input.MouseBlocked, wheelZoomsWorld);
-        if (wheelZoomsWorld)
-        {
-            View.ZoomBy(wheel);
-            if (Camera.InHologramView && wheel < 0f) View.Zoom = MathF.Max(View.Zoom, holoBaseZoom);
-        }
+        View.Immersion = Camera.Immersion;    // the fog widens as the room fades away
+        if (wheelZoomsWorld) View.ZoomBy(wheel);
         // A double-click on a bird follows it; anywhere else on the box it enters or leaves the Hologram View
         input.DoubleClickFollowed = input.BirdsShowing && !overControl && FollowBirdOnDoubleClick();
-        UpdateHologramView(overControl || input.DoubleClickFollowed, input.MouseOverBox && input.BoxReady && !Mode.IsSwitching);
+        UpdateHologramView(overControl || input.DoubleClickFollowed, input.BirdsShowing && input.MouseOverBox);
         // Both hands part as the cube grows, and turn around to press it back together as it shrinks
         if (Camera.IsChangingView) Hands.Spread(Camera.Growth, closing: !Camera.InHologramView);
 
@@ -359,7 +362,7 @@ public class GameEngine
         // The birds and the store share one turn, so the ring never jumps when the rocker switches scenes.
         Dial.Turn(ref View.Yaw, dt, Camera.TurnThisFrame, Camera.IsHolding);
         Store.Yaw = View.Yaw;
-        if (Camera.IsTurning) Hands.HoldRing(RingHand(), View, Camera.TurnThisFrame);
+        if (Camera.IsTurning && !Camera.RoomHidden) Hands.HoldRing(RingHand(), View, Camera.TurnThisFrame);    // no ring to hold in the garden
 
         if (!input.KeyboardBlocked && input.BirdsShowing && View.HandlePanInput(dt))
         {
@@ -393,7 +396,7 @@ public class GameEngine
         Pour.Update(dt, pourBlocked, Mouse, Bucket.Bucket, FoodSpawner, View);
     }
 
-    // The bird world and its clock move on (unless paused), then birds that left are forgotten by the selection.
+    // The bird world, its clock and its weather move on (unless paused), then birds that left are forgotten by the selection.
     private void UpdateSimulation(float dt)
     {
         if (!Paused)
@@ -402,6 +405,7 @@ public class GameEngine
             SimTime += simDt;
             Clock.Advance(simDt);
             Clock.Refresh();
+            Weather.Update(simDt, Clock, World, Wear);
 
             UpdateEntities(simDt);
             BirdSpawner.CheckFrostcrestSeen(View);
@@ -443,7 +447,8 @@ public class GameEngine
         Sounds.PlayRocker();
     }
 
-    // Double-clicking the box enters the Hologram View; double-clicking anywhere (but a control) leaves it.
+    // Double-clicking the box enters the Hologram View (only while it shows the birds: it's for watching them);
+    // double-clicking anywhere (but a control) leaves it.
     // Switching the box off leaves it too, since there's nothing left to look at.
     private void UpdateHologramView(bool mouseOnSomethingElse, bool mouseOverReadyBox)
     {
@@ -457,8 +462,7 @@ public class GameEngine
         if (Camera.InHologramView) Camera.LeaveHologramView();
         else if (mouseOverReadyBox)
         {
-            Camera.EnterHologramView(View);
-            holoBaseZoom = View.Zoom;
+            Camera.EnterHologramView();
         }
     }
 
@@ -472,15 +476,6 @@ public class GameEngine
         SelectedBird = bird;
         FollowedBird = bird;
         return true;
-    }
-
-    // In the Hologram View the wheel is one continuous zoom. In: the camera first, down to where the whole
-    // cube just fits, then the bird world. Out: the bird world back to its zoom on entering, then the camera.
-    private bool HologramWheelZoomsWorld(float wheel)
-    {
-        if (wheel > 0f) return Camera.AtClosestFit;
-        if (wheel < 0f) return View.Zoom > holoBaseZoom + 0.0001f;
-        return false;
     }
 
     // The hand that turns the ring: the right one for a drag that started toward the right, else the left.

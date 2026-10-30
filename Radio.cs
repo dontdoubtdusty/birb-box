@@ -81,7 +81,8 @@ public class Radio
     // ---------------- UPDATE (no drawing) ----------------
 
     // Every frame, even while the Esc menu is open. ducked: the menu is open, so play quieter and let go of the mouse.
-    public void Update(float dt, bool ducked)
+    // observer: how far into the Hologram View the player is (0 to 1); the radio steps back a little for the birds.
+    public void Update(float dt, bool ducked, float observer)
     {
         if (ducked)
         {
@@ -98,7 +99,7 @@ public class Radio
         if (UsingMouse) labelTimer = LabelLinger;
         else labelTimer = MathF.Max(0f, labelTimer - dt);
 
-        Player.Update(dt, ducked);
+        Player.Update(dt, ducked, observer);
     }
 
     // Mouse input. ray: from the camera through the mouse, in room space. blocked: a panel or ImGui has the mouse.

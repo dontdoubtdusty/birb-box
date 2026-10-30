@@ -18,6 +18,10 @@ using Raylib_cs;
 //     The camera always looks down on the pedestal, so nothing of the pedestal is ever in front of the hologram.
 //  4. The player's hands (see Hands), in the room's 3D space again, on top of the hologram.
 //
+// The Hologram View (the observer mode, see HoloCamera): as the camera steps into the garden, the cube's edges fade out,
+// the hologram's fog widens and turns round (observer in hologram.fs), and the room behind it fades into the fog's own
+// haze (a dark sky darker at the top), so the garden melts into it at every edge. Once the room is gone it isn't drawn.
+//
 // The pieces live in their own files: WorldDrawer (birds, food, floor...), FieldEdges (the cube's glowing edges and beams),
 // StoreRenderer, Pedestal and Backdrop. This file sets up the passes and the shaders they share.
 //
@@ -41,6 +45,7 @@ public class HologramRenderer
     private const float HoloLightHeight = 0.3f;    // the hologram's light on the room comes from this far above its floor
     private static readonly Vector3 NightHaze = new Vector3(0.03f, 0.06f, 0.15f);    // the fog's haze at full night
     private const float NightHazeShare = 0.85f;                                       // how far toward it the haze goes
+    private const float SkyTopShade = 0.55f;    // the Hologram View's backdrop: the haze, this much darker at the top of the screen
 
     public Shader HoloShader { get; private set; }
     private Shader grainShader;    // seed grains, many in one draw (grain.vs with hologram.fs); gets the same uniforms as HoloShader
@@ -69,6 +74,8 @@ public class HologramRenderer
     // Shader uniform locations
     private HoloUniforms holoUniforms = null!, grainUniforms = null!;
     private DayLight light = DayLight.Noon;    // this frame's light inside the hologram
+    private Vector3 haze;                      // this frame's fog haze (SetHologramUniforms), also the Hologram View's backdrop
+    private bool weatherShows;                 // false while the Designer is open (its birb is always seen at a clear midday)
     private int locResolution, locPostTime, locGlow, locScanlines;
 
     public void Load(ViewWindow view)
@@ -121,8 +128,9 @@ public class HologramRenderer
         Camera3D roomCamera = holoCamera.Camera;
         Camera3D camera = holoCamera.HologramCamera;    // everything in the hologram pass is seen through this one
 
-        // The birds and the store follow the time of day; the Birb Designer always shows its birb at midday
-        light = designer.IsOpen ? DayLight.Noon : WorldClock.Instance.Light;
+        // The birds and the store follow the time of day, dimmed under cloud; the Birb Designer always shows its birb at midday
+        weatherShows = !designer.IsOpen;
+        light = weatherShows ? Weather.Instance.Overcast(WorldClock.Instance.Light) : DayLight.Noon;
         EnsureTargetSize((int)(width * scale), (int)(height * scale));
 
         // These draw into their own small textures, so they must happen before the scene pass.
@@ -130,7 +138,8 @@ public class HologramRenderer
         ChatMessages.PrepareTextures();
         if (mode.InStore && projector.Showing) DrawZooCamera(view, selected);
 
-        SetHologramUniforms(camera, view, mode.Swallow, projector.Cube, edges: !mode.InStore);    // the store has no edge look
+        float immersion = holoCamera.Immersion;
+        SetHologramUniforms(camera, view, mode.Swallow, projector.Cube, edges: !mode.InStore, immersion);    // the store has no edge look
         fieldEdges.SetUniforms(camera, view.Height);
 
         // The bezel ring, the cube and its beams all turn with the box (the birds and the store share one turn)
@@ -145,7 +154,7 @@ public class HologramRenderer
                     if (mode.InStore)
                     {
                         storeRenderer.Draw(store, view);
-                        SetHologramUniforms(camera, view, mode.Swallow, projector.Cube, edges: false);    // the store changed the turn to its own
+                        SetHologramUniforms(camera, view, mode.Swallow, projector.Cube, edges: false, immersion);    // the store changed the turn to its own
                     }
                     else
                     {
@@ -153,7 +162,8 @@ public class HologramRenderer
                         if (designer.IsOpen) designer.DrawPreview(view);
                         else worldDrawer.DrawContents(view, selected, hovered, Palette.ToColor(HoloColor));
                     }
-                    fieldEdges.Draw(view.HalfWidth, view.Height, ringYaw, CurtainHeight, projector.Cube, HoloColor, WallStrength, camera.Position);
+                    fieldEdges.Draw(view.HalfWidth, view.Height, ringYaw, CurtainHeight, projector.Cube, HoloColor, WallStrength, camera.Position,
+                                    shown: 1f - immersion);
                     if (!designer.IsOpen && !mode.InStore) ChatMessages.Draw(camera, view);
                 Raylib.EndMode3D();
                 Rlgl.SetLineWidth(1f);
@@ -165,8 +175,10 @@ public class HologramRenderer
         Vector3 holoLight = new Vector3(0f, holoCamera.HoloFloorY + HoloLightHeight * holoCamera.HoloScale, 0f);
         Backdrop.SetProjectorLights(holoLight, HoloColor * projector.Cube, lens, HoloColor * projector.Beams, Pedestal.WellRadius(view));
 
-        Backdrop.Draw(roomCamera, view.HalfSize, radio);
-        if (ShowProjector)
+        // Standing in the garden the room has faded away completely, so only its haze is drawn
+        if (immersion >= 0.999f) Raylib.ClearBackground(Color.Blank);
+        else Backdrop.Draw(roomCamera, view.HalfSize, radio);
+        if (ShowProjector && immersion < 0.999f)
         {
             Raylib.BeginMode3D(roomCamera);
                 pedestal.Draw(Backdrop, view, ringYaw, Palette.ToColor(HoloColor), projector);
@@ -179,6 +191,8 @@ public class HologramRenderer
                 }
             Raylib.EndMode3D();
         }
+
+        if (immersion > 0f) DrawHazeSky(immersion);
 
         // The scene's colors are already multiplied by their alpha, so it's laid over the backdrop
         // with premultiplied blending. The post shader is given the screen size, not the scene texture's,
@@ -200,11 +214,20 @@ public class HologramRenderer
         Raylib.EndMode3D();
     }
 
+    // The Hologram View's backdrop: the fog's haze over the whole screen, darker toward the top, laid over the room
+    // as much as the camera has stepped into the garden. 2D, so it leaves the room's depth alone for the hands.
+    private void DrawHazeSky(float immersion)
+    {
+        Color bottom = Palette.ToColor(haze, (int)(255 * immersion));
+        Color top = Palette.ToColor(haze * SkyTopShade, (int)(255 * immersion));
+        Raylib.DrawRectangleGradientV(0, 0, Raylib.GetScreenWidth(), Raylib.GetScreenHeight(), top, bottom);
+    }
+
     // The bird world as seen by the fixed zoo camera, drawn into FeedTexture.
     // Clear background, the same hologram shader and fog, no glowing edges.
     private void DrawZooCamera(ViewWindow view, Bird? selected)
     {
-        SetHologramUniforms(feedCamera, view, swallow: 0f, reveal: 1f);
+        SetHologramUniforms(feedCamera, view, swallow: 0f, reveal: 1f, observer: 0f);
         Raylib.BeginTextureMode(FeedTexture);
             Raylib.ClearBackground(new Color(12, 16, 22, 255));
             Raylib.BeginMode3D(feedCamera);
@@ -237,14 +260,17 @@ public class HologramRenderer
     // The light comes from this frame's DayLight: its direction is turned with the hologram, since the sun stays put
     // in the bird world while the ring turns it.
     // edges: whether things near the walls get the edge look (off for the store, whose floor runs into the fog).
-    private void SetHologramUniforms(Camera3D camera, ViewWindow view, float swallow, float reveal, bool edges = true)
+    // observer: how far the camera has stepped into the garden (the Hologram View). The edge look fades away with it
+    // (no wall should show) and the fog turns round (see hologram.fs). Also keeps this frame's haze for DrawHazeSky.
+    private void SetHologramUniforms(Camera3D camera, ViewWindow view, float swallow, float reveal, bool edges = true, float observer = 0f)
     {
         float time = (float)Raylib.GetTime();
-        Vector3 haze = Vector3.Lerp(HoloColor * 0.3f, NightHaze, light.Darkness * NightHazeShare);
+        haze = Vector3.Lerp(HoloColor * 0.3f, NightHaze, light.Darkness * NightHazeShare);
+        if (weatherShows) haze = Weather.Instance.Haze(haze, light);    // grayer under rain clouds
         Vector3 lightDir = Vector3.Transform(light.Direction, Matrix4x4.CreateRotationY(view.Yaw));
-        float edgeStrength = edges ? EdgeStrength : 0f;
-        holoUniforms.Set(camera, view, swallow, reveal, HoloColor, time, light, lightDir, haze, EdgeWidth, edgeStrength);
-        grainUniforms.Set(camera, view, swallow, reveal, HoloColor, time, light, lightDir, haze, EdgeWidth, edgeStrength);
+        float edgeStrength = (edges ? EdgeStrength : 0f) * (1f - observer);
+        holoUniforms.Set(camera, view, swallow, reveal, HoloColor, time, light, lightDir, haze, EdgeWidth, edgeStrength, observer);
+        grainUniforms.Set(camera, view, swallow, reveal, HoloColor, time, light, lightDir, haze, EdgeWidth, edgeStrength, observer);
     }
 
     // The uniforms every hologram shader shares, found once per shader
@@ -252,7 +278,7 @@ public class HologramRenderer
     {
         private readonly Shader shader;
         private readonly int origin, boxYaw, halfWidth, fogStart, swallow, reveal, cubeHeight, viewCenter, viewZoom, viewPos, holoColor, time, isFloor;
-        private readonly int lightDir, ambientLight, directLight, hazeColor, edgeWidth, edgeStrength;
+        private readonly int lightDir, ambientLight, directLight, hazeColor, edgeWidth, edgeStrength, observer;
 
         public HoloUniforms(Shader shader)
         {
@@ -276,15 +302,17 @@ public class HologramRenderer
             hazeColor = Raylib.GetShaderLocation(shader, "hazeColor");
             edgeWidth = Raylib.GetShaderLocation(shader, "edgeWidth");
             edgeStrength = Raylib.GetShaderLocation(shader, "edgeStrength");
+            observer = Raylib.GetShaderLocation(shader, "observer");
         }
 
         public void Set(Camera3D camera, ViewWindow view, float swallowAmount, float revealAmount, Vector3 color, float seconds,
-                        DayLight light, Vector3 sceneLightDir, Vector3 haze, float edgeWidthAmount, float edgeStrengthAmount)
+                        DayLight light, Vector3 sceneLightDir, Vector3 haze, float edgeWidthAmount, float edgeStrengthAmount,
+                        float observerAmount)
         {
             Raylib.SetShaderValue(shader, origin, Vector3.Zero, ShaderUniformDataType.Vec3);
             Raylib.SetShaderValue(shader, boxYaw, view.Yaw, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, halfWidth, view.HalfWidth, ShaderUniformDataType.Float);
-            Raylib.SetShaderValue(shader, fogStart, view.FogStart, ShaderUniformDataType.Float);
+            Raylib.SetShaderValue(shader, fogStart, view.FogStartShown, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, swallow, swallowAmount, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, reveal, revealAmount, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, cubeHeight, view.Height, ShaderUniformDataType.Float);
@@ -300,6 +328,7 @@ public class HologramRenderer
             Raylib.SetShaderValue(shader, hazeColor, haze, ShaderUniformDataType.Vec3);
             Raylib.SetShaderValue(shader, edgeWidth, edgeWidthAmount, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, edgeStrength, edgeStrengthAmount, ShaderUniformDataType.Float);
+            Raylib.SetShaderValue(shader, observer, observerAmount, ShaderUniformDataType.Float);
         }
     }
 

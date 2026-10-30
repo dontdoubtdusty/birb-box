@@ -3,7 +3,8 @@ using Raylib_cs;
 
 // Draws the bird world's contents inside the hologram: floor (with the pool's water), feeders, seed heaps, sprouts, splash droplets, coins and birds.
 // Used by both the main scene pass and the zoo camera. Nothing in here changes the simulation.
-// A partial class: the seed is drawn in SeedDrawing.cs (which also owns the grain batches), the sprouts in SproutDrawing.cs.
+// A partial class: the seed is drawn in SeedDrawing.cs (which also owns the grain batches), the sprouts in SproutDrawing.cs,
+// the rain (falling drops, and the floor's wet ground, rain rings and puddles) in RainDrawing.cs.
 public partial class WorldDrawer
 {
     private Shader holoShader;
@@ -42,6 +43,7 @@ public partial class WorldDrawer
         locRippleCount = Raylib.GetShaderLocation(holoShader, "rippleCount");
         locRipples = Raylib.GetShaderLocation(holoShader, "ripples");
         locRippleLife = Raylib.GetShaderLocation(holoShader, "rippleLife");
+        FindWeatherUniforms();
 
         // A square floor big enough for the widest the cube can be; the shader's fog cuts off the rest.
         float floorSize = view.HalfSize * ViewWindow.MaxCubeScale * 2f;
@@ -75,6 +77,7 @@ public partial class WorldDrawer
     {
         RefreshWearTexture(GameEngine.Instance.Wear);
         SetPoolUniforms();
+        SetWeatherUniforms();
         Raylib.SetShaderValue(holoShader, locWorldHalfSize, World.Instance.HalfSize, ShaderUniformDataType.Float);
         Raylib.SetShaderValue(holoShader, locIsFloor, 1, ShaderUniformDataType.Int);
         Raylib.DrawModelEx(floorModel, Vector3.Zero, Vector3.UnitY, view.YawDegrees, Vector3.One, Color.White);

@@ -2,7 +2,7 @@ using System.Numerics;
 using Raylib_cs;
 
 // Draws the seed piles inside the hologram, as part of WorldDrawer. Also owns the two grain batches
-// (round and block) that the sprouts (SproutDrawing.cs) and the pool's splash droplets add to as well.
+// (round and block) that the sprouts (SproutDrawing.cs), the pool's splash droplets and the rain (RainDrawing.cs) add to as well.
 public partial class WorldDrawer
 {
     // Each pile is drawn as a heap of small grains, shaped by its seed type (GrainLook in Seeds.cs) and laid out by SeedHeap:
@@ -56,6 +56,7 @@ public partial class WorldDrawer
         }
         AddSprouts(view);
         AddDroplets(view);
+        AddRain(view);
 
         if (roundCount > 0)
         {

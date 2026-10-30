@@ -21,6 +21,7 @@ public class RadioPlayer
     private const float StartVolume = 0.5f;
     private const float StaticLevel = 0.35f;     // static at full volume, compared to music
     private const float DuckedShare = 0.35f;     // how loud it plays while the Esc menu is open
+    private const float ObserverShare = 0.6f;    // how loud it plays standing in the garden (the Hologram View)
     private const float DuckRate = 3f;
     private const float WarmUpRate = 1.4f;       // switched on, it warms up over about 0.7 s, like old valves
     private const float CoolDownRate = 5f;
@@ -199,12 +200,14 @@ public class RadioPlayer
     // ---------------- UPDATE ----------------
 
     // Called every frame, even while the Esc menu is open. ducked: play quieter (the menu is open).
-    public void Update(float dt, bool ducked)
+    // observer: 0 in the room view, 1 standing in the garden, where it steps back to ObserverShare.
+    public void Update(float dt, bool ducked, float observer)
     {
         float warmTarget = On ? 1f : 0f;
         float warmRate = On ? WarmUpRate : CoolDownRate;
         Warmth = Math.Clamp(Warmth + MathF.Sign(warmTarget - Warmth) * warmRate * dt, 0f, 1f);
-        duck += ((ducked ? DuckedShare : 1f) - duck) * MathF.Min(1f, DuckRate * dt);
+        float duckTarget = ducked ? DuckedShare : 1f - (1f - ObserverShare) * observer;
+        duck += (duckTarget - duck) * MathF.Min(1f, DuckRate * dt);
 
         List<WebStations.Info>? found = web.TakeResult();
         if (found != null)

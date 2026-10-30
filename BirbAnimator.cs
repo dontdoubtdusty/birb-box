@@ -74,6 +74,14 @@ public class BirbAnimator
     private const float RoostFluff = 0.1f;        // how puffed up
     private const float RoostSquash = 0.06f;      // how much lower and rounder it sits
 
+    // HUNCHED IN THE RAIN (birds that aren't Rain-proud; at full rain, drizzle does a share): puffed, low, head drawn in, tail down
+    private const float RainFluff = 0.07f;
+    private const float RainSquash = 0.05f;
+    private const float RainHeadIn = 0.035f;      // birb units the head pulls back into the shoulders
+    private const float RainHeadDown = 6f;        // degrees
+    private const float RainTailDown = 6f;
+    private const float HunchRate = 0.6f;         // how quickly a bird hunches or straightens up (per second)
+
     // What the animator remembers about one bird between frames.
     private class BirdAnim
     {
@@ -88,6 +96,7 @@ public class BirbAnimator
         public IdleAct Act;           // the idle act playing, if any
         public float ActTimer;        // > 0 while it plays
         public float NextAct;         // seconds of standing about until the next one
+        public float Hunch;           // 0 standing tall, 1 fully hunched against the rain
         public bool Seen;
     }
 
@@ -135,7 +144,23 @@ public class BirbAnimator
         }
         if (a.Pose != BirdPose.Roost) AddBlink(a, ref shown, dt);    // asleep: the eyes stay shut
         AddIdleAct(a, ref shown, dt);
+        AddHunch(a, bird, ref shown, dt);
         return shown;
+    }
+
+    // In the rain a bird that minds it hunches up on the ground (not while flying, asleep or bathing), easing in and out.
+    private static void AddHunch(BirdAnim a, Bird bird, ref BirbMotion m, float dt)
+    {
+        bool onGround = a.Pose is not (BirdPose.Fly or BirdPose.Roost or BirdPose.Bathe);
+        float target = onGround && !bird.Nature.RainProud ? Weather.Instance.Rain : 0f;
+        a.Hunch = a.Hunch < target ? MathF.Min(target, a.Hunch + HunchRate * dt) : MathF.Max(target, a.Hunch - HunchRate * dt);
+        if (a.Hunch <= 0f) return;
+
+        m.Fluff += RainFluff * a.Hunch;
+        m.Squash -= RainSquash * a.Hunch;
+        m.HeadForward -= RainHeadIn * a.Hunch;
+        m.HeadPitch += RainHeadDown * a.Hunch;
+        m.TailPitch -= RainTailDown * a.Hunch;
     }
 
     // Every few seconds the eyes shut for a moment, each bird on its own rhythm.

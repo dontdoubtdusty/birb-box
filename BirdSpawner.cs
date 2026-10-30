@@ -16,6 +16,10 @@ public class BirdSpawner
     // at this share of the day's rate. In the morning a bird that flew off for the night is almost always the one that comes back.
     private const float NightOwlShare = 0.15f;
     private const float BackFromNightChance = 0.9f;
+
+    // RAIN (see Weather.cs): fewer birds come in steady rain, and a new bird that does come is often Rain-proud.
+    private const float RainArrivalCut = 0.6f;       // share of arrivals the rain keeps away, at full rain
+    private const float RainProudArrival = 0.6f;     // chance a new arrival in full rain is Rain-proud (drizzle: a share)
     private float arrivalTimer = 0f;
     private float sinceLastArrival = 0f;
 
@@ -62,6 +66,7 @@ public class BirdSpawner
         float chance = MathF.Sqrt(totalPull) * SimTuning.Now.ArrivalsPerFoodPerMinute / 60f * elapsed;
         bool night = IsNightArrival();
         chance *= night ? NightOwlShare : WorldClock.Instance.ArrivalShare;
+        chance *= 1f - RainArrivalCut * Weather.Instance.Rain;
 
         if (Rng.Chance(chance))
         {
@@ -109,6 +114,7 @@ public class BirdSpawner
         Bird? regular = TakeRegular(birdType, night);
         Bird bird = regular ?? CreateBird(birdType);
         if (night && regular == null) bird.BecomeNightOwl();
+        if (regular == null && !bird.Nature.RainProud && Rng.Chance(RainProudArrival * Weather.Instance.Rain)) bird.BecomeRainProud();
         bird.State = BirdState.Arriving;
         bird.ArriveHungry();
         string who = regular != null ? $"{bird.Name} is back, and" : bird.Name;

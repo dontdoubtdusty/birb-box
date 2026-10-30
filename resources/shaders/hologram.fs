@@ -38,8 +38,13 @@ uniform vec3 poolLobes[3];   // each circle's world X, world Z and radius
 uniform int rippleCount;     // ripple rings on the water right now
 uniform vec4 ripples[8];     // each ring's world X, world Z, age in seconds, strength 0 to 1
 uniform float rippleLife;    // seconds a ring lasts (Pool.RippleLife)
+uniform float rain;          // how hard it's raining (Weather.Rain): 0 none, 1 steady rain; drops ring the pool and puddles
+uniform float groundWet;     // how soaked the ground is (Weather.GroundWet): wet dirt and grass are darker
+uniform int puddleCount;     // rain puddles on bare dirt (Puddles.cs)
+uniform vec4 puddles[6];     // each one's world X, world Z, full radius, how full 0 to 1
 uniform float edgeWidth;     // how far in from the cube's walls (box units) things start turning to pure hologram
 uniform float edgeStrength;  // how strong that edge look is: 0 off, 1 the normal look, up to 2 (0 while drawing the store)
+uniform float observer;      // 0 in the room view, 1 standing in the garden (the Hologram View): things also fade with distance from the eye
 
 out vec4 finalColor;
 
@@ -49,6 +54,8 @@ const float EdgeGaps = 0.45;         // share of each stripe that's see-through
 const float EdgeSeeThrough = 0.45;   // how much fainter the solid stripes get
 const float EdgeRim = 0.6;           // extra rim glow
 const float EdgeCutGlow = 0.9;       // the bright line where the fog cuts through
+const float ObserverFogNear = 4.5;   // the Hologram View's round fog, in box units from the eye along the ground
+const float ObserverFogFar = 8.0;    // (the same numbers as ViewWindow.ObserverFogNear / Far)
 const float StripesPerUnit = 24.0;   // horizontal stripes per box unit of height
 const float StripeDrift = 0.5;       // how fast the stripes drift upward (stripes per second)
 
@@ -161,6 +168,42 @@ float waterHeight(vec2 world)
     return h;
 }
 
+// ---------------- RAIN ----------------
+
+// How far a world spot is from the nearest puddle's edge (below 0 inside one). The edge is ragged, and the water
+// spreads where the dirt is most worn and pulls back where grass grows, so puddles follow the bare patch they sit in.
+float puddleDistance(vec2 world, float wear)
+{
+    float d = 100000.0;
+    for (int i = 0; i < 6; i++)
+    {
+        if (i >= puddleCount) break;
+        float radius = puddles[i].z * puddles[i].w;
+        if (radius <= 0.01) continue;
+        d = min(d, length(world - puddles[i].xy) - radius);
+    }
+    return d + (noise(world * 3.0) - 0.5) * 0.16 + (0.55 - wear) * 0.35;
+}
+
+// Rain rings: one drop at a time lands in each small cell of standing water, at its own spot and rhythm;
+// the harder it rains, the more cells have drops. Returns how bright the rings are here (0 to 1).
+float rainRings(vec2 world)
+{
+    if (rain <= 0.0) return 0.0;
+    vec2 cellPos = world * 2.5;                      // cells 0.4 units across
+    vec2 cell = floor(cellPos);
+    float period = 0.9 + hash(cell + 4.2) * 0.8;     // seconds between this cell's drops
+    float t = time / period + hash(cell + 1.9);
+    float k = floor(t);
+    float grow = fract(t);                           // 0 as the drop hits, 1 as the ring is gone
+    if (hash(cell + k * 0.71 + 8.8) > rain * 0.55) return 0.0;
+    vec2 spot = vec2(hash(cell + k * 0.37 + 2.1), hash(cell + k * 0.53 + 5.3)) * 0.5 + 0.25;
+    float r = length(fract(cellPos) - spot) / 2.5;   // world units from the drop
+    float front = 0.02 + grow * 0.11;
+    float strength = 0.5 + 0.5 * hash(cell + k * 0.29 + 3.7);    // some drops are bigger than others
+    return exp(-pow((r - front) / 0.01, 2.0)) * (1.0 - grow) * (1.0 - grow) * strength;
+}
+
 // The water's color at a world spot before lighting: lighter and showing a little ground in the shallows, deep teal in the middle.
 vec3 waterColor(float d, vec3 ground)
 {
@@ -207,7 +250,8 @@ void main()
     }
 
     // The pool is part of the floor: water where waterDistance is below 0, damp dark ground along the shore.
-    float wet = 0.0;                     // 1 on the water, 0 on land (soft across the waterline)
+    // Rain puddles are too (puddleDistance), and rain soaks the rest of the ground darker.
+    float wet = 0.0;                     // 1 on the water (pool or puddle), 0 on land (soft across the waterline)
     float waterline = 0.0;               // 1 right at the waterline, for its faint glow
     float rippleShine = 0.0;
     if (isFloor == 1)
@@ -215,6 +259,24 @@ void main()
         vec2 world = boxPos.xz / viewZoom + viewCenter;
         vec3 ground = groundColor(world);
         normal = vec3(0.0, 1.0, 0.0);
+
+        // Rain-soaked ground: darker and a little cooler
+        ground *= mix(vec3(1.0), vec3(0.68, 0.70, 0.74), groundWet);
+
+        // Rain puddles: thin still water over the dirt, glassy with the gray sky in it, the dirt showing through at the rim
+        float puddle = 0.0;
+        if (puddleCount > 0)
+        {
+            float wear = texture(texture1, (world + worldHalfSize) / (2.0 * worldHalfSize)).r;
+            float pd = puddleDistance(world, wear);
+            if (pd < 0.3)
+            {
+                float aa = max(fwidth(pd), 0.002);
+                puddle = 1.0 - smoothstep(-aa, aa, pd);
+                vec3 still = mix(ground * 0.65, vec3(0.16, 0.20, 0.23), smoothstep(0.0, 0.25, -pd) * 0.6);
+                ground = mix(ground, still, puddle);
+            }
+        }
 
         float d = poolLobeCount > 0 ? waterDistance(world) : 100000.0;
         if (d < 0.5)
@@ -229,7 +291,14 @@ void main()
             float damp = 1.0 - smoothstep(0.0, 0.4, d);
             ground = mix(ground, ground * vec3(0.55, 0.6, 0.62), damp * 0.8);
 
-            // The surface's slope (from the swells and ripples) tips the normal, in world axes, then turned into scene space
+            ground = mix(ground, waterColor(d, ground), wet);
+        }
+
+        // On the pool and the puddles alike: the surface's slope (from the swells and ripples) tips the normal,
+        // in world axes, then turned into scene space
+        wet = max(wet, puddle);
+        if (wet > 0.0)
+        {
             const float e = 0.03;
             float h0 = waterHeight(world);
             vec2 slope = vec2(waterHeight(world + vec2(e, 0.0)) - h0, waterHeight(world + vec2(0.0, e)) - h0) / e;
@@ -237,8 +306,6 @@ void main()
             vec3 sceneNormal = normalize(vec3(c * n.x + s * n.z, n.y, -s * n.x + c * n.z));
             normal = normalize(mix(normal, sceneNormal, wet));
             rippleShine = clamp(length(slope) * 4.0, 0.0, 1.0) * wet;
-
-            ground = mix(ground, waterColor(d, ground), wet);
         }
         base = vec4(ground, 1.0);
     }
@@ -261,6 +328,7 @@ void main()
                       * (1.0 - smoothstep(0.08, 0.14, length(fract(world * 5.0) - 0.5)));
         color += directLight * (glint * 0.45 + sparkle * 0.3 + rippleShine * 0.06) * wet;
         color += ambientLight * sheen * 0.12 * wet;
+        color += (ambientLight * 0.35 + directLight * 0.1) * rainRings(world) * wet;
         color += holoColor * waterline * 0.1;
     }
 
@@ -310,6 +378,9 @@ void main()
     float goneBy = mix(1.0, 0.0, swallow);
     float fade = 1.0 - smoothstep(clearUntil, goneBy, edge);
     fade *= 1.0 - smoothstep(cubeHeight * 0.7, cubeHeight, boxPos.y);
+    // Standing in the garden, things also fade with how far they are from the eye, so the far fog is round like a horizon
+    float fromEye = length(fragPosition.xz - viewPos.xz);
+    fade *= 1.0 - observer * smoothstep(ObserverFogNear, ObserverFogFar, fromEye);
 
     // Starting up: only what's below the rising edge shows, softly, and the whole picture brightens as it rises
     float revealY = reveal * (cubeHeight + 1.0) - 0.5;

@@ -37,7 +37,18 @@ public static class Sounds
     private const float HumVolume = 0.22f;
     private const float HumQuietVolume = 0.08f;    // while the Esc menu or the Designer is open
     private const float HumFadeRate = 3f;          // how quickly it eases between the two
+
+    // THE HOLOGRAM VIEW: standing in the garden, the birds and the rain come forward and the box's hum steps back
+    private const float ObserverHumShare = 0.35f;
+    private const float ObserverBirdBoost = 1.35f;
     private static float humVolume = 0f;           // starts silent and fades in
+
+    // RAIN on the garden (sounds/rain.wav, a seamless loop, streamed like the hum). Heard with the birds:
+    // it follows the Birds volume, fades out with them in the store, and grows with how hard it's raining.
+    private static Music rainLoop;
+    private static bool hasRain;
+    private const float RainVolume = 0.3f;
+    private const float RainQuietShare = 0.4f;     // while the Esc menu or the Designer is open
 
     // BIRDS. Each species has one or more calls; see tools/make_sounds.py for how they're made.
     private static readonly Dictionary<BirdType, SoundPool[]> calls = new();
@@ -85,6 +96,15 @@ public static class Sounds
         Raylib.SetMusicVolume(holoHum, 0f);
         Raylib.PlayMusicStream(holoHum);
 
+        string rainFile = Assets.PathTo("sounds/rain.wav");
+        hasRain = File.Exists(rainFile);
+        if (hasRain)
+        {
+            rainLoop = Raylib.LoadMusicStream(rainFile);
+            Raylib.SetMusicVolume(rainLoop, 0f);
+            Raylib.PlayMusicStream(rainLoop);
+        }
+
         // Calls are found by name: call_emberwing_1.wav, call_emberwing_2.wav, and so on.
         foreach (BirdType type in Birds.All)
         {
@@ -120,6 +140,7 @@ public static class Sounds
         if (hasRockerClick) Raylib.UnloadSound(rockerClick);
         if (hasPowerClick) Raylib.UnloadSound(powerClick);
         Raylib.UnloadMusicStream(holoHum);
+        if (hasRain) Raylib.UnloadMusicStream(rainLoop);
 
         foreach (SoundPool[] pools in calls.Values)
         {
@@ -136,18 +157,26 @@ public static class Sounds
 
     // Called every frame. Keeps the hum fed and eases its volume toward loud or quiet.
     // birdsShowing: false while the store is up or the box is off, which fades the birds out.
-    // power: how far the projector is on (0 to 1); the hum follows it.
-    public static void Update(float dt, bool quiet, bool birdsShowing, float power)
+    // power: how far the projector is on (0 to 1); the hum follows it. rain: how hard it's raining in the garden (0 to 1).
+    // observer: how far into the Hologram View the player is (0 to 1).
+    public static void Update(float dt, bool quiet, bool birdsShowing, float power, float rain, float observer)
     {
         Raylib.SetMasterVolume(Master);
 
-        float target = (quiet ? HumQuietVolume : HumVolume) * power;
+        float target = (quiet ? HumQuietVolume : HumVolume) * power * (1f - (1f - ObserverHumShare) * observer);
         humVolume += (target - humVolume) * MathF.Min(1f, HumFadeRate * dt);
         Raylib.SetMusicVolume(holoHum, humVolume * HumLevel);
         Raylib.UpdateMusicStream(holoHum);
 
-        float birdTarget = birdsShowing ? 1f : 0f;
+        float birdTarget = birdsShowing ? 1f + (ObserverBirdBoost - 1f) * observer : 0f;
         birdVolume += (birdTarget - birdVolume) * MathF.Min(1f, HumFadeRate * dt);
+
+        if (hasRain)
+        {
+            float rainLevel = RainVolume * rain * birdVolume * BirdLevel * (quiet ? RainQuietShare : 1f);
+            Raylib.SetMusicVolume(rainLoop, rainLevel);
+            Raylib.UpdateMusicStream(rainLoop);
+        }
 
         // A projector sound waiting behind the power button's click
         if (projectorWait >= 0f)

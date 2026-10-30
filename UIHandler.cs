@@ -142,6 +142,11 @@ public class UIHandler
             DrawClockTools(engine.Clock, t, d);
         }
 
+        if (ImGui.CollapsingHeader("Weather"))
+        {
+            DrawWeatherTools(engine.Weather, engine.Clock, t, d);
+        }
+
         if (ImGui.CollapsingHeader("Cheats"))
         {
             if (ImGui.Button("+10 coins")) engine.Coins += 10;
@@ -223,6 +228,27 @@ public class UIHandler
         Slider("Night light", ref t.NightBrightness, d.NightBrightness, 0.2f, 3f, "%.2fx");
         Slider("Stay the night", ref t.RoostChance, d.RoostChance, 0f, 1f, "%.2f chance");
         Slider("Max roosting", ref t.MaxRoosting, d.MaxRoosting, 0, 30);
+    }
+
+    // The weather (see Weather.cs): what it's doing and for how long, and dev controls to start or stop the rain,
+    // soak the ground at once (so puddles can form), or hold the weather as it is.
+    private static void DrawWeatherTools(Weather weather, WorldClock clock, SimTuning t, SimTuning d)
+    {
+        string spell = weather.Raining ? (weather.Strength < 1f ? "drizzle" : "steady rain") : "dry";
+        ImGui.Text($"{weather.Word}: {spell} spell, {weather.HoursLeft:0.0} h left");
+        ImGui.Text($"Cloud {weather.Cloud:0.00}  rain {weather.Rain:0.00}  ground wet {weather.GroundWet:0.00}  puddles {weather.Puddles.All.Count}");
+
+        if (ImGui.Button("Rain")) weather.StartRain(1f);
+        ImGui.SameLine();
+        if (ImGui.Button("Drizzle")) weather.StartRain(Weather.DrizzleStrength);
+        ImGui.SameLine();
+        if (ImGui.Button("Clear up")) weather.ClearUp(clock.Season);
+        ImGui.SameLine();
+        if (ImGui.Button("Soak the ground")) weather.Soak();
+        ImGui.Checkbox("Hold the weather", ref weather.Held);
+
+        Slider("Rain comes", ref t.RainOften, d.RainOften, 0.1f, 10f, "%.2fx as often");
+        Slider("Rain spoils seed", ref t.RainSpoil, d.RainSpoil, 1f, 10f, "%.2fx");
     }
 
     // 5.5 -> "05:30"

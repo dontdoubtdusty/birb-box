@@ -1,6 +1,6 @@
 // A bird's personality: 2 or 3 traits, fixed for its whole life (Step 12a).
 //
-// Each trait is one degree on a scale (Nerve, Appetite, Roaming, Voice, Hours). A bird holds at most one degree of
+// Each trait is one degree on a scale (Nerve, Appetite, Roaming, Voice, Hours, Weather). A bird holds at most one degree of
 // each scale, so opposite traits never roll together. A scale the bird has no trait on is average.
 // Traits only nudge numbers the simulation already has (personal space, hunger, home radius, call delay...).
 // The numbers live in TraitEffects; each trait in the table below says which ones it changes.
@@ -12,7 +12,8 @@ public enum TraitScale
     Appetite,
     Roaming,
     Voice,
-    Hours        // when it keeps to its roost (added at 4.92 with day and night)
+    Hours,       // when it keeps to its roost (added at 4.92 with day and night)
+    Weather      // how it takes the rain (added at 4.96 with rain; one trait only, so it's rolled less often, see ScaleWeight)
 }
 
 public enum Trait
@@ -21,7 +22,8 @@ public enum Trait
     Dainty, BigEater,                // Appetite
     Hearthbound, Wayfarer,               // Roaming
     Hushed, TownCrier,                   // Voice
-    EarlyRiser, NightOwl                 // Hours
+    EarlyRiser, NightOwl,                // Hours
+    RainProud                            // Weather
 }
 
 // Which birds a bird is easy around: on a rock it hops up to, and at a pile or feeder it picks to eat from.
@@ -63,6 +65,9 @@ public class TraitEffects
     // HOURS
     public float HourShift = 0f;          // hours: when it wakes and goes to roost, earlier (-) or later (+) than most
     public bool NightOwl = false;         // never roosts; the only kind of bird that arrives at night
+
+    // WEATHER
+    public bool RainProud = false;        // doesn't mind the rain: no hunching, no leaving early, calls as usual
 }
 
 // One trait: its name, the line shown when hovering it, its scale, how common it is, and what it changes.
@@ -93,6 +98,14 @@ public static class Traits
 
     private const float ThreeTraitChance = 0.5f;    // the rest get 2
 
+    // How likely each scale is to be one of a bird's 2 or 3 (missing means 1). Weather has only one trait,
+    // so it gets a low weight: about 1 bird in 9 is Rain-proud (Frostcrests 1 in 5, Dusk Doves 1 in 18), plus some of
+    // the birds that arrive in the rain (BirdSpawner).
+    private static readonly Dictionary<TraitScale, float> ScaleWeight = new()
+    {
+        [TraitScale.Weather] = 0.2f,
+    };
+
     // Each scale from one end to the other, as the bird card's sliders show it. null is the average spot.
     private static readonly Dictionary<TraitScale, Trait?[]> stops = new()
     {
@@ -101,6 +114,7 @@ public static class Traits
         [TraitScale.Roaming] = new Trait?[] { Trait.Hearthbound, null, Trait.Wayfarer },
         [TraitScale.Voice] = new Trait?[] { Trait.Hushed, null, Trait.TownCrier },
         [TraitScale.Hours] = new Trait?[] { Trait.EarlyRiser, null, Trait.NightOwl },
+        [TraitScale.Weather] = new Trait?[] { null, Trait.RainProud },
     };
 
     public static IReadOnlyList<Trait?> Stops(TraitScale scale) => stops[scale];
@@ -155,26 +169,56 @@ public static class Traits
         [Trait.NightOwl] = new TraitInfo("Night Owl", TraitScale.Hours, 0.6f,
             "Keeps lantern hours. Wanders the dark garden long after the rest have gone to roost.",
             e => { e.NightOwl = true; }),
+
+        // WEATHER
+        [Trait.RainProud] = new TraitInfo("Rain-proud", TraitScale.Weather, 1f,
+            "Takes a downpour as a compliment. Stays out in it, eats, and sings while the others huddle.",
+            e => { e.RainProud = true; }),
     };
 
     // How each species leans: a trait's commonness is multiplied by this when a bird of that kind rolls.
     // Missing means 1 (no lean).
     private static readonly Dictionary<BirdType, Dictionary<Trait, float>> leans = new()
     {
-        [BirdType.Emberwing] = new() { [Trait.StoutHearted] = 2.5f, [Trait.FaintHearted] = 0.4f, [Trait.TownCrier] = 1.5f, [Trait.EarlyRiser] = 1.5f },
-        [BirdType.DuskDove] = new() { [Trait.FaintHearted] = 2.5f, [Trait.Wary] = 1.5f, [Trait.StoutHearted] = 0.4f, [Trait.Hushed] = 1.5f, [Trait.NightOwl] = 2.5f, [Trait.EarlyRiser] = 0.5f },
+        [BirdType.Emberwing] = new() { [Trait.StoutHearted] = 2.5f, [Trait.FaintHearted] = 0.4f, [Trait.TownCrier] = 1.5f, [Trait.EarlyRiser] = 1.5f, [Trait.RainProud] = 1.5f },
+        [BirdType.DuskDove] = new() { [Trait.FaintHearted] = 2.5f, [Trait.Wary] = 1.5f, [Trait.StoutHearted] = 0.4f, [Trait.Hushed] = 1.5f, [Trait.NightOwl] = 2.5f, [Trait.EarlyRiser] = 0.5f, [Trait.RainProud] = 0.5f },
         [BirdType.Gildfinch] = new() { [Trait.Dainty] = 2f, [Trait.TownCrier] = 1.5f, [Trait.Wayfarer] = 1.5f, [Trait.EarlyRiser] = 1.5f },
-        [BirdType.Frostcrest] = new() { [Trait.Wayfarer] = 2f, [Trait.Hushed] = 2f, [Trait.Wary] = 1.5f, [Trait.NightOwl] = 1.5f },
+        [BirdType.Frostcrest] = new() { [Trait.Wayfarer] = 2f, [Trait.Hushed] = 2f, [Trait.Wary] = 1.5f, [Trait.NightOwl] = 1.5f, [Trait.RainProud] = 2f },
     };
 
     public static TraitInfo Get(Trait trait) => info[trait];
 
     // A new personality for a bird of this kind: 2 or 3 different scales, one degree of each, in scale order.
+    // Scales are picked one at a time by their weight (ScaleWeight, times the species' lean for a one-trait scale).
     public static List<Trait> Roll(BirdType type)
     {
         int count = Rng.Chance(ThreeTraitChance) ? 3 : 2;
-        List<TraitScale> scales = Scales.OrderBy(_ => Rng.Range(0f, 1f)).Take(count).OrderBy(scale => scale).ToList();
-        return scales.Select(scale => RollDegree(type, scale)).ToList();
+        List<TraitScale> left = Scales.ToList();
+        List<TraitScale> picked = new();
+        while (picked.Count < count && left.Count > 0)
+        {
+            float total = left.Sum(scale => PickWeight(type, scale));
+            float roll = Rng.Range(0f, total);
+            TraitScale chosen = left[^1];
+            foreach (TraitScale scale in left)
+            {
+                roll -= PickWeight(type, scale);
+                if (roll <= 0f) { chosen = scale; break; }
+            }
+            picked.Add(chosen);
+            left.Remove(chosen);
+        }
+        return picked.OrderBy(scale => scale).Select(scale => RollDegree(type, scale)).ToList();
+    }
+
+    // How likely a scale is to be picked. A scale with only one trait (Weather) has no other degree to lean between,
+    // so the species' lean for that trait goes on the scale instead.
+    private static float PickWeight(BirdType type, TraitScale scale)
+    {
+        float weight = ScaleWeight.TryGetValue(scale, out float w) ? w : 1f;
+        List<Trait> options = All.Where(trait => info[trait].Scale == scale).ToList();
+        if (options.Count == 1) weight *= Lean(type, options[0]);
+        return weight;
     }
 
     // One degree of a scale, weighted by commonness and the species' lean.
@@ -191,11 +235,10 @@ public static class Traits
         return options[^1];
     }
 
-    private static float Weight(BirdType type, Trait trait)
-    {
-        float lean = leans.TryGetValue(type, out var forType) && forType.TryGetValue(trait, out float l) ? l : 1f;
-        return info[trait].Commonness * lean;
-    }
+    private static float Weight(BirdType type, Trait trait) => info[trait].Commonness * Lean(type, trait);
+
+    private static float Lean(BirdType type, Trait trait) =>
+        leans.TryGetValue(type, out var forType) && forType.TryGetValue(trait, out float l) ? l : 1f;
 
     // The same personality made a Night Owl (birds that arrive at night all are): its Hours trait swapped,
     // or, with no room left for one, another trait dropped at random, so it still has 2 or 3.
@@ -204,6 +247,20 @@ public static class Traits
         List<Trait> kept = traits.Where(trait => info[trait].Scale != TraitScale.Hours).ToList();
         if (kept.Count >= 3) kept.RemoveAt(Rng.Next(kept.Count));
         kept.Add(Trait.NightOwl);
+        return Clean(kept);
+    }
+
+    // The same personality made Rain-proud (some birds that arrive in the rain are): a Weather trait added, dropping one
+    // other trait at random (never Night Owl) if it already has 3.
+    public static List<Trait> AsRainProud(IEnumerable<Trait> traits)
+    {
+        List<Trait> kept = traits.Where(trait => info[trait].Scale != TraitScale.Weather).ToList();
+        if (kept.Count >= 3)
+        {
+            List<Trait> droppable = kept.Where(trait => trait != Trait.NightOwl).ToList();
+            kept.Remove(droppable[Rng.Next(droppable.Count)]);
+        }
+        kept.Add(Trait.RainProud);
         return Clean(kept);
     }
 

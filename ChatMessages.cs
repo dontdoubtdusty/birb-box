@@ -283,9 +283,11 @@ public class ChatMessages
         float halfWidth = LabelWidth / 2f;
         float halfHeight = halfWidth * TextureHeight / TextureWidth;
 
+        Vector3 eye = view.SceneToBox(camera.Position);    // labels fade in the fog as seen from here (ViewWindow.FogFade)
+
         Rlgl.DrawRenderBatchActive();
         Rlgl.DisableDepthMask();
-        DrawNameTags(camera, view, right, up);
+        DrawNameTags(camera, view, right, up, eye);
         foreach (Message msg in messages)
         {
             if (msg.Texture.Id == 0) continue;
@@ -296,7 +298,7 @@ public class ChatMessages
 
             float drift = msg.Leaving ? -msg.Age * RiseSpeed : msg.Age * RiseSpeed;    // leaving labels sink
             Vector3 local = view.ToLocal(msg.LastPosition) + new Vector3(0, StartHeight + drift, 0);
-            alpha *= EdgeFade(local, view);
+            alpha *= view.FogFade(local, eye);
             if (alpha <= 0.01f) continue;
 
             Vector3 center = view.BoxToScene(local);
@@ -309,7 +311,7 @@ public class ChatMessages
 
     // Each tag floats a little above the top of its bird's head and follows it.
     // A grown tag rises by its extra height so its bottom edge stays the same gap above the head.
-    private void DrawNameTags(Camera3D camera, ViewWindow view, Vector3 right, Vector3 up)
+    private void DrawNameTags(Camera3D camera, ViewWindow view, Vector3 right, Vector3 up, Vector3 eye)
     {
         float halfWidth = NameLabelWidth / 2f;
         float halfHeight = halfWidth * TextureHeight / NameTextureWidth;
@@ -322,7 +324,7 @@ public class ChatMessages
             Vector3 headLocal = view.ToLocal(head);
             float grow = DistanceScale(camera, view.BoxToScene(headLocal));
             Vector3 local = headLocal + new Vector3(0, NameLift + halfHeight * grow, 0);
-            float alpha = NameAlpha * EdgeFade(local, view);
+            float alpha = NameAlpha * view.FogFade(local, eye);
             if (alpha <= 0.01f) continue;
 
             DrawFacingQuad(tag.Texture.Texture, view.BoxToScene(local), right * halfWidth * grow, up * halfHeight * grow, alpha);
@@ -352,14 +354,6 @@ public class ChatMessages
             Rlgl.TexCoord2f(1, 1); Rlgl.Vertex3f(topRight.X, topRight.Y, topRight.Z);
         Rlgl.End();
         Rlgl.SetTexture(0);
-    }
-
-    // Same fade as the fog in hologram.fs: full strength in the middle, gone at the walls.
-    private static float EdgeFade(Vector3 local, ViewWindow view)
-    {
-        float edge = ViewWindow.EdgeAmount(local.X, local.Z, view.HalfWidth);
-        float t = Math.Clamp((edge - view.FogStart) / (1f - view.FogStart), 0f, 1f);
-        return 1f - t * t * (3f - 2f * t);
     }
 
     public void Unload()

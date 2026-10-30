@@ -102,6 +102,7 @@ public class SaveGame
             SavedAt = DateTime.Now,
             SimTime = engine.SimTime,
             ClockDays = engine.Clock.Days,
+            Weather = engine.Weather.ToSave(),
             Coins = engine.Coins,
             FrostcrestSeen = Seeds.FrostcrestSeen,
             VisitedStore = engine.Store.VisitedBefore,
@@ -158,6 +159,7 @@ public class SaveGame
         if (data.ClockDays is double days) engine.Clock.Days = days;
         else engine.Clock.Reset(data.Birds.Count > 0 ? WorldClock.OldSaveStartHour : WorldClock.StartHour);
         engine.Clock.Refresh();                                         // before the birds load, so roosting birds stay roosting
+        engine.Weather.Restore(data.Weather);                           // a new world, or a save from before 4.96, starts fair and dry
         engine.Coins = data.Coins;
         Seeds.FrostcrestSeen = data.FrostcrestSeen;
         engine.Store.VisitedBefore = data.VisitedStore;
@@ -263,6 +265,7 @@ public class SaveData
     // THE PLAYER
     public float SimTime { get; set; }
     public double? ClockDays { get; set; }                            // the world's calendar (WorldClock.Days); null before 4.92
+    public WeatherSave? Weather { get; set; }                         // the rain, the clouds, the wet ground and its puddles; null before 4.96
     public int Coins { get; set; }
     public bool FrostcrestSeen { get; set; }
     public bool VisitedStore { get; set; }
@@ -368,6 +371,24 @@ public class RockSave
     public float Radius { get; set; }
     public float Height { get; set; }
     public int Look { get; set; }
+}
+
+public class WeatherSave
+{
+    public bool Raining { get; set; }
+    public float Strength { get; set; } = 1f;
+    public float HoursLeft { get; set; }
+    public float Cloud { get; set; }
+    public float Rain { get; set; }
+    public float GroundWet { get; set; }
+    public List<PuddleSave> Puddles { get; set; } = new();
+}
+
+public class PuddleSave
+{
+    public Vector2 Spot { get; set; }
+    public float Size { get; set; }
+    public float Fill { get; set; }
 }
 
 public class PoolSave

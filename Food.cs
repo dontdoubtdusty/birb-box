@@ -24,6 +24,7 @@ public class Food : Entity
     public const float BiteSize = 0.5f;           // seed removed per bite
     public const float NutritionPerBite = 0.35f;
     public const float FadeAfter = 2f;            // times the spoil time
+    private const float RainAgingFrom = 1f;       // seconds after landing (past the landing hop) before rain starts aging a layer faster
     public const float SettledAge = 10f;          // a layer this old has long finished landing (for seed loaded from a save)
 
     // Landing seed joins a pile on the dirt this close (or within most of a bigger heap's width).
@@ -130,13 +131,15 @@ public class Food : Entity
     }
 
     // Layers grow older; on the dirt, a layer that has gone bad long enough fades away (and may sprout).
+    // Rain ages seed lying on the ground faster (Weather.SpoilFactor), once it has finished landing.
     private void AgeLayers(float dt)
     {
         bool faded = false;
+        float rainAging = Feeder == null && Plant == null ? Weather.Instance.SpoilFactor : 1f;
         for (int i = Layers.Count - 1; i >= 0; i--)
         {
             SeedLayer layer = Layers[i];
-            layer.Age += dt;
+            layer.Age += layer.Age > RainAgingFrom ? dt * rainAging : dt;
             if (Feeder == null && HasFaded(layer))
             {
                 Layers.RemoveAt(i);

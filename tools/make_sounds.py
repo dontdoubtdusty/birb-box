@@ -358,6 +358,27 @@ def splash(seconds):
     return lowpass(out, 6500)
 
 
+# Rain on the garden (4.96): a soft wash of falling rain with patter on top, made to loop without a seam.
+# Twice the loop is made, then the end is cross-faded into the start so the join can't be heard.
+def rain(seconds=8.0, fade=1.0):
+    n = int(RATE * (seconds + fade))
+    t = np.arange(n) / RATE
+    wash = lowpass(bandpass(rng.normal(0, 1, n), 300, 6000), 3500)
+    swell = 1.0 + 0.12 * np.sin(2 * np.pi * t / seconds * 2) + 0.06 * np.sin(2 * np.pi * t / seconds * 5 + 1.3)
+    out = wash * swell * 0.6
+    for _ in range(int(seconds * 55)):
+        drop = bandpass(rng.normal(0, 1, int(RATE * 0.02)), 1500, 8000) * np.exp(-np.arange(int(RATE * 0.02)) / RATE * 260)
+        place(out, drop * rng.uniform(0.15, 0.6), rng.uniform(0, seconds + fade - 0.03))
+    for _ in range(int(seconds * 3)):
+        place(out, plip(rng.uniform(600, 1000), rng.uniform(1200, 2200), 0.04) * rng.uniform(0.1, 0.25), rng.uniform(0, seconds + fade - 0.05))
+    loop_n = int(RATE * seconds)
+    fade_n = int(RATE * fade)
+    body = out[:loop_n].copy()
+    ramp = np.linspace(0, 1, fade_n)
+    body[:fade_n] = body[:fade_n] * ramp + out[loop_n:loop_n + fade_n] * (1 - ramp)
+    return body
+
+
 os.makedirs(OUT, exist_ok=True)
 save("coin_land.wav", coin_land(), 0.7)
 save("coin_pickup.wav", coin_pickup(), 0.7)
@@ -386,4 +407,6 @@ save("sip_1.wav", sip(700, 1500), 0.4)
 save("sip_2.wav", sip(850, 1800), 0.4)
 save("splash_1.wav", splash(0.35), 0.5)
 save("splash_2.wav", splash(0.45), 0.5)
+# Rain (4.96): a loop, played as a stream like the hum. A recording can replace it (any length; it should loop cleanly)
+save("rain.wav", rain(), 0.5)
 print("done")

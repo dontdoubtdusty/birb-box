@@ -3,10 +3,10 @@ using Raylib_cs;
 
 // The fixed on-screen HUD, drawn with plain Raylib on top of the hologram:
 // the stats screen in the right side column (see SidePanels; with the time of day: a 24-hour dial, the word for it,
-// the day and the season), and the selected bird or feeder card
+// the day and the season; and the weather's word), and the selected bird or feeder card
 // floating at the top of the middle area. The world map is its own class (MiniMap).
 // Clickable parts of the bird card: the name (click to rename), and the Follow and Center buttons.
-// The bird card also shows its personality as five sliders, one per trait scale (hover one for its trait's flavor line),
+// The bird card also shows its personality as six sliders, one per trait scale (hover one for its trait's flavor line),
 // and its favorite seed.
 // The feeder card shows the seed inside and has Move and Center buttons.
 public class Hud
@@ -16,7 +16,7 @@ public class Hud
     private const int Pad = 10;
     private const int HeaderSize = 12;
     private const int NameSize = 20;
-    private const int CardWidth = 300, CardHeight = 302;
+    private const int CardWidth = 300, CardHeight = 324;
     private const int TraitSize = 16;                                         // the "Fond of" line
     private const int FlavorSize = 14, FlavorLineHeight = 17;
 
@@ -310,6 +310,10 @@ public class Hud
         string date = clock.DateText;
         int dateX = x + UiText.Measure(clock.Phase.ToString(), 20) + 10;
         UiText.Draw(date, dateX, y + 4, 16, Palette.DimText);
+        y += 24;
+
+        // The weather under it: Fair, Clouding over, Drizzle, Rain, Clearing
+        UiText.Draw(engine.Weather.Word, x, y, 16, Palette.DimText);
 
         Vector2 center = new Vector2(statsRect.X + statsRect.Width - Pad - DialRadius, statsRect.Y + Pad + HeaderSize + 8 + DialRadius + 4);
         DrawDial(clock, center, accent);
