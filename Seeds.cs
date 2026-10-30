@@ -71,14 +71,14 @@ public static class Seeds
         [SeedType.Millet] = new SeedInfo(
             "Millet", "Pip-Mk II Millet", new Color(180, 160, 220, 255),
             "Scatter at dusk. Doves can't resist. Small birds peck at it too.",
-            new() { [BirdType.DuskDove] = 1.0f, [BirdType.Glintfinch] = 0.3f },
+            new() { [BirdType.DuskDove] = 1.0f, [BirdType.Gildfinch] = 0.3f },
             new GrainLook(GrainMesh.Round, new Vector3(0.06f, 0.06f, 0.06f), Spread: 0.35f),
             spoilTime: 120f),
 
         [SeedType.Thistle] = new SeedInfo(
             "Thistle", "Squire Starter Mix", new Color(150, 230, 120, 255),
             "Tiny and bright. Small beaks only.",
-            new() { [BirdType.Glintfinch] = 1.0f },
+            new() { [BirdType.Gildfinch] = 1.0f },
             new GrainLook(GrainMesh.Round, new Vector3(0.03f, 0.03f, 0.10f), Spread: 0.22f),
             spoilTime: 180f),
 
@@ -92,7 +92,7 @@ public static class Seeds
         [SeedType.Wild] = new SeedInfo(
             "Wild Seed", "Hedgerow Gleanings", new Color(214, 178, 112, 255),
             "Whatever the wind brings. Common birds pick at it.",
-            new() { [BirdType.Emberwing] = 0.4f, [BirdType.DuskDove] = 0.4f, [BirdType.Glintfinch] = 0.4f },
+            new() { [BirdType.Emberwing] = 0.4f, [BirdType.DuskDove] = 0.4f, [BirdType.Gildfinch] = 0.4f },
             new GrainLook(GrainMesh.Round, new Vector3(0.06f, 0.045f, 0.07f), Spread: 0.25f),
             spoilTime: 180f, jarPrice: 0, startingSupply: 0f),
     };
@@ -102,6 +102,30 @@ public static class Seeds
     // Frostcrests are a discovery. Until the first one has been seen in the view,
     // only Blue Barley can call them; after that their other tastes count too.
     public static bool FrostcrestSeen = false;
+
+    // A bird's favorite seed, picked from its species' tastes: seed it loves is picked more often than seed it only eats.
+    // Seeds it barely touches (taste under FavoriteMinTaste) are never a favorite.
+    private const float FavoriteMinTaste = 0.2f;
+
+    public static SeedType RollFavorite(BirdType bird)
+    {
+        List<(SeedType Seed, float Taste)> liked = All
+            .Select(seed => (Seed: seed, Taste: Get(seed).Tastes.TryGetValue(bird, out float taste) ? taste : 0f))
+            .Where(pair => pair.Taste >= FavoriteMinTaste)
+            .ToList();
+        if (liked.Count == 0) return SeedType.Wild;
+
+        float roll = Rng.Range(0f, liked.Sum(pair => pair.Taste));
+        foreach ((SeedType seed, float taste) in liked)
+        {
+            roll -= taste;
+            if (roll <= 0f) return seed;
+        }
+        return liked[^1].Seed;
+    }
+
+    // True if this kind of bird eats this seed at all.
+    public static bool Eats(BirdType bird, SeedType seed) => Get(seed).Tastes.TryGetValue(bird, out float taste) && taste > 0f;
 
     // Adds how strongly some seed draws each bird (amount x taste) into a running score.
     // Used by the bucket's prediction and by the bird spawner, so both agree.

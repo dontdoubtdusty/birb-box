@@ -123,13 +123,14 @@ public class SaveGame
             Rocks = new(),
         };
 
-        // Seed sitting in a feeder is saved with its feeder.
+        // Seed sitting in a feeder is saved with its feeder, and seed on a sprout's heads with its sprout.
         foreach (Entity entity in engine.World.Entities)
         {
             switch (entity)
             {
                 case Bird bird: data.Birds.Add(bird.ToSave()); break;
-                case Food food when food.Feeder == null: data.Seed.Add(food.ToSave()); break;
+                case Food food when food.Feeder == null && food.Plant == null: data.Seed.Add(food.ToSave()); break;
+                case Sprout sprout: data.Sprouts.Add(sprout.ToSave()); break;
                 case Feeder feeder: data.Feeders.Add(feeder.ToSave()); break;
                 case Coin coin: data.LooseCoins.Add(coin.ToSave()); break;
                 case Rock rock: data.Rocks.Add(rock.ToSave()); break;
@@ -183,6 +184,13 @@ public class SaveGame
         world.FlushChanges();
         if (data.Rocks == null) Rock.PlaceNew(world);
         engine.Wear.RebuildLush(world);
+
+        // Sprouts, kept off the rocks (their heads come in with them)
+        foreach (SproutSave sprout in data.Sprouts)
+        {
+            sprout.Position = Rock.PushOut(world.PullInside(sprout.Position), Sprout.Reach);
+            Sprout.FromSave(sprout).AddToWorld(world);
+        }
 
         // Seed lying on the ground is moved off any rock; seed still falling rolls off by itself.
         foreach (FoodSave food in data.Seed)
@@ -257,6 +265,7 @@ public class SaveData
     public List<FoodSave> Seed { get; set; } = new();                 // piles on the dirt, or still falling
     public List<FeederSave> Feeders { get; set; } = new();
     public List<CoinSave> LooseCoins { get; set; } = new();
+    public List<SproutSave> Sprouts { get; set; } = new();
     public string GroundWear { get; set; } = "";                      // worn grass, one byte per cell (GroundWear.ToSave)
     public List<RockSave>? Rocks { get; set; }                        // null in a new world or a save from before rocks: new ones are placed
     public List<BirdSave> Regulars { get; set; } = new();             // birds away for now that may come back (BirdSpawner)
@@ -286,7 +295,8 @@ public class BirdSave
 {
     public BirdType Type { get; set; }
     public string Name { get; set; } = "";
-    public int ShapeIndex { get; set; }
+    public int ShapeIndex { get; set; }              // which built-in look (used when ShapeFile is null)
+    public string? ShapeFile { get; set; }           // the Birb Designer save it wears; null for a built-in look
     public Vector3 Position { get; set; }
     public float Speed { get; set; }
     public float Heading { get; set; }
@@ -302,6 +312,11 @@ public class BirdSave
     public int Visits { get; set; } = 1;
     public bool HasHome { get; set; }
     public Vector3 Home { get; set; }
+    public List<Trait>? Traits { get; set; }        // null in a save from before personalities: rolled on load
+    public SeedType? FavoriteSeed { get; set; }
+    public float Build { get; set; }                 // 0 in a save from before looks: rolled on load
+    public float Shade { get; set; }
+    public float Warmth { get; set; }
 }
 
 public class FoodSave
@@ -309,6 +324,14 @@ public class FoodSave
     public Vector3 Position { get; set; }
     public Dictionary<SeedType, float> Contents { get; set; } = new();
     public float FallSpeed { get; set; }
+    public float Age { get; set; }                         // only read from saves before layers (all layers this old)
+    public List<SeedLayerSave>? Layers { get; set; }       // bottom first; null in a save from before layers
+}
+
+public class SeedLayerSave
+{
+    public SeedType Seed { get; set; }
+    public float Amount { get; set; }
     public float Age { get; set; }
 }
 
@@ -325,6 +348,17 @@ public class RockSave
     public float Radius { get; set; }
     public float Height { get; set; }
     public int Look { get; set; }
+}
+
+public class SproutSave
+{
+    public Vector3 Position { get; set; }
+    public SeedType Seed { get; set; }
+    public float Age { get; set; }
+    public float Lifespan { get; set; }
+    public int Look { get; set; }
+    public float HeadSeed { get; set; }      // seed left on its heads
+    public float ShedTimer { get; set; }
 }
 
 public class CoinSave

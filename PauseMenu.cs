@@ -128,9 +128,9 @@ public class PauseMenu
                 Close(engine);    // first, so the Designer remembers the pause state from before the menu
                 engine.Designer.Toggle(engine);
                 break;
-            case Choice.Fullscreen: engine.ToggleFullscreen(); break;
+            case Choice.Fullscreen: engine.Window.ToggleFullscreen(); break;
             case Choice.Settings: page = Page.Settings; break;
-            case Choice.FullscreenType: engine.SetTrueFullscreen(!engine.TrueFullscreen); break;
+            case Choice.FullscreenType: engine.Window.SetTrueFullscreen(!engine.Window.TrueFullscreen); break;
             case Choice.NameTags: CycleNameTags(engine.Renderer.ChatMessages); break;
             case Choice.HandYellow: engine.Hands.Yellow = !engine.Hands.Yellow; break;
             case Choice.Quality: CycleQuality(engine.Renderer); break;
@@ -159,7 +159,7 @@ public class PauseMenu
             case Page.Settings:
                 return new()
                 {
-                    (Choice.FullscreenType, engine.TrueFullscreen ? "Fullscreen type: True" : "Fullscreen type: Window"),
+                    (Choice.FullscreenType, engine.Window.TrueFullscreen ? "Fullscreen type: True" : "Fullscreen type: Window"),
                     (Choice.NameTags, NameTagsLabel(engine.Renderer.ChatMessages.NameLabels)),
                     (Choice.HandYellow, engine.Hands.Yellow ? "Hands: Groening yellow (on)" : "Hands: Groening yellow"),
                     (Choice.Quality, QualityLabel(engine.Renderer.Quality)),
@@ -174,7 +174,7 @@ public class PauseMenu
                 {
                     (Choice.Resume, "Resume"),
                     (Choice.Designer, engine.Designer.IsOpen ? "Close Birb Designer" : "Birb Designer"),
-                    (Choice.Fullscreen, engine.IsFullscreen ? "Windowed" : "Fullscreen"),
+                    (Choice.Fullscreen, engine.Window.IsFullscreen ? "Windowed" : "Fullscreen"),
                     (Choice.Settings, "Settings"),
                     (Choice.Controls, "Controls"),
                     (Choice.NewWorld, "New world"),

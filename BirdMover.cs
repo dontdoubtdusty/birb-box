@@ -26,10 +26,11 @@ public class BirdMover
     private const float TurnRate = 4f;            // radians per second
     private const float FlySpeed = 3.2f;
     private const float NeighborRadius = 3f;      // how far a bird looks for its flock
-    private const float SeparationRadius = 0.7f;  // personal space
+    private const float SeparationRadius = 0.7f;  // personal space of an average bird (times Nature.PersonalSpace)
     private const float RockRoom = 0.12f;         // how close a bird's middle gets to a rock's edge
     private const float RockSteerReach = 0.9f;    // how far past a rock's edge birds start steering around it
     private const float PerchReach = 2.5f;        // how near a rock's edge a bird has to be to hop up
+    private const float BusyFoodPenalty = 4f;     // food with a bird it minds at it counts as this many times farther (Nature.Company)
     // Perch chance and home radius are tunable: see SimTuning.
     private const float EdgeMargin = 5f;          // birds turn back this far from the world's edge
     // HopPhase speeds: how fast the bird's rhythm runs (BirbAnimator draws from it)
@@ -208,7 +209,7 @@ public class BirdMover
 
             Vector2 away = Flat(bird.Position) - Flat(other.Position);
             float dist = away.Length();
-            force += SeparationPush(away, dist);
+            force += SeparationPush(away, dist, bird.Nature.PersonalSpace);
 
             if (other.Type == bird.Type && dist < NeighborRadius)
             {
@@ -241,16 +242,17 @@ public class BirdMover
             if (other == bird || other.IsFlying) continue;
 
             Vector2 away = Flat(bird.Position) - Flat(other.Position);
-            push += SeparationPush(away, away.Length());
+            push += SeparationPush(away, away.Length(), bird.Nature.PersonalSpace);
         }
         return push;
     }
 
     // The push away from one other bird: zero outside personal space, stronger the closer it is.
-    private static Vector2 SeparationPush(Vector2 away, float dist)
+    // space: how much room this bird wants (1 average). A shy bird's space is wider and pushes harder at the same distance.
+    private static Vector2 SeparationPush(Vector2 away, float dist, float space)
     {
-        if (dist <= 0.001f || dist >= SeparationRadius) return Vector2.Zero;
-        return away / (dist * dist) * 0.15f;
+        if (dist <= 0.001f || dist >= SeparationRadius * space) return Vector2.Zero;
+        return away / (dist * dist) * 0.15f * space;
     }
 
     // A push away from rocks the bird is close to, plus a sideways push so it walks around one
@@ -286,7 +288,7 @@ public class BirdMover
         {
             Vector2 toHome = Flat(bird.Home) - Flat(bird.Position);
             float dist = toHome.Length();
-            float homeRadius = SimTuning.Now.HomeRadius;
+            float homeRadius = SimTuning.Now.HomeRadius * bird.Nature.HomeRadius;
             if (dist > homeRadius) force += toHome / dist * MathF.Min((dist - homeRadius) / homeRadius, 1f) * 1.5f;
         }
 
@@ -300,14 +302,14 @@ public class BirdMover
     // ---------------- PERCHING ----------------
 
     // Sometimes, instead of pausing on the ground, a wandering bird near a rock hops up onto it,
-    // if there's room for one more. Returns true when it sets off.
+    // if there's room for one more and it's happy with who's up there already (Nature.Company). Returns true when it sets off.
     private bool TryStartPerch()
     {
         Bird bird = ParentBird;
-        if (bird.IsHungry() || !Rng.Chance(SimTuning.Now.PerchChance)) return false;
+        if (bird.IsHungry() || !Rng.Chance(SimTuning.Now.PerchChance * bird.Nature.PerchChance)) return false;
 
         Rock? rock = Rock.At(bird.Position, PerchReach);
-        if (rock == null || BirdsOn(rock) >= rock.PerchRoom) return false;
+        if (rock == null || BirdsOn(rock) >= rock.PerchRoom || !WillShare(rock)) return false;
 
         // A spot near the top, not right on the edge
         float angle = Rng.Range(0f, MathF.PI * 2f);
@@ -321,6 +323,41 @@ public class BirdMover
         perchTimer = Rng.Range(5f, 14f);
         perchLookTimer = 0f;
         return true;
+    }
+
+    // Whether this bird will sit with the birds already on the rock.
+    private bool WillShare(Rock rock)
+    {
+        if (ParentBird.Nature.Company == Company.Anyone) return true;
+
+        foreach (Bird other in World.Instance.GetAllEntities<Bird>())
+        {
+            if (other != ParentBird && other.Mover.PerchRock == rock && Minds(other)) return false;
+        }
+        return true;
+    }
+
+    // True if another bird is eating at this food, or on its way to it, that this bird minds (see Company).
+    // Seed in a feeder is one food, so this also covers the free perch beside a taken one.
+    private bool IsBusy(Food food)
+    {
+        foreach (Bird other in World.Instance.GetAllEntities<Bird>())
+        {
+            if (other == ParentBird || other.TargetFood != food) continue;
+            if ((other.State is BirdState.SeekingFood or BirdState.Eating) && Minds(other)) return true;
+        }
+        return false;
+    }
+
+    // Whether this bird would rather not be near the other one.
+    private bool Minds(Bird other)
+    {
+        return ParentBird.Nature.Company switch
+        {
+            Company.Alone => true,
+            Company.KinOnly => other.Type != ParentBird.Type,
+            _ => false,
+        };
     }
 
     private static int BirdsOn(Rock rock)
@@ -459,9 +496,12 @@ public class BirdMover
 
     // The best food within range. Tastier food counts as closer, so a bird will walk past
     // seed it barely likes to reach seed it loves (distance is divided by taste).
-    // A feeder the bird likes counts as closer still (divided by the feeder's appeal too).
-    public Food? FindNearestFood(float range)
+    // A feeder the bird likes counts as closer still (divided by the feeder's appeal too),
+    // and so does food holding the bird's own favorite seed (divided by favoritePull).
+    // A shy bird (Nature.Company) counts food with a bird it minds at it as farther, so it eats elsewhere when it can.
+    public Food? FindNearestFood(float range, SeedType favoriteSeed, float favoritePull)
     {
+        bool shy = ParentBird.Nature.Company != Company.Anyone;
         Food? best = null;
         float bestScore = float.MaxValue;
         BirdType type = ParentBird.Type;
@@ -478,6 +518,8 @@ public class BirdMover
             if (dist > range) continue;
 
             float score = dist / (Seeds.Get(favorite.Value).Tastes[type] * food.AppealFor(type));
+            if (food.HasFresh(favoriteSeed)) score /= favoritePull;
+            if (shy && score < bestScore && IsBusy(food)) score *= BusyFoodPenalty;
             if (score < bestScore)
             {
                 best = food;

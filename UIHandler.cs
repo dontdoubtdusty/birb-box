@@ -56,7 +56,9 @@ public class UIHandler
         ImGui.Text($"Window center: {engine.View.Center.X:0.0}, {engine.View.Center.Y:0.0}");
         ImGui.Text($"FPS {Raylib.GetFPS()}   frame {Raylib.GetFrameTime() * 1000f:0.0} ms   update {engine.UpdateMs:0.00} ms");
         ImGui.Text($"draw {engine.DrawMs:0.00} ms   model draws {DrawStats.ModelDraws}");
-        ImGui.Text($"Birds {World.Instance.GetAllEntities<Bird>().Count}   food {World.Instance.GetAllEntities<Food>().Count}");
+        FramePacing pacing = engine.Pacing;
+        ImGui.Text($"slow frames {pacing.RecentSlowFrames} last min, {pacing.SlowFrames} total   {pacing.RefreshRate} Hz {(pacing.TimerCap ? "timer" : "vsync")}");
+        ImGui.Text($"Birds {World.Instance.GetAllEntities<Bird>().Count}   food {World.Instance.GetAllEntities<Food>().Count}   sprouts {World.Instance.GetAllEntities<Sprout>().Count}");
 
         if (ImGui.Button(engine.Paused ? "Play" : "Pause", new Vector2(80, 0)))
         {
@@ -65,7 +67,7 @@ public class UIHandler
         ImGui.SameLine();
         if (ImGui.Button("Fullscreen (F)"))
         {
-            engine.ToggleFullscreen();
+            engine.Window.ToggleFullscreen();
         }
         ImGui.SliderFloat("Sim speed", ref engine.SimSpeed, 0.25f, 4f, "%.2fx");
 
@@ -82,6 +84,7 @@ public class UIHandler
         {
             for (int i = 0; i < 10; i++) engine.BirdSpawner.SpawnArrival();
         }
+        if (engine.SelectedBird is Bird selected && ImGui.Button("Re-roll selected bird's traits")) selected.RerollPersonality();
 
         ImGui.SeparatorText("Food");
         FoodSpawner food = engine.FoodSpawner;
@@ -94,6 +97,9 @@ public class UIHandler
         if (ImGui.Button("Scatter in view")) food.ScatterInView(scatterCount, engine.View);
         ImGui.SameLine();
         if (ImGui.Button("Scatter across world")) food.ScatterAcrossWorld(scatterCount);
+        Slider("Sprout chance", ref t.SproutChancePerSeed, d.SproutChancePerSeed, 0f, 0.3f, "%.3f per seed");
+        Slider("Sprout lives", ref t.SproutMinutes, d.SproutMinutes, 1f, 60f, "%.0f min");
+        Slider("Max sprouts", ref t.MaxSprouts, d.MaxSprouts, 0, 50);
 
         ImGui.SeparatorText("Coins");
         Slider("Drop chance", ref t.CoinDropChance, d.CoinDropChance, 0f, 1f, "%.2f per meal");
@@ -130,6 +136,8 @@ public class UIHandler
             ImGui.SameLine();
             if (ImGui.Button("Fill bucket")) FillBucket(engine.Bucket.Bucket);
             if (ImGui.Button("Clear ground seed")) FoodSpawner.ClearGroundSeed();
+            ImGui.SameLine();
+            if (ImGui.Button("Sprout in view")) SproutInView(engine.View);
         }
 
         if (ImGui.CollapsingHeader("Hologram"))
@@ -155,6 +163,17 @@ public class UIHandler
     // Each one is tinted brass while it's off its default, shows the default on hover, and goes back to it on right-click.
 
     private static readonly Vector4 ChangedTint = new Vector4(0.42f, 0.30f, 0.10f, 1f);
+
+    // Cheat: a grown sprout of a random seed somewhere near the middle of the view, its heads about to fill.
+    private static void SproutInView(ViewWindow view)
+    {
+        float reach = view.WorldHalfWidth * 0.6f;
+        for (int tries = 0; tries < 10; tries++)
+        {
+            Vector3 spot = new Vector3(view.Center.X + Rng.Range(-reach, reach), 0f, view.Center.Y + Rng.Range(-reach, reach));
+            if (Sprout.TryPlant(spot, Seeds.All[Rng.Next(Seeds.All.Length)], grown: true)) return;
+        }
+    }
 
     private static void Slider(string label, ref float value, float def, float min, float max, string format = "%.2f")
     {
@@ -216,7 +235,7 @@ public class UIHandler
             ImGui.PushID(bird.EntityID);
             // Click: select (again: deselect). Double-click: select and follow.
             // AllowDoubleClick makes the second click of a double-click report on its press, and skip its release.
-            if (ImGui.Selectable($"{bird.Name}  ({bird.State})", bird == engine.SelectedBird, ImGuiSelectableFlags.AllowDoubleClick))
+            if (ImGui.Selectable($"{bird.Name}  ({bird.State})  {Traits.Words(bird.Personality)}", bird == engine.SelectedBird, ImGuiSelectableFlags.AllowDoubleClick))
             {
                 if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left))
                 {
@@ -231,12 +250,24 @@ public class UIHandler
             if (ImGui.IsItemHovered())
             {
                 engine.HoveredBird = bird;
-                ImGui.SetTooltip($"HUNGER: {bird.Hunger:0.00}\nSPEED: {bird.Speed * 100:0}\nAGE: {bird.FormatAge()}");
+                ImGui.SetTooltip($"HUNGER: {bird.Hunger:0.00}\nSPEED: {bird.Speed * 100:0}\nAGE: {bird.FormatAge()}\n"
+                                 + $"FOND OF: {Seeds.Get(bird.FavoriteSeed).Name}\n"
+                                 + $"BUILD x{bird.Build:0.00}  SHADE {bird.Shade:0.00}  WARMTH {bird.Warmth:+0.00;-0.00}\n{NatureNumbers(bird.Nature)}");
             }
             ImGui.PopID();
         }
 
         ImGui.End();
+    }
+
+    // The raw numbers a bird's traits set (dev): personal space, perching, appetite, roaming, voice.
+    private static string NatureNumbers(TraitEffects n)
+    {
+        return $"SPACE x{n.PersonalSpace:0.0}  PERCH x{n.PerchChance:0.0}  COMPANY {n.Company}\n"
+             + $"HUNGER x{n.HungerSpeed:0.0}  HUNGRY <{n.HungryAt:0.00}  FULL {n.FullAt:0.00}\n"
+             + $"BITE x{n.Nourish:0.0}  BITE TIME x{n.BiteTime:0.0}  RANGE x{n.FoodRange:0.0}\n"
+             + $"HOME x{n.HomeRadius:0.0}  BORED x{n.LoseInterest:0.0}  RETURN x{n.ReturnWeight:0.0}\n"
+             + $"CALLS x{n.CallDelay:0.0}  IGNORE HUSH {n.IgnoreHush:0.0}";
     }
 
     // ---------------- EVENT LOG ----------------

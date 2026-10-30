@@ -33,6 +33,11 @@ public class SimTuning
     public float WearSpeed = 1f;                   // times as fast as the wear rates in GroundWear.cs
     public float RegrowSpeed = 1f;                 // times as fast as the regrowth in GroundWear.cs
 
+    // SPROUTS (see Sprout.cs)
+    public float SproutChancePerSeed = 0.05f;      // chance each rotted seed comes up as a sprout (1 seed 5%, 10 seed 40%)
+    public float SproutMinutes = 15f;              // how long a sprout lives, give or take a little
+    public int MaxSprouts = 12;
+
     // Keeps every number usable, in case the file was edited by hand or a min slider passed its max.
     public void Clamp()
     {
@@ -54,5 +59,8 @@ public class SimTuning
         SpoilSpeed = MathF.Max(0.01f, SpoilSpeed);
         WearSpeed = MathF.Max(0f, WearSpeed);
         RegrowSpeed = MathF.Max(0f, RegrowSpeed);
+        SproutChancePerSeed = Math.Clamp(SproutChancePerSeed, 0f, 1f);
+        SproutMinutes = MathF.Max(1f, SproutMinutes);
+        MaxSprouts = Math.Clamp(MaxSprouts, 0, 200);
     }
 }

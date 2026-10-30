@@ -39,11 +39,11 @@ public class BirdSpawner
         Dictionary<BirdType, float> pull = new();
         foreach (Food food in World.Instance.GetAllEntities<Food>())
         {
-            foreach ((SeedType seed, float amount) in food.Contents)
+            foreach (SeedLayer layer in food.Layers)
             {
-                if (food.IsSpoiled(seed)) continue;
-                if (food.Feeder == null) Seeds.AddAttraction(pull, seed, amount / FoodSpawner.PileAmount);
-                else AddFeederAttraction(pull, food.Feeder, seed, amount / FoodSpawner.PileAmount);
+                if (food.IsSpoiled(layer)) continue;
+                if (food.Feeder == null) Seeds.AddAttraction(pull, layer.Seed, layer.Amount / FoodSpawner.PileAmount);
+                else AddFeederAttraction(pull, food.Feeder, layer.Seed, layer.Amount / FoodSpawner.PileAmount);
             }
         }
 
@@ -145,6 +145,12 @@ public class BirdSpawner
             : World.Instance.RandomGroundPoint();
 
         landing += new Vector3(Rng.Range(-3f, 3f), 0, Rng.Range(-3f, 3f));
+        FlyDownTo(bird, landing);
+    }
+
+    // Starts the bird high up and a way off, flying down to land at this spot (moved off any rock).
+    private static void FlyDownTo(Bird bird, Vector3 landing)
+    {
         landing = Rock.PushOut(landing, 0.3f);
         landing.Y = bird.GroundY;
 
@@ -155,6 +161,23 @@ public class BirdSpawner
         bird.Position = start;
         bird.FlightTarget = landing;
         bird.ArrivingByAir = true;
+    }
+
+    // The Birb Designer's Release button: a new bird wearing a saved design flies down near a spot (the middle of the view).
+    // Always a new bird, never a regular coming back.
+    public Bird Release(BirdType type, BirdLook look, Vector3 spot)
+    {
+        Bird bird = CreateBird(type);
+        bird.UseLook(look);
+        bird.State = BirdState.Arriving;
+        bird.ArriveHungry();
+
+        Vector3 landing = spot + new Vector3(Rng.Range(-1f, 1f), 0, Rng.Range(-1f, 1f));
+        FlyDownTo(bird, World.Instance.PullInside(landing));
+        EventLog.Add($"{bird.Name} was released into the cube.");
+
+        World.Instance.AddEntity(bird);
+        return bird;
     }
 
     // Names count up per type and never repeat, even after birds leave.
@@ -177,16 +200,29 @@ public class BirdSpawner
     }
 
     // Half the time, if any bird of this kind is away, one of them comes back. Null means a new bird comes instead.
+    // Hearthbound birds are likelier to be the one, Wayfarers less (TraitEffects.ReturnWeight).
     private Bird? TakeRegular(BirdType type)
     {
         List<BirdSave> away = regulars.Where(save => save.Type == type).ToList();
         if (away.Count == 0 || !Rng.Chance(SimTuning.Now.RegularChance)) return null;
 
-        BirdSave pick = away[Rng.Next(away.Count)];
+        BirdSave pick = PickByReturnWeight(away);
         regulars.Remove(pick);
         Bird bird = Bird.FromSave(pick);
         bird.StartNewVisit();
         return bird;
+    }
+
+    private static BirdSave PickByReturnWeight(List<BirdSave> away)
+    {
+        List<float> weights = away.Select(save => Traits.EffectsOf(save.Traits).ReturnWeight).ToList();
+        float roll = Rng.Range(0f, weights.Sum());
+        for (int i = 0; i < away.Count; i++)
+        {
+            roll -= weights[i];
+            if (roll <= 0f) return away[i];
+        }
+        return away[^1];
     }
 
     public List<BirdSave> SaveRegulars() => new(regulars);
@@ -195,6 +231,22 @@ public class BirdSpawner
     {
         regulars.Clear();
         regulars.AddRange(saved);
+    }
+
+    // The first Frostcrest to enter the view unlocks their other tastes (see Seeds.FrostcrestSeen).
+    public void CheckFrostcrestSeen(ViewWindow view)
+    {
+        if (Seeds.FrostcrestSeen) return;
+
+        foreach (Bird bird in World.Instance.GetAllEntities<Bird>())
+        {
+            if (bird.Type == BirdType.Frostcrest && bird.State != BirdState.Leaving && view.Contains(bird.Position))
+            {
+                Seeds.FrostcrestSeen = true;
+                EventLog.Add("A Frostcrest has been spotted! Now that they know this place, corn may draw them in too.");
+                return;
+            }
+        }
     }
 
     // Saving (see SaveGame.cs): the name counters, so a loaded world never repeats a name.

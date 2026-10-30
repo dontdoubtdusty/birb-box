@@ -68,12 +68,12 @@ public static class Feeders
     {
         [FeederStyle.Tray] = new FeederInfo(
             "Almoner's Tray", "Doves eat right out of it.", price: 4, capacity: 10f,
-            new() { [BirdType.DuskDove] = 1.0f, [BirdType.Emberwing] = 0.8f, [BirdType.Glintfinch] = 0.4f, [BirdType.Frostcrest] = 0.6f },
+            new() { [BirdType.DuskDove] = 1.0f, [BirdType.Emberwing] = 0.8f, [BirdType.Gildfinch] = 0.4f, [BirdType.Frostcrest] = 0.6f },
             catchRadius: 0.4f, catchHeight: 0.22f, seedHeight: 0.21f, perchHeight: 0.21f, perchRadius: 0.22f, footRadius: 0.4f),
 
         [FeederStyle.Tube] = new FeederInfo(
             "Turret Feeder", "Finches perch. Doves can't.", price: 6, capacity: 8f,
-            new() { [BirdType.Glintfinch] = 1.0f, [BirdType.Emberwing] = 0.8f, [BirdType.Frostcrest] = 0.6f },
+            new() { [BirdType.Gildfinch] = 1.0f, [BirdType.Emberwing] = 0.8f, [BirdType.Frostcrest] = 0.6f },
             catchRadius: 0.25f, catchHeight: 1.0f, seedHeight: 0.56f, perchHeight: 0.608f, perchRadius: 0.25f, footRadius: 0.3f,
             perches: 2, portRadius: 0.085f, rodReach: 0.3f),
     };

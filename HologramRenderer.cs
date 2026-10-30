@@ -39,6 +39,7 @@ public class HologramRenderer
     private const float HoloLightHeight = 0.3f;    // the hologram's light on the room comes from this far above its floor
 
     public Shader HoloShader { get; private set; }
+    private Shader grainShader;    // seed grains, many in one draw (grain.vs with hologram.fs); gets the same uniforms as HoloShader
     private Shader postShader;
     private RenderTexture2D sceneTarget;
 
@@ -62,25 +63,18 @@ public class HologramRenderer
     public ChatMessages ChatMessages { get; } = new ChatMessages();
 
     // Shader uniform locations
-    private int locHoloOrigin, locBoxYaw, locHoloHalfWidth, locFogStart, locSwallow, locReveal, locCubeHeight, locViewCenter, locViewZoom, locViewPos, locHoloColor, locTime, locIsFloor;
+    private HoloUniforms holoUniforms = null!, grainUniforms = null!;
     private int locResolution, locPostTime, locGlow, locScanlines;
 
     public void Load(ViewWindow view)
     {
         HoloShader = Raylib.LoadShader(Assets.PathTo("shaders/hologram.vs"), Assets.PathTo("shaders/hologram.fs"));
-        locHoloOrigin = Raylib.GetShaderLocation(HoloShader, "holoOrigin");
-        locBoxYaw = Raylib.GetShaderLocation(HoloShader, "boxYaw");
-        locHoloHalfWidth = Raylib.GetShaderLocation(HoloShader, "holoHalfWidth");
-        locFogStart = Raylib.GetShaderLocation(HoloShader, "fogStart");
-        locSwallow = Raylib.GetShaderLocation(HoloShader, "swallow");
-        locReveal = Raylib.GetShaderLocation(HoloShader, "reveal");
-        locCubeHeight = Raylib.GetShaderLocation(HoloShader, "cubeHeight");
-        locViewCenter = Raylib.GetShaderLocation(HoloShader, "viewCenter");
-        locViewZoom = Raylib.GetShaderLocation(HoloShader, "viewZoom");
-        locViewPos = Raylib.GetShaderLocation(HoloShader, "viewPos");
-        locHoloColor = Raylib.GetShaderLocation(HoloShader, "holoColor");
-        locTime = Raylib.GetShaderLocation(HoloShader, "time");
-        locIsFloor = Raylib.GetShaderLocation(HoloShader, "isFloor");
+        holoUniforms = new HoloUniforms(HoloShader);
+
+        // Raylib finds grain.vs's per-grain transform (instanceTransform) by its name on its own
+        grainShader = Raylib.LoadShader(Assets.PathTo("shaders/grain.vs"), Assets.PathTo("shaders/hologram.fs"));
+        grainUniforms = new HoloUniforms(grainShader);
+        Raylib.SetShaderValue(grainShader, Raylib.GetShaderLocation(grainShader, "useVertexColor"), 1, ShaderUniformDataType.Int);
 
         postShader = Raylib.LoadShader(Assets.PathTo("shaders/post.vs"), Assets.PathTo("shaders/post.fs"));
         locResolution = Raylib.GetShaderLocation(postShader, "resolution");
@@ -89,7 +83,7 @@ public class HologramRenderer
         locScanlines = Raylib.GetShaderLocation(postShader, "scanlineStrength");
 
         fieldEdges.Load();
-        worldDrawer.Load(HoloShader, view);
+        worldDrawer.Load(HoloShader, grainShader, view);
         storeRenderer.Load(HoloShader);
         Backdrop.Load();
         pedestal.Load(Backdrop.RoomShader, view);    // after the Backdrop, whose room shader it uses
@@ -106,6 +100,7 @@ public class HologramRenderer
         Raylib.UnloadRenderTexture(FeedTexture);
         ChatMessages.Unload();
         Raylib.UnloadShader(HoloShader);
+        Raylib.UnloadShader(grainShader);
         Raylib.UnloadShader(postShader);
         if (sceneTarget.Id != 0) Raylib.UnloadRenderTexture(sceneTarget);
     }
@@ -230,22 +225,54 @@ public class HologramRenderer
     // ---------------- SETUP HELPERS ----------------
 
     // reveal: how far the projector has the picture up (see hologram.fs); 1 when fully on.
+    // Both hologram shaders get the same values, so grains fog and tint like everything else.
     private void SetHologramUniforms(Camera3D camera, ViewWindow view, float swallow, float reveal)
     {
         float time = (float)Raylib.GetTime();
-        Raylib.SetShaderValue(HoloShader, locHoloOrigin, Vector3.Zero, ShaderUniformDataType.Vec3);
-        Raylib.SetShaderValue(HoloShader, locBoxYaw, view.Yaw, ShaderUniformDataType.Float);
-        Raylib.SetShaderValue(HoloShader, locHoloHalfWidth, view.HalfWidth, ShaderUniformDataType.Float);
-        Raylib.SetShaderValue(HoloShader, locFogStart, view.FogStart, ShaderUniformDataType.Float);
-        Raylib.SetShaderValue(HoloShader, locSwallow, swallow, ShaderUniformDataType.Float);
-        Raylib.SetShaderValue(HoloShader, locReveal, reveal, ShaderUniformDataType.Float);
-        Raylib.SetShaderValue(HoloShader, locCubeHeight, view.Height, ShaderUniformDataType.Float);
-        Raylib.SetShaderValue(HoloShader, locViewCenter, view.Center, ShaderUniformDataType.Vec2);
-        Raylib.SetShaderValue(HoloShader, locViewZoom, view.Zoom, ShaderUniformDataType.Float);
-        Raylib.SetShaderValue(HoloShader, locViewPos, camera.Position, ShaderUniformDataType.Vec3);
-        Raylib.SetShaderValue(HoloShader, locHoloColor, HoloColor, ShaderUniformDataType.Vec3);
-        Raylib.SetShaderValue(HoloShader, locTime, time, ShaderUniformDataType.Float);
-        Raylib.SetShaderValue(HoloShader, locIsFloor, 0, ShaderUniformDataType.Int);
+        holoUniforms.Set(camera, view, swallow, reveal, HoloColor, time);
+        grainUniforms.Set(camera, view, swallow, reveal, HoloColor, time);
+    }
+
+    // The uniforms every hologram shader shares, found once per shader
+    private class HoloUniforms
+    {
+        private readonly Shader shader;
+        private readonly int origin, boxYaw, halfWidth, fogStart, swallow, reveal, cubeHeight, viewCenter, viewZoom, viewPos, holoColor, time, isFloor;
+
+        public HoloUniforms(Shader shader)
+        {
+            this.shader = shader;
+            origin = Raylib.GetShaderLocation(shader, "holoOrigin");
+            boxYaw = Raylib.GetShaderLocation(shader, "boxYaw");
+            halfWidth = Raylib.GetShaderLocation(shader, "holoHalfWidth");
+            fogStart = Raylib.GetShaderLocation(shader, "fogStart");
+            swallow = Raylib.GetShaderLocation(shader, "swallow");
+            reveal = Raylib.GetShaderLocation(shader, "reveal");
+            cubeHeight = Raylib.GetShaderLocation(shader, "cubeHeight");
+            viewCenter = Raylib.GetShaderLocation(shader, "viewCenter");
+            viewZoom = Raylib.GetShaderLocation(shader, "viewZoom");
+            viewPos = Raylib.GetShaderLocation(shader, "viewPos");
+            holoColor = Raylib.GetShaderLocation(shader, "holoColor");
+            time = Raylib.GetShaderLocation(shader, "time");
+            isFloor = Raylib.GetShaderLocation(shader, "isFloor");
+        }
+
+        public void Set(Camera3D camera, ViewWindow view, float swallowAmount, float revealAmount, Vector3 color, float seconds)
+        {
+            Raylib.SetShaderValue(shader, origin, Vector3.Zero, ShaderUniformDataType.Vec3);
+            Raylib.SetShaderValue(shader, boxYaw, view.Yaw, ShaderUniformDataType.Float);
+            Raylib.SetShaderValue(shader, halfWidth, view.HalfWidth, ShaderUniformDataType.Float);
+            Raylib.SetShaderValue(shader, fogStart, view.FogStart, ShaderUniformDataType.Float);
+            Raylib.SetShaderValue(shader, swallow, swallowAmount, ShaderUniformDataType.Float);
+            Raylib.SetShaderValue(shader, reveal, revealAmount, ShaderUniformDataType.Float);
+            Raylib.SetShaderValue(shader, cubeHeight, view.Height, ShaderUniformDataType.Float);
+            Raylib.SetShaderValue(shader, viewCenter, view.Center, ShaderUniformDataType.Vec2);
+            Raylib.SetShaderValue(shader, viewZoom, view.Zoom, ShaderUniformDataType.Float);
+            Raylib.SetShaderValue(shader, viewPos, camera.Position, ShaderUniformDataType.Vec3);
+            Raylib.SetShaderValue(shader, holoColor, color, ShaderUniformDataType.Vec3);
+            Raylib.SetShaderValue(shader, time, seconds, ShaderUniformDataType.Float);
+            Raylib.SetShaderValue(shader, isFloor, 0, ShaderUniformDataType.Int);
+        }
     }
 
     private void SetPostUniforms(int width, int height)

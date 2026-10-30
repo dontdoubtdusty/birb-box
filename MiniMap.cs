@@ -191,8 +191,14 @@ public class MiniMap
             Raylib.DrawCircleV(center, radius, new Color(120, 114, 104, 255));
         }
 
+        foreach (Sprout sprout in World.Instance.GetAllEntities<Sprout>())
+        {
+            Raylib.DrawCircleV(ToMap(sprout.Position), 2.5f, new Color(110, 170, 80, 255));
+        }
+
         foreach (Food food in World.Instance.GetAllEntities<Food>())
         {
+            if (food.Plant != null) continue;    // a sprout's heads: the sprout's dot covers them
             Color c = Seeds.Get(food.MainSeed).Color;
             Raylib.DrawRectangleV(ToMap(food.Position) - Vector2.One, new Vector2(2, 2), c);
         }

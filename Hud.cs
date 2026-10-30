@@ -5,6 +5,8 @@ using Raylib_cs;
 // the stats screen in the right side column (see SidePanels), and the selected bird or feeder card
 // floating at the top of the middle area. The world map is its own class (MiniMap).
 // Clickable parts of the bird card: the name (click to rename), and the Follow and Center buttons.
+// The bird card also shows its personality as four sliders, one per trait scale (hover one for its trait's flavor line),
+// and its favorite seed.
 // The feeder card shows the seed inside and has Move and Center buttons.
 public class Hud
 {
@@ -13,7 +15,20 @@ public class Hud
     private const int Pad = 10;
     private const int HeaderSize = 12;
     private const int NameSize = 20;
-    private const int CardWidth = 260, CardHeight = 164;
+    private const int CardWidth = 300, CardHeight = 280;
+    private const int TraitSize = 16;                                         // the "Fond of" line
+    private const int FlavorSize = 14, FlavorLineHeight = 17;
+
+    // TRAIT SLIDERS: one row per scale (name, brass track, the trait's word), a glowing pip on the bird's spot.
+    private const int SliderRowHeight = 22;
+    private const int SliderWordSize = 14;
+    private const int SliderGap = 10;               // between the name, the track and the word
+    private const float PipRadius = 4f;
+    private const float PipGlow = 9f;               // outer glow radius
+    private const float PipSlide = 8f;              // how quickly pips slide to their spot (higher is quicker)
+    private const float PipPulseSpeed = 2.5f;       // gentle breathing of the glow
+    private readonly float[] pipSpots = new float[Traits.Scales.Length];    // 0..1 along each track, eased in Update
+    private Bird? pipBird;                                                  // whose spots they are
     private const int SeedLineHeight = 20;
     private const int CardButtonHeight = 24, CardButtonGap = 6;
 
@@ -76,6 +91,50 @@ public class Hud
     {
         Layout(engine);
         HandleCardClicks(engine, mouseBlockedByImGui);
+        UpdatePips(engine.SelectedBird);
+    }
+
+    // Slides the slider pips toward the bird's spots. A newly selected bird's pips start in the middle and slide out.
+    private void UpdatePips(Bird? bird)
+    {
+        if (bird == null)
+        {
+            pipBird = null;
+            return;
+        }
+        if (bird != pipBird)
+        {
+            pipBird = bird;
+            for (int i = 0; i < pipSpots.Length; i++) pipSpots[i] = AverageSpot(Traits.Scales[i]);
+        }
+
+        float ease = MathF.Min(1f, Raylib.GetFrameTime() * PipSlide);
+        for (int i = 0; i < pipSpots.Length; i++)
+        {
+            pipSpots[i] += (SpotOf(bird, Traits.Scales[i]) - pipSpots[i]) * ease;
+        }
+    }
+
+    // The trait a bird holds on a scale, or null when it's average there.
+    private static Trait? TraitOn(Bird bird, TraitScale scale)
+    {
+        foreach (Trait trait in bird.Personality)
+        {
+            if (Traits.Get(trait).Scale == scale) return trait;
+        }
+        return null;
+    }
+
+    // Where a bird sits along a scale's track, 0 (left end) to 1 (right end).
+    private static float SpotOf(Bird bird, TraitScale scale) => StopSpot(scale, TraitOn(bird, scale));
+
+    private static float AverageSpot(TraitScale scale) => StopSpot(scale, null);
+
+    private static float StopSpot(TraitScale scale, Trait? trait)
+    {
+        IReadOnlyList<Trait?> stops = Traits.Stops(scale);
+        int index = Math.Max(0, stops.ToList().IndexOf(trait));
+        return stops.Count > 1 ? index / (float)(stops.Count - 1) : 0.5f;
     }
 
     // True when the mouse is over the selected bird card. The side columns are covered by SidePanels.IsMouseOver.
@@ -276,9 +335,129 @@ public class Hud
         y += 24;
 
         UiText.Draw($"Age {bird.FormatAge()}", x, y, 20, Palette.DimText);
+        y += 26;
+
+        Trait? hoveredTrait = DrawTraitSliders(bird, x, y, innerWidth);
+        y += Traits.Scales.Length * SliderRowHeight + 4;
+
+        SeedInfo favorite = Seeds.Get(bird.FavoriteSeed);
+        Raylib.DrawRectangle(x, y + 3, 4, 12, favorite.Color);
+        UiText.Draw($"Fond of {favorite.Name}", x + 10, y, TraitSize, Palette.DimText);
 
         UiDraw.Button(followButton, engine.FollowSelected ? "Following" : "Follow", accent, lit: engine.FollowSelected);
         UiDraw.Button(centerButton, "Center", accent);
+
+        if (hoveredTrait is Trait trait) DrawFlavor(trait, accent);
+    }
+
+    // One row per scale: its name, a brass track with a tick per stop (a small ring marks average),
+    // the bird's glowing pip, and its trait's word (or "average"). Returns the trait under the mouse, if any.
+    private Trait? DrawTraitSliders(Bird bird, int x, int y, int innerWidth)
+    {
+        int nameColumn = Traits.Scales.Max(scale => UiText.Measure(scale.ToString().ToUpper(), HeaderSize));
+        int wordColumn = Traits.All.Max(trait => UiText.Measure(Traits.Get(trait).Name, SliderWordSize));
+        float trackLeft = x + nameColumn + SliderGap + PipGlow / 2f;
+        float trackRight = x + innerWidth - wordColumn - SliderGap - PipGlow / 2f;
+        Vector2 mouse = Raylib.GetMousePosition();
+        float time = (float)Raylib.GetTime();
+        Trait? hovered = null;
+
+        for (int i = 0; i < Traits.Scales.Length; i++)
+        {
+            TraitScale scale = Traits.Scales[i];
+            Trait? trait = TraitOn(bird, scale);
+            int rowY = y + i * SliderRowHeight;
+            float midY = rowY + SliderRowHeight / 2f - 1f;
+
+            Rectangle row = new Rectangle(x - 3, rowY, innerWidth + 6, SliderRowHeight);
+            bool over = trait != null && Raylib.CheckCollisionPointRec(mouse, row);
+            if (over)
+            {
+                hovered = trait;
+                Raylib.DrawRectangleRec(row, Palette.PanelDark);
+            }
+
+            UiText.Draw(scale.ToString().ToUpper(), x, (int)midY - HeaderSize / 2, HeaderSize, Palette.DimText);
+            DrawTrack(scale, trackLeft, trackRight, midY);
+
+            float pipX = trackLeft + (trackRight - trackLeft) * pipSpots[i];
+            if (trait != null) DrawPip(new Vector2(pipX, midY), bird.Info.Color, time * PipPulseSpeed + i * 1.7f);
+            else Raylib.DrawCircleLines((int)pipX, (int)midY, PipRadius, Palette.DimText);
+
+            string word = trait is Trait held ? Traits.Get(held).Name : "average";
+            Color wordColor = trait == null ? Raylib.Fade(Palette.DimText, 0.7f) : over ? Palette.Text : Palette.BrassLight;
+            UiText.Draw(word, x + innerWidth - wordColumn, (int)midY - SliderWordSize / 2, SliderWordSize, wordColor);
+        }
+        return hovered;
+    }
+
+    // The brass line with a notch at each stop. The average stop is a small open ring instead of a notch.
+    private static void DrawTrack(TraitScale scale, float left, float right, float midY)
+    {
+        Raylib.DrawLineEx(new Vector2(left, midY), new Vector2(right, midY), 2f, Palette.Brass);
+
+        IReadOnlyList<Trait?> stops = Traits.Stops(scale);
+        for (int s = 0; s < stops.Count; s++)
+        {
+            float stopX = left + (right - left) * (stops.Count > 1 ? s / (float)(stops.Count - 1) : 0.5f);
+            if (stops[s] == null)
+            {
+                Raylib.DrawCircleV(new Vector2(stopX, midY), 3f, Palette.PanelFill);
+                Raylib.DrawCircleLines((int)stopX, (int)midY, 3f, Palette.Brass);
+            }
+            else
+            {
+                Raylib.DrawRectangle((int)stopX - 1, (int)midY - 4, 2, 8, Raylib.Fade(Palette.BrassLight, 0.7f));
+            }
+        }
+    }
+
+    // A softly breathing glow in the bird's color, a solid core, and a small bright glint.
+    private static void DrawPip(Vector2 at, Color color, float phase)
+    {
+        float breathe = 0.5f + 0.5f * MathF.Sin(phase);
+        Raylib.DrawCircleV(at, PipGlow + breathe * 1.5f, Raylib.Fade(color, 0.10f + 0.08f * breathe));
+        Raylib.DrawCircleV(at, PipRadius + 2f, Raylib.Fade(color, 0.35f));
+        Raylib.DrawCircleV(at, PipRadius, color);
+        Raylib.DrawCircleV(at + new Vector2(-1.2f, -1.2f), 1.3f, Palette.Lighten(color, 0.6f));
+    }
+
+    // A small panel just under the card with the hovered trait's flavor line, wrapped to the card's width.
+    private void DrawFlavor(Trait trait, Color accent)
+    {
+        int innerWidth = CardWidth - Pad * 2;
+        List<string> lines = Wrap(Traits.Get(trait).Flavor, FlavorSize, innerWidth);
+        Rectangle panel = new Rectangle(cardRect.X, cardRect.Y + cardRect.Height + 4, CardWidth, Pad * 2 + lines.Count * FlavorLineHeight);
+        UiDraw.Panel(panel, accent);
+
+        int y = (int)panel.Y + Pad;
+        foreach (string line in lines)
+        {
+            UiText.Draw(line, (int)panel.X + Pad, y, FlavorSize, Palette.Text);
+            y += FlavorLineHeight;
+        }
+    }
+
+    // Splits text into lines no wider than maxWidth, breaking between words.
+    private static List<string> Wrap(string text, int size, int maxWidth)
+    {
+        List<string> lines = new();
+        string line = "";
+        foreach (string word in text.Split(' '))
+        {
+            string longer = line.Length == 0 ? word : line + " " + word;
+            if (line.Length > 0 && UiText.Measure(longer, size) > maxWidth)
+            {
+                lines.Add(line);
+                line = word;
+            }
+            else
+            {
+                line = longer;
+            }
+        }
+        if (line.Length > 0) lines.Add(line);
+        return lines;
     }
 
     // The name, or while renaming, a text box with a blinking cursor.

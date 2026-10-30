@@ -88,7 +88,8 @@ public class Feeder : Entity
     }
 
     // Takes as much of the falling seed as fits. Returns what didn't fit, to spill onto the dirt.
-    public Dictionary<SeedType, float> Catch(Dictionary<SeedType, float> falling)
+    // impactSpeed: how fast it was falling (for the landing bounce in the tray).
+    public Dictionary<SeedType, float> Catch(Dictionary<SeedType, float> falling, float impactSpeed = 0f)
     {
         float total = falling.Values.Sum();
         float share = total <= 0f ? 0f : MathF.Min(1f, (Info.Capacity - Held) / total);
@@ -105,12 +106,12 @@ public class Feeder : Entity
         {
             if (Seed == null || Seed.IsFullyEaten)
             {
-                Seed = new Food(SeedSpot, taken, this);
+                Seed = new Food(SeedSpot, taken, this, impactSpeed);
                 World.Instance.AddEntity(Seed);
             }
             else
             {
-                Seed.AddSeed(taken);
+                Seed.AddSeed(taken, impactSpeed);
             }
         }
         return spilled;
@@ -169,7 +170,7 @@ public class Feeder : Entity
         Feeder feeder = new Feeder(save.Style) { Position = save.Position };
         if (save.Seed != null && save.Seed.Count > 0)
         {
-            feeder.Seed = new Food(feeder.SeedSpot, new(save.Seed), feeder);
+            feeder.Seed = new Food(feeder.SeedSpot, new(save.Seed), feeder, age: Food.SettledAge);
         }
         return feeder;
     }

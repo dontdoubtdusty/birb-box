@@ -5,21 +5,25 @@ using Raylib_cs;
 // The Birb Designer: build a birb out of parts and watch it move.
 // While it's open the world pauses and the hologram shows only the birb being designed, standing in the middle.
 // Dragging still turns the hologram, so the birb can be seen from every side.
-// It edits a copy, so birds already in the world keep their shape.
-// Designs are saved as .json files in resources/birbs/ (see BirbFile.cs).
+// It edits a copy, so birds already in the world keep their shape until the design is saved.
+// Designs are saved as .json files in resources/birbs/ (see BirbFile.cs). Each save is one more look for its
+// species in the world, and birds already wearing it switch to the saved version (see Birds.AddDesign).
+// Release saves the design and sends one bird wearing it into the middle of the view.
 // Opened with B or from the Esc menu.
 public class BirbDesigner
 {
     public bool IsOpen { get; private set; }
 
-    // The birb being designed: its shape plus species details (size, map color, common).
-    private BirbFile design = FromBird(BirdType.Emberwing, StarterBirbs.EmberwingCock);
+    // The birb being designed: its shape plus species details (species, size; map color and common for later).
+    private BirbFile design = FromBird(BirdType.Emberwing, Birds.Get(BirdType.Emberwing).BuiltInLooks[0]);
     public BirbShape Shape => design.Shape;
 
     // SAVING
     private string? currentFile;          // the file this design was opened from or last saved to
     private string? pendingReplace;       // waiting for "Replace?" to be answered for this file name
     private string status = "Not saved yet.";
+    private bool releasePending;          // Release was pressed: release once the save goes through
+    private BirdLook? releaseLook;        // saved and ready to release (handled in DrawWindow, which has the engine)
 
     // PREVIEW
     private float previewZoom = 4f;       // extra magnification so small birbs are easy to see; 1 = true size
@@ -109,6 +113,7 @@ public class BirbDesigner
         ImGui.Begin("Birb Designer", ref stayOpen);
 
         DrawTopSection();
+        if (releaseLook != null) Release(engine, releaseLook);
         if (ImGui.CollapsingHeader("Preview", ImGuiTreeNodeFlags.DefaultOpen)) DrawPreviewSection();
         if (ImGui.CollapsingHeader("Species")) DrawSpeciesSection();
         if (ImGui.CollapsingHeader("Movement")) DrawMovementSection();
@@ -127,9 +132,9 @@ public class BirbDesigner
         {
             foreach (BirdType type in Birds.All)
             {
-                foreach (BirbShape starter in Birds.Get(type).Shapes)
+                foreach (BirdLook starter in Birds.Get(type).BuiltInLooks)
                 {
-                    if (ImGui.Selectable(starter.Name)) UseDesign(FromBird(type, starter), null);
+                    if (ImGui.Selectable(starter.Shape.Name)) UseDesign(FromBird(type, starter), null);
                 }
             }
             ImGui.EndCombo();
@@ -151,12 +156,17 @@ public class BirbDesigner
         ImGui.TextDisabled(status);
     }
 
-    // Save, or Replace / Cancel while waiting for an answer.
+    // Save and Release, or Replace / Cancel while waiting for an answer.
     // Asks only when the file belongs to a different birb, not when saving back to the file this one came from.
+    // Release saves first, so the released bird's look is in a file and survives the world being saved.
     private void DrawSaveButtons()
     {
         string fileName = BirbFiles.FileNameFor(Shape.Name);
-        if (pendingReplace != null && pendingReplace != fileName) pendingReplace = null;    // the name changed
+        if (pendingReplace != null && pendingReplace != fileName)    // the name changed
+        {
+            pendingReplace = null;
+            releasePending = false;
+        }
 
         if (pendingReplace != null)
         {
@@ -164,28 +174,57 @@ public class BirbDesigner
             ImGui.SameLine();
             if (ImGui.Button("Replace")) SaveAs(pendingReplace);
             ImGui.SameLine();
-            if (ImGui.Button("Cancel")) pendingReplace = null;
+            if (ImGui.Button("Cancel"))
+            {
+                pendingReplace = null;
+                releasePending = false;
+            }
             return;
         }
 
-        if (!ImGui.Button("Save")) return;
+        bool save = ImGui.Button("Save");
+        ImGui.SameLine();
+        bool release = ImGui.Button("Release into the Cube");
+        if (!save && !release) return;
 
-        if (fileName.Length == 0) status = "Give the birb a name first.";
+        releasePending = release;
+        if (fileName.Length == 0)
+        {
+            status = "Give the birb a name first.";
+            releasePending = false;
+        }
         else if (fileName != currentFile && BirbFiles.Exists(fileName)) pendingReplace = fileName;
         else SaveAs(fileName);
     }
 
+    // Writes the file, then puts the design among its species' looks and updates birds already wearing it.
     private void SaveAs(string fileName)
     {
         pendingReplace = null;
         if (!BirbFiles.Save(design, fileName))
         {
             status = "Couldn't save. See the Bird Log (Tab) for why.";
+            releasePending = false;
             return;
         }
         currentFile = fileName;
         status = $"Saved {fileName}.json";
         EventLog.Add($"{Shape.Name} was saved to {Path.Combine(BirbFiles.Folder, fileName)}.json");
+
+        BirdLook look = Birds.AddDesign(design, fileName);
+        foreach (Bird bird in World.Instance.GetAllEntities<Bird>()) bird.RefreshLook();
+
+        if (releasePending) releaseLook = look;
+        releasePending = false;
+    }
+
+    // Closes the Designer and sends one bird wearing the saved look down into the middle of the view.
+    private void Release(GameEngine engine, BirdLook look)
+    {
+        releaseLook = null;
+        Close(engine);
+        Vector3 middle = new Vector3(engine.View.Center.X, 0f, engine.View.Center.Y);
+        engine.BirdSpawner.Release(design.Species, look, middle);
     }
 
     private void OpenFile(string fileName)
@@ -212,10 +251,13 @@ public class BirbDesigner
     }
 
     // A built-in birb as a design: a copy of its shape plus its species details from the bird table.
-    private static BirbFile FromBird(BirdType type, BirbShape shape)
+    private static BirbFile FromBird(BirdType type, BirdLook look)
     {
         BirdInfo info = Birds.Get(type);
-        return new BirbFile { Size = info.Size, MapColor = info.Color, Common = info.Common, Shape = shape.Copy() };
+        return new BirbFile
+        {
+            Species = type, Size = look.Size, MapColor = info.Color, Common = info.Common, Shape = look.Shape.Copy(),
+        };
     }
 
     private void DrawPreviewSection()
@@ -229,16 +271,31 @@ public class BirbDesigner
         ImGui.TextDisabled($"In the world: {size.X:0.00} wide, {size.Y:0.00} tall, {size.Z:0.00} long");
     }
 
-    // What kind of bird it is in the world. Saved with the birb, but the world doesn't use saved birbs yet.
+    // Which kind of bird wears this look in the world, and how big it is.
+    // Picking a species starts the size at that species' own size.
+    // Map color and Common belong to the species for now; they're kept in the file for new species later.
     private void DrawSpeciesSection()
     {
+        if (ImGui.BeginCombo("Species##SpeciesCombo", Birds.Get(design.Species).Name))
+        {
+            foreach (BirdType type in Birds.All)
+            {
+                if (!ImGui.Selectable(Birds.Get(type).Name, type == design.Species) || type == design.Species) continue;
+                design.Species = type;
+                design.Size = Birds.Get(type).Size;
+            }
+            ImGui.EndCombo();
+        }
+
         ImGui.SliderFloat("Size", ref design.Size, 0.1f, 0.6f, "%.2f");
+        ImGui.TextDisabled($"{Birds.Get(design.Species).Name} size is {Birds.Get(design.Species).Size:0.00}.");
 
+        ImGui.BeginDisabled();
         Vector3 color = ToVector(design.MapColor);
-        if (ImGui.ColorEdit3("Map color", ref color)) design.MapColor = ToColor(color);
-
+        ImGui.ColorEdit3("Map color", ref color);
         ImGui.Checkbox("Common (lives here, no special seed)", ref design.Common);
-        ImGui.TextDisabled("Not used in the world yet.");
+        ImGui.EndDisabled();
+        ImGui.TextDisabled("Map color and Common come from the species for now.");
     }
 
     private void DrawMovementSection()

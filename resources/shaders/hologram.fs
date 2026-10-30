@@ -28,6 +28,7 @@ uniform float time;
 uniform int isFloor;
 uniform int flatShade;       // 1 while drawing birbs: each triangle gets one flat shade (the faceted look)
 uniform float moss;          // 0 normally; while drawing a rock, how mossy its tops are (0 to 1)
+uniform int useVertexColor;  // 1 only in the grain shader (grain.vs), which hands each grain's color over in fragColor
 
 out vec4 finalColor;
 
@@ -113,7 +114,8 @@ void main()
     // Color comes from the texture and the material color (colDiffuse).
     // fragColor is ignored: the meshes have no vertex colors, and some
     // drivers fill the missing value with zero, which made birds invisible.
-    vec4 base = texture(texture0, fragTexCoord) * colDiffuse;
+    // The exception is seed grains: grain.vs fills fragColor with each grain's own color.
+    vec4 base = useVertexColor == 1 ? vec4(fragColor.rgb, 1.0) : texture(texture0, fragTexCoord) * colDiffuse;
 
     // Guard against a zero-length normal, which would turn into NaN
     vec3 normal = length(fragNormal) > 0.0001 ? normalize(fragNormal) : vec3(0.0, 1.0, 0.0);

@@ -34,12 +34,12 @@ public class FoodSpawner
         }
     }
 
-    // Tools panel cheat: every pile lying on the dirt is gone (seed in feeders stays). Emptied piles remove themselves next update.
+    // Tools panel cheat: every pile lying on the dirt is gone (seed in feeders and on sprouts stays). Emptied piles remove themselves next update.
     public static void ClearGroundSeed()
     {
         foreach (Food food in World.Instance.GetAllEntities<Food>())
         {
-            if (food.Feeder == null) food.ClearAway();
+            if (food.Feeder == null && food.Plant == null) food.ClearAway();
         }
     }
 

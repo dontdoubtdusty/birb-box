@@ -78,7 +78,7 @@ public class GroundWear
 
         foreach (Food food in world.GetAllEntities<Food>())
         {
-            if (food.Feeder != null || !food.IsLanded) continue;
+            if (food.Feeder != null || food.Plant != null || !food.IsLanded) continue;    // not seed in feeders or on seedheads
             AddWear(food.Position, SeedWear * SimTuning.Now.WearSpeed * dt);
         }
 

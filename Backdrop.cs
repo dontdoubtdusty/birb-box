@@ -30,7 +30,7 @@ public class Backdrop
 
     // WINDOW VIEW: the starfield picture (resources/starfield.png) behind the glass, with the painted planet in front
     private const float SkyPixelsPerUnit = 50f;     // how many of the picture's pixels one unit of glass shows
-    private const float SkyDrift = 1f / 900f;       // picture widths per second the stars slide by (one width in 15 minutes)
+    private const double SkyDrift = 1.0 / 300.0;    // picture widths per second the stars slide by (one width in 5 minutes)
     private const float WindowDepth = 0.5f;         // how far away the stars look when the camera moves: 0 painted on the glass, 1 truly far
     private const float PlanetPixelsPerUnit = 40f;  // the painted planet's picture size
     private static readonly Color SkyTint = new Color(225, 225, 235, 255);    // a touch dimmer and cooler than the picture
@@ -330,7 +330,9 @@ public class Backdrop
 
         // Truly far stars move one unit of glass (SkyPixelsPerUnit) for each 1/distance radians the view turns
         float pixelsPerRadian = SkyPixelsPerUnit * toWindow.Length() * WindowDepth;
-        float u = (float)Raylib.GetTime() * SkyDrift + across * pixelsPerRadian / starfield.Width;
+        // The mirrored picture repeats every 2 widths, so the drift is kept below 2: small numbers stay precise in long sessions
+        float drift = (float)(Raylib.GetTime() * SkyDrift % 2.0);
+        float u = drift + across * pixelsPerRadian / starfield.Width;
         float v = -up * pixelsPerRadian / starfield.Height;
         return new Vector2(u, v);
     }

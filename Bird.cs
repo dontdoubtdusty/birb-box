@@ -10,11 +10,28 @@ public class Bird : Entity
     public int Visits { get; private set; } = 1;   // 2 and up: a regular that came back
     public BirdType Type { get; private set; }
     public BirdInfo Info => Birds.Get(Type);
-    public BirbShape Shape { get; private set; }
+    public BirdLook Look { get; private set; }         // its shape and base size: built in, or a Birb Designer save
+    public BirbShape Shape => Look.Shape;
     public BoundingBox Bounds { get; private set; }    // around the shape, before Size is applied
 
+    // PERSONALITY (see Traits.cs): rolled on its first arrival, kept for life, saved.
+    public IReadOnlyList<Trait> Personality => personality;
+    private List<Trait> personality = new();
+    public TraitEffects Nature { get; private set; } = new();    // the numbers its traits change
+    public SeedType FavoriteSeed { get; private set; }           // a mild pull toward piles that have it
+    private const float FavoritePull = 1.5f;                     // its favorite seed counts as this many times closer
+
+    // LOOKS: rolled once when it's first made, saved, kept by regulars, so no two birds of a kind are quite alike.
+    public float Build { get; private set; } = 1f;         // times its look's size
+    public float Shade { get; private set; } = 1f;         // how bright its feathers are (1 as designed, lower is darker)
+    public float Warmth { get; private set; }              // -1 cooler (a little less red) to 1 warmer (a little less blue)
+    public Color Plumage { get; private set; } = Color.White;    // Shade and Warmth as a tint on every part (see WorldDrawer)
+    private const float BuildSpread = 0.1f;                // size up to this share bigger or smaller, before its traits' lean
+    private const float ShadeMin = 0.84f;
+    private const float WarmthStrength = 0.12f;            // how much of the other end's color a fully warm or cool bird loses
+
     // BODY
-    public float Size { get; private set; }        // birb units to world units
+    public float Size { get; private set; }        // birb units to world units (its look's size times Build)
     public float Speed { get; private set; }       // walking speed, units per second
     public float Heading { get; set; }             // radians, 0 = facing +Z
     public float HopPhase { get; set; }
@@ -23,8 +40,7 @@ public class Bird : Entity
     // LIFE & HUNGER
     public float Age { get; private set; }         // seconds of simulation time
     public float Lifespan { get; private set; }
-    public float Hunger { get; private set; } = 1f;     // 1 = full, 0 = starving
-    public float HungerThreshold { get; private set; } = 0.4f;
+    public float Hunger { get; private set; } = 1f;     // 1 = full, 0 = starving (it gets hungry below Nature.HungryAt)
     private const float StarveLimit = 25f;         // seconds at zero hunger before leaving
     private float starveTimer = 0f;
     private const float OldSaveLifespan = 3600f;   // saves from before 4.54 had shorter lifespans; those birds get a new one
@@ -70,7 +86,9 @@ public class Bird : Entity
     {
         Type = type;
         Name = name;
-        Size = Info.Size;
+        SetPersonality(Traits.Roll(type));
+        FavoriteSeed = Seeds.RollFavorite(type);
+        RollLooks();
         Speed = Rng.Range(0.45f, 1f);
         Lifespan = NewLifespan();
         Hunger = Rng.Range(0.5f, 1f);
@@ -82,16 +100,77 @@ public class Bird : Entity
         interestTimer = Rng.Range(0f, InterestCheckInterval);
         Mover = new BirdMover(this);
 
-        SetShape(Rng.Next(Info.Shapes.Length));
+        UseLook(Info.Looks[Rng.Next(Info.Looks.Count)]);
     }
 
-    // Picks one of its species' shapes. The origin is not at the feet, so the bottom of the box tells how high to lift the bird.
-    [MemberNotNull(nameof(Shape))]
-    private void SetShape(int index)
+    // Takes on a look and works out its size and how high it stands.
+    // The origin is not at the feet, so the bottom of the box tells how high to lift the bird.
+    [MemberNotNull(nameof(Look))]
+    public void UseLook(BirdLook look)
     {
-        Shape = Info.Shapes[index];
+        Look = look;
         Bounds = Shape.GetBounds();
+        Size = look.Size * Build;
         GroundY = -Bounds.Min.Y * Size;
+    }
+
+    // After a design is saved again in the Designer: a bird wearing it switches to the new version.
+    // A bird standing on the ground stays on the ground, even if the new version stands taller or shorter.
+    public void RefreshLook()
+    {
+        if (Look.File == null) return;
+        BirdLook? fresh = Info.Looks.Find(look => Birds.SameFile(look.File, Look.File));
+        if (fresh == null || fresh == Look) return;
+
+        bool onGround = !IsFlying;
+        UseLook(fresh);
+        if (onGround) Position = new Vector3(Position.X, GroundY, Position.Z);
+    }
+
+    // The look a save names: its Designer file if that still belongs to this species, otherwise a built-in look by number.
+    // A design that was deleted or moved to another species gives a random look of this species instead.
+    private BirdLook SavedLook(string? file, int index)
+    {
+        if (file != null)
+        {
+            return Info.Looks.Find(look => Birds.SameFile(look.File, file)) ?? Info.Looks[Rng.Next(Info.Looks.Count)];
+        }
+        List<BirdLook> builtIn = Info.BuiltInLooks;
+        return builtIn[Math.Clamp(index, 0, builtIn.Count - 1)];
+    }
+
+    // A size, shade and warmth of its own. Its traits can lean the size (Trencherbirds bigger, Dainty birds smaller).
+    private void RollLooks()
+    {
+        float build = Rng.Range(1f - BuildSpread, 1f + BuildSpread) * Nature.BuildLean;
+        SetLooks(build, Rng.Range(ShadeMin, 1f), Rng.Range(-1f, 1f));
+    }
+
+    // Sets the build and the feather tint. Call UseLook afterward, since its size and how high it stands depend on Build.
+    private void SetLooks(float build, float shade, float warmth)
+    {
+        Build = build;
+        Shade = Math.Clamp(shade, 0f, 1f);
+        Warmth = Math.Clamp(warmth, -1f, 1f);
+
+        float red = Shade * (1f - WarmthStrength * MathF.Max(0f, -Warmth));
+        float blue = Shade * (1f - WarmthStrength * MathF.Max(0f, Warmth));
+        Plumage = new Color((int)(red * 255f), (int)(Shade * 255f), (int)(blue * 255f), 255);
+    }
+
+    // Takes on a set of traits and works out the numbers they change.
+    private void SetPersonality(IEnumerable<Trait> traits)
+    {
+        personality = Traits.Clean(traits);
+        Nature = Traits.EffectsOf(personality);
+    }
+
+    // Dev only (tools panel): a fresh personality and favorite seed, as if it had just arrived for the first time.
+    public void RerollPersonality()
+    {
+        SetPersonality(Traits.Roll(Type));
+        FavoriteSeed = Seeds.RollFavorite(Type);
+        callTimer = NextCallDelay();
     }
 
     // ---------------- SAVING (see SaveGame.cs) ----------------
@@ -100,7 +179,8 @@ public class Bird : Entity
     {
         Type = Type,
         Name = Name,
-        ShapeIndex = Math.Max(0, Array.IndexOf(Info.Shapes, Shape)),
+        ShapeIndex = Math.Max(0, Info.BuiltInLooks.IndexOf(Look)),
+        ShapeFile = Look.File,
         Position = Position,
         Speed = Speed,
         Heading = Heading,
@@ -116,15 +196,23 @@ public class Bird : Entity
         Visits = Visits,
         HasHome = HasHome,
         Home = Home,
+        Traits = new(personality),
+        FavoriteSeed = FavoriteSeed,
+        Build = Build,
+        Shade = Shade,
+        Warmth = Warmth,
     };
 
     // A bird that was heading for or eating some seed goes back to wandering; it finds its food again in a moment.
     // One that was up on a feeder flutters down first, like after any meal there.
     // A save from before the long lives gets a new lifespan in the new range.
+    // A save from before personalities (4.85) keeps the traits and favorite seed rolled when it was made here,
+    // and one from before looks (4.88) keeps the size and tint rolled here.
     public static Bird FromSave(BirdSave save)
     {
         Bird bird = new Bird(save.Type, save.Name);
-        bird.SetShape(Math.Clamp(save.ShapeIndex, 0, bird.Info.Shapes.Length - 1));
+        if (save.Build > 0f) bird.SetLooks(save.Build, save.Shade, save.Warmth);
+        bird.UseLook(bird.SavedLook(save.ShapeFile, save.ShapeIndex));
         bird.Position = save.Position;
         bird.Speed = save.Speed;
         bird.Heading = save.Heading;
@@ -140,6 +228,9 @@ public class Bird : Entity
         bird.Visits = Math.Max(1, save.Visits);
         bird.HasHome = save.HasHome;
         bird.Home = save.Home;
+        if (save.Traits != null) bird.SetPersonality(save.Traits);
+        if (save.FavoriteSeed is SeedType favorite && Seeds.Eats(save.Type, favorite)) bird.FavoriteSeed = favorite;
+        bird.callTimer = bird.NextCallDelay();
         return bird;
     }
 
@@ -230,7 +321,7 @@ public class Bird : Entity
         interestTimer = InterestCheckInterval;
 
         bool scarce = !World.Instance.GetAllEntities<Food>().Any(food => !food.IsFullyEaten && CanEat(food));
-        float chance = InterestCheckInterval / (SimTuning.Now.LoseInterestMinutes * 60f) * (scarce ? ScarceFoodFactor : 1f);
+        float chance = InterestCheckInterval / (SimTuning.Now.LoseInterestMinutes * 60f) * (scarce ? ScarceFoodFactor : 1f) * Nature.LoseInterest;
         if (!Rng.Chance(chance)) return;
 
         StartLeaving(scarce ? $"{Name} found the pickings slim and flew off." : $"{Name} lost interest and flew off.");
@@ -252,13 +343,14 @@ public class Bird : Entity
     }
 
     // Calls out now and then, and flaps when it leaves or touches the ground.
-    // If another bird called close by a moment ago, it holds its call and tries again a little later.
+    // If another bird called close by a moment ago, it holds its call and tries again a little later
+    // (a Town Crier sometimes calls anyway).
     private void UpdateVoice(float dt)
     {
         callTimer -= dt;
         if (callTimer <= 0f)
         {
-            if (Sounds.CalledNearby(Position)) callTimer = Rng.Range(HushRetryMin, HushRetryMax);
+            if (Sounds.CalledNearby(Position) && !Rng.Chance(Nature.IgnoreHush)) callTimer = Rng.Range(HushRetryMin, HushRetryMax);
             else Call();
         }
 
@@ -274,7 +366,7 @@ public class Bird : Entity
         callTimer = NextCallDelay();
     }
 
-    private static float NextCallDelay() => Rng.Range(SimTuning.Now.CallDelayMin, SimTuning.Now.CallDelayMax);
+    private float NextCallDelay() => Rng.Range(SimTuning.Now.CallDelayMin, SimTuning.Now.CallDelayMax) * Nature.CallDelay;
 
     // Seconds this bird will live, from the tuned range in minutes.
     private static float NewLifespan() => Rng.Range(SimTuning.Now.LifespanMinMinutes, SimTuning.Now.LifespanMaxMinutes) * 60f;
@@ -293,19 +385,19 @@ public class Bird : Entity
     private void TickDownHunger(float dt)
     {
         // The slider value is "seconds per 5% hunger".
-        float rate = 0.05f / SimTuning.Now.HungerRate;
+        float rate = 0.05f / SimTuning.Now.HungerRate * Nature.HungerSpeed;
         Hunger = MathF.Max(0f, Hunger - rate * dt);
 
         if (Hunger <= 0f) starveTimer += dt;
         else starveTimer = 0f;
     }
 
-    public bool IsHungry() => Hunger < HungerThreshold;
+    public bool IsHungry() => Hunger < Nature.HungryAt;
 
     // Birds drawn in by seed arrive ready to eat it.
     public void ArriveHungry()
     {
-        Hunger = HungerThreshold - Rng.Range(0.05f, 0.15f);
+        Hunger = MathF.Max(0.05f, Nature.HungryAt - Rng.Range(0.05f, 0.15f));
     }
 
     // A bird only eats seed it has a taste for (see the seed table in Seeds.cs).
@@ -313,7 +405,7 @@ public class Bird : Entity
 
     private void TryFindFood()
     {
-        Food? nearest = Mover.FindNearestFood(10f);
+        Food? nearest = Mover.FindNearestFood(10f * Nature.FoodRange, FavoriteSeed, FavoritePull);
         if (nearest != null)
         {
             TargetFood = nearest;
@@ -330,9 +422,9 @@ public class Bird : Entity
             return;
         }
 
-        // Close enough to a feeder to flutter up onto it, or to a pile to start pecking
+        // Close enough to a feeder to flutter up onto it, or to a pile to start pecking (just outside a big heap)
         Feeder? feeder = TargetFood.Feeder;
-        float reach = feeder != null ? feeder.Info.PerchRadius + 0.5f : 0.6f;
+        float reach = feeder != null ? feeder.Info.PerchRadius + 0.5f : MathF.Max(0.6f, TargetFood.HeapRadius + 0.3f);
         if (Mover.IsCloseTo(TargetFood.Position, reach))
         {
             perchSpot = feeder?.TakePerch(this);
@@ -364,15 +456,15 @@ public class Bird : Entity
         Mover.PeckAt(TargetFood.Position, dt, perched: perchSpot != null);
 
         eatTimer += dt;
-        if (eatTimer >= BiteInterval)
+        if (eatTimer >= BiteInterval * Nature.BiteTime)
         {
             eatTimer = 0f;
-            if (TargetFood.TakeBite(Type))
+            if (TargetFood.TakeBite(Type, FavoriteSeed))
             {
-                Hunger = MathF.Min(1f, Hunger + Food.NutritionPerBite);
+                Hunger = MathF.Min(1f, Hunger + Food.NutritionPerBite * Nature.Nourish);
             }
 
-            if (Hunger >= 0.95f)
+            if (Hunger >= Nature.FullAt)
             {
                 TargetFood = null;
                 State = BirdState.Wandering;

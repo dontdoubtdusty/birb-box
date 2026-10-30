@@ -11,7 +11,7 @@ public class Shopkeeper
     public BirdType Type { get; private set; }
     public BirbShape Shape { get; private set; } = null!;
     public string Name { get; private set; } = "";
-    public float Size => Birds.Get(Type).Size;         // scene units per birb unit, the same as in the bird world
+    public float Size { get; private set; }            // scene units per birb unit, the same as in the bird world
 
     // The box around the birb's shape, in birb units. Measured the first time it's asked for, not when the shift
     // starts: the first shift starts before the game window opens, and the part meshes it needs only load after that.
@@ -118,8 +118,10 @@ public class Shopkeeper
         if (choices.Count > 1 && Shape != null) choices.Remove(Type);
 
         Type = choices[Rng.Next(choices.Count)];
-        BirbShape[] shapes = Birds.Get(Type).Shapes;
-        Shape = shapes[Rng.Next(shapes.Length)];
+        List<BirdLook> looks = Birds.Get(Type).Looks;
+        BirdLook look = looks[Rng.Next(looks.Count)];
+        Shape = look.Shape;
+        Size = look.Size;
         Name = $"{Titles[Rng.Next(Titles.Length)]} {GivenNames[Rng.Next(GivenNames.Length)]} the {Birds.Get(Type).Name}";
         bounds = null;    // a new shape, so it gets measured again
 

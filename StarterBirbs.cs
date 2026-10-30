@@ -39,7 +39,7 @@ public static class StarterBirbs
         body: Rgb(80, 130, 240), wing: Rgb(50, 85, 180), crest: Rgb(185, 225, 255), mask: Rgb(20, 30, 60), beak: Rgb(215, 230, 240));
 
     public static readonly BirbShape DuskDove = MakeDuskDove();
-    public static readonly BirbShape Glintfinch = MakeGlintfinch();
+    public static readonly BirbShape Gildfinch = MakeGildfinch();
 
     // Emberwings and Frostcrests share one build: a pointed crest, a dark face mask and a thick beak.
     private static BirbShape Cardinal(string name, Color body, Color wing, Color crest, Color mask, Color beak)
@@ -78,12 +78,12 @@ public static class StarterBirbs
         return s;
     }
 
-    private static BirbShape MakeGlintfinch()
+    private static BirbShape MakeGildfinch()
     {
         Color gold = Rgb(240, 185, 40);
         Color wing = Rgb(35, 35, 40);
 
-        BirbShape s = new BirbShape("Glintfinch")
+        BirbShape s = new BirbShape("Gildfinch")
             .Add(new BirbPart("Body", Sphere, V(0, -0.72f, 0), V(0.75f, 0.72f, 0.95f), V(0, 0, 0), gold) { Role = PartRole.Body })
             .Add(new BirbPart("Head", Sphere, V(0, 0.22f, 0.75f), V(0.48f, 0.48f, 0.48f), V(0, 0, 0), gold) { Role = PartRole.Head, Parent = "Body" })
             .Add(new BirbPart("Cap", Sphere, V(0, 0.8f, 0.82f), V(0.4f, 0.18f, 0.38f), V(0, 0, 0), Black) { Parent = "Head" })

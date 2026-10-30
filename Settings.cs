@@ -62,8 +62,8 @@ public static class Settings
             BirdVolume = Sounds.BirdLevel,
             EffectsVolume = Sounds.EffectsLevel,
             RadioVolume = engine.Radio.Player.Volume,
-            Fullscreen = engine.IsFullscreen,
-            TrueFullscreen = engine.TrueFullscreen,
+            Fullscreen = engine.Window.IsFullscreen,
+            TrueFullscreen = engine.Window.TrueFullscreen,
             NameTags = engine.Renderer.ChatMessages.NameLabels,
             HandTone = engine.Hands.Tone,
             HandYellow = engine.Hands.Yellow,
@@ -102,8 +102,8 @@ public static class Settings
         engine.View.FogStart = Math.Clamp(data.FogStart, 0.3f, 0.99f);
         if (data.RadioDial is float dial) engine.Radio.Player.Tuning = Math.Clamp(dial, 0f, 1f);
 
-        engine.SetTrueFullscreen(data.TrueFullscreen);
-        if (data.Fullscreen != engine.IsFullscreen) engine.ToggleFullscreen();
+        engine.Window.SetTrueFullscreen(data.TrueFullscreen);
+        if (data.Fullscreen != engine.Window.IsFullscreen) engine.Window.ToggleFullscreen();
     }
 }
 
