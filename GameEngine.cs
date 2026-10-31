@@ -8,7 +8,7 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Cube 5.06 Alpha";
+    public const string Version = "Birb Cube 5.07 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }

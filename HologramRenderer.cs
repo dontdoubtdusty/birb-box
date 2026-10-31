@@ -187,7 +187,7 @@ public class HologramRenderer
                         // The sun and moon: only in the room view, fading as the camera dives in and while the scene switches
                         if (!designer.IsOpen) skyOrbs.Draw(camera, view, projector.Cube * (1f - immersion) * (1f - mode.Swallow));
                         if (designer.IsOpen) designer.DrawPreview(view);
-                        else worldDrawer.DrawContents(view, selected, hovered, Palette.ToColor(HoloColor));
+                        else worldDrawer.DrawContents(view, view.SceneToBox(camera.Position), selected, hovered, Palette.ToColor(HoloColor));
                     }
                     fieldEdges.Draw(view.HalfWidth, view.Height, ringYaw, CurtainHeight, projector.Cube, HoloColor, WallStrength, camera.Position,
                                     shown: 1f - immersion);
@@ -250,7 +250,7 @@ public class HologramRenderer
             Raylib.ClearBackground(new Color(12, 16, 22, 255));
             Raylib.BeginMode3D(feedCamera);
                 worldDrawer.DrawFloor(view);
-                worldDrawer.DrawContents(view, selected, hovered: null, Palette.ToColor(HoloColor));
+                worldDrawer.DrawContents(view, view.SceneToBox(feedCamera.Position), selected, hovered: null, Palette.ToColor(HoloColor));
             Raylib.EndMode3D();
         Raylib.EndTextureMode();
     }

@@ -39,7 +39,7 @@ public partial class WorldDrawer
     private Matrix4x4[] blockBatch = new Matrix4x4[512];
     private int roundCount, blockCount;
 
-    private void DrawFood(ViewWindow view)
+    private void DrawFood(ViewWindow view, Vector3 eye)
     {
         roundCount = 0;
         blockCount = 0;
@@ -56,7 +56,7 @@ public partial class WorldDrawer
         }
         AddSprouts(view);
         AddDroplets(view);
-        AddRain(view);
+        AddRain(view, eye);
 
         if (roundCount > 0)
         {

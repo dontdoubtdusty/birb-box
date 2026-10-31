@@ -145,11 +145,12 @@ public partial class WorldDrawer
     }
 
     // Everything standing on the floor. ringColor is the ring under the selected bird or feeder.
-    public void DrawContents(ViewWindow view, Bird? selected, Bird? hovered, Color ringColor)
+    // eye is the camera's position in box space (the rain thins out near it, see RainDrawing.cs).
+    public void DrawContents(ViewWindow view, Vector3 eye, Bird? selected, Bird? hovered, Color ringColor)
     {
         DrawRocks(view);
         DrawFeeders(view, ringColor);
-        DrawFood(view);
+        DrawFood(view, eye);
         DrawCoins(view);
         DrawBirds(view, selected, hovered, ringColor);
     }
