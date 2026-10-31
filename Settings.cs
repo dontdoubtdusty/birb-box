@@ -70,6 +70,7 @@ public static class Settings
             Tuning = SimTuning.Now,
             HoloColor = engine.Renderer.HoloColor,
             Glow = engine.Renderer.GlowStrength,
+            RimGlow = engine.Renderer.RimGlow,
             Scanlines = engine.Renderer.ScanlineStrength,
             Quality = engine.Renderer.Quality,
             ShowProjector = engine.Renderer.ShowProjector,
@@ -97,6 +98,7 @@ public static class Settings
         SimTuning.Now.Clamp();
         engine.Renderer.HoloColor = Vector3.Clamp(data.HoloColor, Vector3.Zero, Vector3.One);
         engine.Renderer.GlowStrength = Math.Clamp(data.Glow, 0f, 3f);
+        engine.Renderer.RimGlow = Math.Clamp(data.RimGlow, 0f, 1.5f);
         engine.Renderer.ScanlineStrength = Math.Clamp(data.Scanlines, 0f, 0.5f);
         engine.Renderer.Quality = Math.Clamp(data.Quality, 1f, 2f);
         engine.Renderer.ShowProjector = data.ShowProjector;
@@ -129,6 +131,7 @@ public class SettingsData
     public SimTuning Tuning { get; set; } = new();
     public Vector3 HoloColor { get; set; } = new Vector3(0.36f, 0.86f, 0.82f);
     public float Glow { get; set; } = 0.7f;
+    public float RimGlow { get; set; } = 0.45f;       // the rim on models' edges (hologram.fs); missing in older files, so it starts as built
     public float Scanlines { get; set; } = 0.12f;
     public float Quality { get; set; } = 2f;          // hologram quality, 1 to 2 (Esc menu Settings)
     public bool ShowProjector { get; set; } = true;

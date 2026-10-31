@@ -269,7 +269,7 @@ public class BirdMover
             float dist = away.Length();
             force += SeparationPush(away, dist, bird.Nature.PersonalSpace);
 
-            if (other.Type == bird.Type && dist < NeighborRadius)
+            if (other.Species == bird.Species && dist < NeighborRadius)
             {
                 center += Flat(other.Position);
                 alignment += HeadingVector(other.Heading);
@@ -478,7 +478,7 @@ public class BirdMover
         return ParentBird.Nature.Company switch
         {
             Company.Alone => true,
-            Company.KinOnly => other.Type != ParentBird.Type,
+            Company.KinOnly => other.Species != ParentBird.Species,
             _ => false,
         };
     }
@@ -835,7 +835,7 @@ public class BirdMover
         bool shy = ParentBird.Nature.Company != Company.Anyone;
         Food? best = null;
         float bestScore = float.MaxValue;
-        BirdType type = ParentBird.Type;
+        Species type = ParentBird.Species;
 
         foreach (Food food in World.Instance.GetAllEntities<Food>())
         {
@@ -848,7 +848,7 @@ public class BirdMover
             float dist = Vector2.Distance(Flat(food.Position), Flat(ParentBird.Position));
             if (dist > range) continue;
 
-            float score = dist / (Seeds.Get(favorite.Value).Tastes[type] * food.AppealFor(type));
+            float score = dist / (type.TasteFor(favorite.Value) * food.AppealFor(type));
             if (food.HasFresh(favoriteSeed)) score /= favoritePull;
             if (shy && score < bestScore && IsBusy(food)) score *= BusyFoodPenalty;
             if (score < bestScore)

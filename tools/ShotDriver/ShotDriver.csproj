@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Claude's screenshot driver: the game's own code plus a script runner, built and run on Linux
+       in Claude's workspace (see README.md). Not part of the game; BirdsApp.csproj leaves tools\ out. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>ShotDriver</AssemblyName>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <NoWarn>$(NoWarn);CS8618;CS0162;CS0414;CS0649;CS0169</NoWarn>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+
+    <GameFolder>$(MSBuildThisFileDirectory)..\..\</GameFolder>
+    <!-- The game's managed DLLs (NuGet is blocked in the workspace, so the ones from your Release build are used) -->
+    <GameDlls>$(GameFolder)bin\Release\net10.0\win-x64\</GameDlls>
+    <!-- Linux builds of raylib and cimgui, from your Debug build's runtimes folder -->
+    <NativeDir>$(GameFolder)bin\Debug\net10.0\runtimes\linux-x64\native\</NativeDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Every game source file except Program.cs (its Main is replaced by the driver's) -->
+    <Compile Include="$(GameFolder)*.cs" Exclude="$(GameFolder)Program.cs" />
+    <Compile Include="*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Raylib-cs"><HintPath>$(GameDlls)Raylib-cs.dll</HintPath></Reference>
+    <Reference Include="ImGui.NET"><HintPath>$(GameDlls)ImGui.NET.dll</HintPath></Reference>
+    <Reference Include="rlImGui"><HintPath>$(GameDlls)rlImGui.dll</HintPath></Reference>
+    <Reference Include="NAudio.Core"><HintPath>$(GameDlls)NAudio.Core.dll</HintPath></Reference>
+    <Reference Include="NAudio.Wasapi"><HintPath>$(GameDlls)NAudio.Wasapi.dll</HintPath></Reference>
+    <Reference Include="NAudio.Vorbis"><HintPath>$(GameDlls)NAudio.Vorbis.dll</HintPath></Reference>
+    <Reference Include="NVorbis"><HintPath>$(GameDlls)NVorbis.dll</HintPath></Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(GameFolder)resources\**\*" Link="resources\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="$(NativeDir)*.so" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

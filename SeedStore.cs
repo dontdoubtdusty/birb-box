@@ -47,6 +47,18 @@ public class SeedStore
     public float FanAngle { get; private set; }
     private const float FanSpeed = 1.2f;    // radians per second
 
+    // THE LAMP under the air recycler: the keeper switches it on as the bird world gets dark, like a shop lit up at night.
+    // It follows the world's clock even while the box shows the birds, so it's already on when you walk in after dark.
+    public float LampLevel { get; private set; }     // how bright it is right now: 0 off, 1 fully on
+    private const float LampOnDarkness = 0.35f;      // switched on once the world is this dark (DayLight.Darkness)
+    private const float LampOffDarkness = 0.2f;      // and off again once it's lighter than this, so it never flickers at the line
+    private const float LampWarmUp = 0.8f;           // seconds for the filament to warm up to full
+    private const float LampCoolDown = 0.4f;         // seconds to go dark
+    private const float LampFlickerTime = 0.35f;     // an old bulb stutters this long as it comes on
+    private bool lampOn;
+    private float lampFlicker;                       // seconds of stutter left
+    private float lampSteady;                        // the brightness without the stutter
+
     public bool VisitedBefore { get; set; } = false;    // the welcome line is only said on the first visit
 
     public SeedStore()
@@ -58,6 +70,7 @@ public class SeedStore
     public void Update(float dt, bool showing)
     {
         FanAngle += FanSpeed * dt;
+        UpdateLamp(dt, WorldClock.Instance.Light.Darkness);
 
         Vector3? lookAt = HoveredItem != null ? HoveredItem.Center - KeeperSpot : null;
         string outgoing = Keeper.Name;
@@ -69,6 +82,32 @@ public class SeedStore
         foreach (ShelfItem item in Stock)
         {
             if (!item.OnShelf) item.RestockTimer -= dt;
+        }
+    }
+
+    // Switches the lamp by how dark the world is and eases its brightness, with a short stutter when it comes on.
+    private void UpdateLamp(float dt, float darkness)
+    {
+        if (!lampOn && darkness >= LampOnDarkness)
+        {
+            lampOn = true;
+            lampFlicker = LampFlickerTime;
+        }
+        else if (lampOn && darkness <= LampOffDarkness)
+        {
+            lampOn = false;
+        }
+
+        float target = lampOn ? 1f : 0f;
+        float rate = lampOn ? 1f / LampWarmUp : 1f / LampCoolDown;
+        lampSteady += Math.Clamp(target - lampSteady, -rate * dt, rate * dt);
+        LampLevel = lampSteady;
+
+        if (lampFlicker > 0f)
+        {
+            lampFlicker -= dt;
+            float stutter = MathF.Sin(lampFlicker * 90f) * MathF.Sin(lampFlicker * 37f);
+            if (lampFlicker > 0f && stutter > 0.2f) LampLevel = lampSteady * 0.25f;
         }
     }
 

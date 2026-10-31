@@ -7,11 +7,16 @@ public static class EventLog
     public static IReadOnlyList<string> Entries => entries;
     public static int Version { get; private set; }
 
-    // From a save: the log as it was, newest last.
+    private static bool restoredOnce;    // the first Restore (the save loading at start) keeps what start-up already said
+
+    // From a save: the log as it was, newest last. At start, lines logged while loading (a design or species file
+    // that couldn't be read) are kept after it; a New world later starts with the new world's log alone.
     public static void Restore(IEnumerable<string> saved)
     {
+        List<string> startUp = restoredOnce ? new() : new(entries);
+        restoredOnce = true;
         entries.Clear();
-        entries.AddRange(saved.TakeLast(MaxEntries));
+        entries.AddRange(saved.Concat(startUp).TakeLast(MaxEntries));
         Version++;
     }
 

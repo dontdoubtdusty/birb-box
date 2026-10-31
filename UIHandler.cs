@@ -19,10 +19,12 @@ public class UIHandler
         "Hologram View: wheel leans in to the glass",
         "WASD: pan (Shift = faster)",
         "Hold right mouse: pour bucket",
-        "Click bird: select   Space: pause",
+        "Click bird: select",
+        "P or Space: pause   1 / 2 / 3: 1x / 2x / 4x",
+        "- / +: one speed slower / faster (.5x to 4x)",
         "Double-click bird (or its name): follow",
         "Click name on bird card: rename",
-        "Click minimap: jump view   +/-: zoom levels",
+        "Click minimap: jump view   Map's +/- buttons: zoom",
         "Click feeder: pick up   Click dirt: set down",
         "Store: click Zoo Cam to go back",
         "Radio: click buttons, drag or scroll knobs",
@@ -165,6 +167,7 @@ public class UIHandler
             HologramRenderer r = engine.Renderer;
             ImGui.ColorEdit3("Color", ref r.HoloColor);
             Slider("Glow", ref r.GlowStrength, start.Glow, 0f, 3f);
+            Slider("Rim glow", ref r.RimGlow, start.RimGlow, 0f, 1.5f);
             Slider("Scanlines", ref r.ScanlineStrength, start.Scanlines, 0f, 0.5f);
             Slider("Width", ref engine.View.CubeScale, start.CubeWidth, 0.5f, ViewWindow.MaxCubeScale);
             Slider("Fog start", ref engine.View.FogStart, start.FogStart, 0.3f, 0.99f);
@@ -214,7 +217,7 @@ public class UIHandler
     {
         ImGui.Text($"{clock.DateText}, year {clock.Year}  {clock.TimeText}  ({clock.Phase})");
         ImGui.Text($"Sunrise {Hours(clock.Sunrise)}  sunset {Hours(clock.Sunset)}  first glow {Hours(clock.FirstGlow)}  last {Hours(clock.LastGlow)}");
-        ImGui.Text($"Sun {clock.SunElevation:0} deg above the horizon");
+        ImGui.Text($"Sun {clock.SunElevation:0} deg above the horizon   {clock.MoonName} ({clock.MoonLit * 100f:0}% lit)");
 
         float hour = clock.Hour;
         if (ImGui.SliderFloat("Hour", ref hour, 0f, 23.99f, "%.2f")) clock.SetHour(hour);
@@ -237,6 +240,11 @@ public class UIHandler
         string spell = weather.Raining ? (weather.Strength < 1f ? "drizzle" : "steady rain") : "dry";
         ImGui.Text($"{weather.Word}: {spell} spell, {weather.HoursLeft:0.0} h left");
         ImGui.Text($"Cloud {weather.Cloud:0.00}  rain {weather.Rain:0.00}  ground wet {weather.GroundWet:0.00}  puddles {weather.Puddles.All.Count}");
+        ImGui.Text($"Drifting clouds: cover {weather.Cover:0.00}");
+
+        // This dry spell's cloudiness (the next dry spell rolls its own); the cover eases toward it
+        float fair = weather.FairCover;
+        if (ImGui.SliderFloat("Fair-weather clouds", ref fair, 0f, 1f, "%.2f")) weather.SetFairCover(fair);
 
         if (ImGui.Button("Rain")) weather.StartRain(1f);
         ImGui.SameLine();

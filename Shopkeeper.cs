@@ -2,13 +2,13 @@ using System.Numerics;
 using Raylib_cs;
 
 // The birb minding the Gilded Granary's counter, standing on a stool so it can just see over.
-// A random common birb (or a Frostcrest, once one has been spotted) takes the counter, and shifts change
+// A random common birb (or a rare one, like a Frostcrest, once one has been spotted) takes the counter, and shifts change
 // every few minutes. It idles and looks around, watches the item under your mouse, and hops when you buy.
 //
 // This is the keeper's state and motion; StoreRenderer draws it with BirbBuilder.
 public class Shopkeeper
 {
-    public BirdType Type { get; private set; }
+    public Species Type { get; private set; } = Species.Emberwing;
     public BirbShape Shape { get; private set; } = null!;
     public string Name { get; private set; } = "";
     public float Size { get; private set; }            // scene units per birb unit, the same as in the bird world
@@ -113,16 +113,15 @@ public class Shopkeeper
     // Picks a different birb than last time if there's a choice, and names it.
     private void StartShift()
     {
-        List<BirdType> choices = Birds.Common.ToList();
-        if (Seeds.FrostcrestSeen) choices.Add(BirdType.Frostcrest);
+        List<Species> choices = Birds.All.Where(species => species.CanAppear && (species.Common || Birds.IsDiscovered(species))).ToList();
         if (choices.Count > 1 && Shape != null) choices.Remove(Type);
 
         Type = choices[Rng.Next(choices.Count)];
-        List<BirdLook> looks = Birds.Get(Type).Looks;
+        List<BirdLook> looks = Type.Looks;
         BirdLook look = looks[Rng.Next(looks.Count)];
         Shape = look.Shape;
         Size = look.Size;
-        Name = $"{Titles[Rng.Next(Titles.Length)]} {GivenNames[Rng.Next(GivenNames.Length)]} the {Birds.Get(Type).Name}";
+        Name = $"{Titles[Rng.Next(Titles.Length)]} {GivenNames[Rng.Next(GivenNames.Length)]} the {Type.Name}";
         bounds = null;    // a new shape, so it gets measured again
 
         shiftTimer = ShiftLength;

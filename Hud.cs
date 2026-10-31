@@ -445,7 +445,7 @@ public class Hud
             DrawTrack(scale, trackLeft, trackRight, midY);
 
             float pipX = trackLeft + (trackRight - trackLeft) * pipSpots[i];
-            if (trait != null) DrawPip(new Vector2(pipX, midY), bird.Info.Color, time * PipPulseSpeed + i * 1.7f);
+            if (trait != null) DrawPip(new Vector2(pipX, midY), bird.Species.Color, time * PipPulseSpeed + i * 1.7f);
             else Raylib.DrawCircleLines((int)pipX, (int)midY, PipRadius, Palette.DimText);
 
             string word = trait is Trait held ? Traits.Get(held).Name : "average";
@@ -527,7 +527,7 @@ public class Hud
     // The name, or while renaming, a text box with a blinking cursor.
     private void DrawNameField(Bird bird, int x, int y, bool hovered, Color accent)
     {
-        Color nameColor = bird.Info.Color;
+        Color nameColor = bird.Species.Color;
 
         if (!IsEditingName)
         {

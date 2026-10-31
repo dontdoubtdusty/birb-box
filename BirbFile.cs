@@ -2,16 +2,15 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Raylib_cs;
 
-// One saved birb: its shape plus what kind of species it is. Each birb is one .json file in resources/birbs/.
+// One saved birb: its shape plus which species wears it. Each birb is one .json file in resources/birbs/.
 // The file is plain text, so it can be read (and carefully hand-edited) in any text editor.
-// Every save becomes one more look for its Species in the world (see Birds.LoadDesigns).
+// Every save becomes one more look for its species in the world (see Birds.AddDesign).
+// Files from before 4.99 also hold a MapColor and Common; those are read past and dropped (the species has its own).
 public class BirbFile
 {
     public int FormatVersion = 1;                                // bumped if the layout of these files ever changes
-    public BirdType Species = BirdType.Emberwing;                // which kind of bird wears this look; older files count as Emberwing
-    public float Size = 0.33f;                                   // birb units to world units, like BirdInfo.Size
-    public Color MapColor = new Color(200, 200, 200, 255);       // kept for new species later; the world uses the species' color
-    public bool Common = true;                                   // kept for new species later; the world uses the species' setting
+    public string Species = "Emberwing";                         // the species' key; older files without one count as Emberwing
+    public float Size = 0.33f;                                   // birb units to world units, like Species.Size
     public BirbShape Shape = new BirbShape("New Birb");
 }
 

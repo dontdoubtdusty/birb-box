@@ -104,7 +104,8 @@ public class SaveGame
             ClockDays = engine.Clock.Days,
             Weather = engine.Weather.ToSave(),
             Coins = engine.Coins,
-            FrostcrestSeen = Seeds.FrostcrestSeen,
+            FrostcrestSeen = Birds.IsDiscovered(Species.Frostcrest),    // also in SeenSpecies; kept so older versions still read it
+            SeenSpecies = Birds.SaveSeen(),
             VisitedStore = engine.Store.VisitedBefore,
             View = new ViewSave
             {
@@ -161,7 +162,7 @@ public class SaveGame
         engine.Clock.Refresh();                                         // before the birds load, so roosting birds stay roosting
         engine.Weather.Restore(data.Weather);                           // a new world, or a save from before 4.96, starts fair and dry
         engine.Coins = data.Coins;
-        Seeds.FrostcrestSeen = data.FrostcrestSeen;
+        Birds.RestoreSeen(data.FrostcrestSeen ? data.SeenSpecies.Append(Species.Frostcrest.Key) : data.SeenSpecies);
         engine.Store.VisitedBefore = data.VisitedStore;
 
         engine.View.Zoom = Math.Clamp(data.View.Zoom, ViewWindow.ZoomLevels[0], ViewWindow.ZoomLevels[^1]);
@@ -176,10 +177,10 @@ public class SaveGame
         }
         engine.Bucket.Bucket.Restore(data.Bucket);
         engine.BirdSpawner.RestoreNameCounters(data.NameCounters);
-        engine.BirdSpawner.RestoreRegulars(data.Regulars);
         engine.Store.RestoreTimers(data.RestockTimers);
         engine.Placer.Restore(data.BoughtFeeders, data.CarriedFeeder != null ? Feeder.FromSave(data.CarriedFeeder) : null);
         EventLog.Restore(data.Log);
+        engine.BirdSpawner.RestoreRegulars(KeepKnownSpecies(data.Regulars, away: true));    // after the log, which it may add to
         engine.Wear.Restore(data.GroundWear, world.HalfSize);
 
         // Feeders go in first, so seed that was still falling can find the feeder below it.
@@ -217,7 +218,7 @@ public class SaveGame
             coin.Position = Pool.PushOut(Rock.PushOut(world.PullInside(coin.Position), Coin.Radius), Coin.Radius);
             world.AddEntity(Coin.FromSave(coin));
         }
-        foreach (BirdSave save in data.Birds)
+        foreach (BirdSave save in KeepKnownSpecies(data.Birds, away: false))
         {
             Bird bird = Bird.FromSave(save);
             BringBirdInside(bird, world);
@@ -225,6 +226,20 @@ public class SaveGame
             world.AddEntity(bird);
         }
         world.FlushChanges();
+    }
+
+    // Birds of a species that's gone (its file deleted or renamed), or that has no look left to wear, leave for good:
+    // they're dropped, with one line in the log naming them. away: these are regulars, not birds in the cube.
+    private static List<BirdSave> KeepKnownSpecies(List<BirdSave> saves, bool away)
+    {
+        List<BirdSave> gone = saves.Where(save => Birds.Find(save.Type) is not { CanAppear: true }).ToList();
+        if (gone.Count > 0)
+        {
+            string names = string.Join(", ", gone.Select(save => save.Name));
+            EventLog.Add(away ? $"{names} won't be back: their species is no longer in the cube."
+                              : $"{names} flew off for good: their species is no longer in the cube.");
+        }
+        return saves.Except(gone).ToList();
     }
 
     // A bird from a bigger world that's now past the edge walks back in from just outside it, like a new arrival.
@@ -267,7 +282,8 @@ public class SaveData
     public double? ClockDays { get; set; }                            // the world's calendar (WorldClock.Days); null before 4.92
     public WeatherSave? Weather { get; set; }                         // the rain, the clouds, the wet ground and its puddles; null before 4.96
     public int Coins { get; set; }
-    public bool FrostcrestSeen { get; set; }
+    public bool FrostcrestSeen { get; set; }                          // from before 4.99; now also in SeenSpecies
+    public List<string> SeenSpecies { get; set; } = new();            // keys of rare species seen at least once (Birds.IsDiscovered)
     public bool VisitedStore { get; set; }
     public ViewSave View { get; set; } = new();
     public Dictionary<SeedType, float> BagSupply { get; set; } = new();
@@ -276,7 +292,7 @@ public class SaveData
     public FeederSave? CarriedFeeder { get; set; }                    // in hand, waiting to be set down
 
     // THE STORE AND THE LOG
-    public Dictionary<BirdType, int> NameCounters { get; set; } = new();
+    public Dictionary<string, int> NameCounters { get; set; } = new();    // by species key; kept for species that are gone, too
     public List<float> RestockTimers { get; set; } = new();          // one per shelf item, in shelf order
     public List<string> Log { get; set; } = new();
 
@@ -314,7 +330,7 @@ public class LayerSave
 
 public class BirdSave
 {
-    public BirdType Type { get; set; }
+    public string Type { get; set; } = "Emberwing";    // its species key ("Emberwing", "DuskDove"...); missing in very old saves
     public string Name { get; set; } = "";
     public int ShapeIndex { get; set; }              // which built-in look (used when ShapeFile is null)
     public string? ShapeFile { get; set; }           // the Birb Designer save it wears; null for a built-in look
@@ -381,6 +397,8 @@ public class WeatherSave
     public float Cloud { get; set; }
     public float Rain { get; set; }
     public float GroundWet { get; set; }
+    public float? FairCover { get; set; }                  // the dry spell's cloudiness; null before 5.05
+    public float? Cover { get; set; }                      // the drifting clouds' cover right now; null before 5.05
     public List<PuddleSave> Puddles { get; set; } = new();
 }
 

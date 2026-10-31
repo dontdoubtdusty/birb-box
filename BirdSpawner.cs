@@ -23,7 +23,8 @@ public class BirdSpawner
     private float arrivalTimer = 0f;
     private float sinceLastArrival = 0f;
 
-    private readonly Dictionary<BirdType, int> nameCounters = new();
+    // By species key, so a species whose file is gone keeps its count in case it comes back.
+    private readonly Dictionary<string, int> nameCounters = new(StringComparer.OrdinalIgnoreCase);
 
     // REGULARS: birds that left (not of old age) and may come back under the same name.
     private readonly List<BirdSave> regulars = new();
@@ -45,7 +46,7 @@ public class BirdSpawner
 
         // Every pile pulls on the birds that like its seed. Amounts are measured in
         // poured piles, so one pile of a seed a bird loves pulls about 1.
-        Dictionary<BirdType, float> pull = new();
+        Dictionary<Species, float> pull = new();
         foreach (Food food in World.Instance.GetAllEntities<Food>())
         {
             foreach (SeedLayer layer in food.Layers)
@@ -76,11 +77,11 @@ public class BirdSpawner
     }
 
     // Seed in a feeder pulls harder on the birds that like that feeder, and not at all on birds that can't use it.
-    private static void AddFeederAttraction(Dictionary<BirdType, float> pull, Feeder feeder, SeedType seed, float amount)
+    private static void AddFeederAttraction(Dictionary<Species, float> pull, Feeder feeder, SeedType seed, float amount)
     {
-        Dictionary<BirdType, float> plain = new();
+        Dictionary<Species, float> plain = new();
         Seeds.AddAttraction(plain, seed, amount);
-        foreach ((BirdType bird, float score) in plain)
+        foreach ((Species bird, float score) in plain)
         {
             pull.TryGetValue(bird, out float current);
             pull[bird] = current + score * feeder.Info.AppealFor(bird) * Feeders.PullBonus;
@@ -88,11 +89,11 @@ public class BirdSpawner
     }
 
     // Bigger pull means a better chance of being the bird that shows up.
-    private BirdType PickByPull(Dictionary<BirdType, float> pull, float totalPull)
+    private Species PickByPull(Dictionary<Species, float> pull, float totalPull)
     {
         float roll = Rng.Range(0f, totalPull);
-        BirdType last = BirdType.Emberwing;
-        foreach ((BirdType bird, float amount) in pull)
+        Species last = Species.Emberwing;
+        foreach ((Species bird, float amount) in pull)
         {
             last = bird;
             roll -= amount;
@@ -107,9 +108,9 @@ public class BirdSpawner
     // With no type given, picks one of the common birds. nightOwl: a night arrival, always a Night Owl
     // (null: decided by the time of day, for the tools panel's buttons).
     // Often it's a regular of that kind coming back instead of a new bird.
-    public Bird SpawnArrival(BirdType? type = null, bool? nightOwl = null)
+    public Bird SpawnArrival(Species? type = null, bool? nightOwl = null)
     {
-        BirdType birdType = type ?? GetRandomBirdType();
+        Species birdType = type ?? GetRandomBirdType();
         bool night = nightOwl ?? IsNightArrival();
         Bird? regular = TakeRegular(birdType, night);
         Bird bird = regular ?? CreateBird(birdType);
@@ -119,8 +120,8 @@ public class BirdSpawner
         bird.ArriveHungry();
         string who = regular != null ? $"{bird.Name} is back, and" : bird.Name;
 
-        // Frostcrests always fly straight to the Blue Barley; walking in from the edge they might never find it.
-        if (bird.Type == BirdType.Frostcrest || Rng.Chance(AirArrivalChance))
+        // Rare birds (Frostcrests and the like) always fly straight to their lure; walking in from the edge they might never find it.
+        if (IsLured(bird.Species) || Rng.Chance(AirArrivalChance))
         {
             SetupAirArrival(bird);
             EventLog.Add(night ? $"{who} flew in out of the night." : $"{who} flew down from the sky.");
@@ -184,7 +185,7 @@ public class BirdSpawner
 
     // The Birb Designer's Release button: a new bird wearing a saved design flies down near a spot (the middle of the view).
     // Always a new bird, never a regular coming back. At night it comes as a Night Owl, like every night arrival.
-    public Bird Release(BirdType type, BirdLook look, Vector3 spot)
+    public Bird Release(Species type, BirdLook look, Vector3 spot)
     {
         Bird bird = CreateBird(type);
         bird.UseLook(look);
@@ -201,12 +202,12 @@ public class BirdSpawner
     }
 
     // Names count up per type and never repeat, even after birds leave.
-    private Bird CreateBird(BirdType type)
+    private Bird CreateBird(Species type)
     {
-        nameCounters.TryGetValue(type, out int count);
+        nameCounters.TryGetValue(type.Key, out int count);
         count++;
-        nameCounters[type] = count;
-        return new Bird(type, $"{Birds.Get(type).Name} #{count}");
+        nameCounters[type.Key] = count;
+        return new Bird(type, $"{type.Name} #{count}");
     }
 
     // ---------------- REGULARS ----------------
@@ -222,9 +223,9 @@ public class BirdSpawner
     // Half the time, if any bird of this kind is away, one of them comes back. Null means a new bird comes instead.
     // Hearthbound birds are likelier to be the one, Wayfarers less (TraitEffects.ReturnWeight).
     // By day, a bird that flew off for the night nearly always comes back first. At night only Night Owls come back.
-    private Bird? TakeRegular(BirdType type, bool night)
+    private Bird? TakeRegular(Species type, bool night)
     {
-        List<BirdSave> away = regulars.Where(save => save.Type == type).ToList();
+        List<BirdSave> away = regulars.Where(save => Birds.SameKey(save.Type, type.Key)).ToList();
         if (night) away = away.Where(save => Traits.EffectsOf(save.Traits).NightOwl).ToList();
         if (away.Count == 0) return null;
 
@@ -260,33 +261,45 @@ public class BirdSpawner
         regulars.AddRange(saved);
     }
 
-    // The first Frostcrest to enter the view unlocks their other tastes (see Seeds.FrostcrestSeen).
-    public void CheckFrostcrestSeen(ViewWindow view)
-    {
-        if (Seeds.FrostcrestSeen) return;
+    // A rare species with a lure: comes only for it until seen, and always flies straight in.
+    private static bool IsLured(Species species) => !species.Common && species.Lure != null;
 
+    // The first bird of a rare species to enter the view unlocks its other tastes (see Birds.IsDiscovered).
+    public void CheckRareSeen(ViewWindow view)
+    {
         foreach (Bird bird in World.Instance.GetAllEntities<Bird>())
         {
-            if (bird.Type == BirdType.Frostcrest && bird.State != BirdState.Leaving && view.Contains(bird.Position))
-            {
-                Seeds.FrostcrestSeen = true;
-                EventLog.Add("A Frostcrest has been spotted! Now that they know this place, corn may draw them in too.");
-                return;
-            }
+            Species species = bird.Species;
+            if (Birds.IsDiscovered(species) || bird.State == BirdState.Leaving || !view.Contains(bird.Position)) continue;
+
+            Birds.MarkSeen(species);
+            EventLog.Add($"A {species.Name} has been spotted! Now that they know this place, {OtherSeedsText(species)}");
         }
     }
 
-    // Saving (see SaveGame.cs): the name counters, so a loaded world never repeats a name.
-    public Dictionary<BirdType, int> SaveNameCounters() => new(nameCounters);
-
-    public void RestoreNameCounters(Dictionary<BirdType, int> counters)
+    // "corn may draw them in too." for a Frostcrest: the seeds other than its lure, or a plain line if there are none.
+    private static string OtherSeedsText(Species species)
     {
-        nameCounters.Clear();
-        foreach ((BirdType type, int count) in counters) nameCounters[type] = count;
+        List<string> others = Seeds.All.Where(seed => seed != species.Lure && species.Eats(seed))
+                                       .Select(seed => Seeds.Get(seed).Name.ToLowerInvariant()).ToList();
+        if (others.Count == 0) return "they may come back now and then.";
+        string list = others.Count == 1 ? others[0] : string.Join(", ", others.Take(others.Count - 1)) + " or " + others[^1];
+        return $"{list} may draw them in too.";
     }
 
-    public static BirdType GetRandomBirdType()
+    // Saving (see SaveGame.cs): the name counters, so a loaded world never repeats a name.
+    public Dictionary<string, int> SaveNameCounters() => new(nameCounters);
+
+    public void RestoreNameCounters(Dictionary<string, int> counters)
     {
-        return Birds.Common[Rng.Next(Birds.Common.Length)];
+        nameCounters.Clear();
+        foreach ((string key, int count) in counters) nameCounters[key] = count;
+    }
+
+    // Can return a Designer species only once it has a design to wear (Birds.Common checks).
+    public static Species GetRandomBirdType()
+    {
+        List<Species> common = Birds.Common;
+        return common[Rng.Next(common.Count)];
     }
 }

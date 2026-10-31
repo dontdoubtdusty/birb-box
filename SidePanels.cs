@@ -26,8 +26,8 @@ public class SidePanels
     private const float KeepReach = 24f;    // a shown column stays while the mouse is this close to it
     private const float SlideTime = 0.25f;  // seconds to slide all the way in or out
 
-    // The speed buttons. Pause is its own button, to the left of these.
-    private static readonly float[] Speeds = { 0.5f, 1f, 2f, 4f };
+    // The speed buttons, one per GameEngine.SpeedSteps (the keys use the same steps). Pause is its own button, to the left of these.
+    private static readonly float[] Speeds = GameEngine.SpeedSteps;
     private static readonly string[] SpeedLabels = { ".5x", "1x", "2x", "4x" };
 
     public Rectangle LeftColumn { get; private set; }
@@ -57,8 +57,7 @@ public class SidePanels
             }
             else
             {
-                engine.SimSpeed = Speeds[i - 1];
-                engine.Paused = false;
+                engine.SetSpeed(Speeds[i - 1]);
             }
         }
     }

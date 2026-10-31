@@ -41,6 +41,14 @@ public class Weather
     private static readonly Vector3 RainHaze = new Vector3(0.16f, 0.18f, 0.20f);    // the fog's haze in rain, by day
     private const float RainHazeShare = 0.5f;
 
+    // BROKEN CLOUDS (5.05): the drifting clouds whose shadows cross the garden and whose shapes fill the Hologram View's sky.
+    // Each dry spell picks how cloudy its fair weather is; before rain the cover fills in to a solid deck.
+    private const float ClearDayShare = 0.35f;         // share of dry spells with a clear sky (no clouds at all)
+    private const float FairCoverMin = 0.25f, FairCoverMax = 0.6f;    // how cloudy the other dry spells are (0 none, 1 solid)
+    private const float CoverRate = 1.0f;              // cover fills in or breaks up: about an hour from none to full
+    private const float WindSpeed = 0.12f;             // how fast the clouds drift (world units per sim second)
+    private const float WindTurn = 0.6f;               // how far (radians) the wind may swing at the start of each spell
+
     // STATE (saved)
     public bool Raining { get; private set; }           // in a rain spell (the rain itself may still be building up)
     public float Strength { get; private set; } = 1f;   // this spell's rain: DrizzleStrength or 1
@@ -51,6 +59,10 @@ public class Weather
     public Puddles Puddles { get; } = new();
     public bool Held;                                   // dev (tools panel): the weather stays as it is
     public float RainClock { get; private set; }        // sim seconds of falling rain, for drawing the drops (not saved)
+    public float FairCover { get; private set; }        // this dry spell's cloudiness when fair (0 clear to FairCoverMax)
+    public float Cover { get; private set; }            // how much of the sky the drifting clouds cover right now (0 to 1)
+    public Vector2 CloudDrift { get; private set; }     // how far the clouds have drifted (world units; not saved)
+    private float windAngle = Rng.Range(0f, MathF.Tau); // which way the wind blows (not saved)
 
     public Weather()
     {
@@ -67,6 +79,8 @@ public class Weather
         Cloud = 0f;
         Rain = 0f;
         GroundWet = 0f;
+        FairCover = RollFairCover();
+        Cover = FairCover;
         Puddles.Clear();
     }
 
@@ -96,6 +110,11 @@ public class Weather
         if (Rain > 0.01f) GroundWet = MathF.Min(1f, GroundWet + Rain * WetRate * hours);
         else GroundWet = MathF.Max(0f, GroundWet - (clock.SunElevation > 0f ? DryRateSun : DryRateNight) * hours);
 
+        // The drifting clouds: they fill in to a solid deck as the rain spell's clouds gather, and break up after
+        float coverTarget = MathF.Max(FairCover, Raining ? 1f : 0f);
+        Cover = MathF.Max(Approach(Cover, coverTarget, CoverRate * hours), Cloud);
+        CloudDrift += new Vector2(MathF.Cos(windAngle), MathF.Sin(windAngle)) * WindSpeed * simDt;
+
         if (Rain > 0f) RainClock += simDt;
         Puddles.Update(simDt, this, world, wear);
     }
@@ -105,13 +124,22 @@ public class Weather
         Raining = true;
         Strength = strength;
         HoursLeft = Rng.Range(RainMinHours, RainMaxHours) * (strength < 1f ? 1.3f : 1f);    // drizzle lingers a little longer
+        windAngle += Rng.Range(-WindTurn, WindTurn);
     }
 
     private void StartDrySpell(Season season)
     {
         Raining = false;
         HoursLeft = DryHours[season] * Rng.Range(0.5f, 1.5f) / MathF.Max(0.05f, SimTuning.Now.RainOften);
+        FairCover = RollFairCover();
+        windAngle += Rng.Range(-WindTurn, WindTurn);
     }
+
+    // How cloudy a dry spell's fair weather is: some are clear, the rest have scattered clouds.
+    private static float RollFairCover() => Rng.Chance(ClearDayShare) ? 0f : Rng.Range(FairCoverMin, FairCoverMax);
+
+    // Dev (tools panel): this spell's fair-weather cloudiness, eased into like any change.
+    public void SetFairCover(float cover) => FairCover = Math.Clamp(cover, 0f, 1f);
 
     // Dev (tools panel): rain now (drizzle or steady), or clear up now. The clouds still gather or part at their usual pace.
     public void StartRain(float strength) => StartRainSpell(strength);
@@ -149,6 +177,8 @@ public class Weather
         Vector3 gray = new Vector3(lum) * CloudBrightensSky;
         light.Ambient = Vector3.Lerp(ambient, gray, CloudGraysSky * Cloud);
         light.Direct *= 1f - CloudDimsSun * Cloud;
+        light.Golden *= 1f - Cloud;                                    // no golden hour under cloud
+        light.Shade = Vector3.Lerp(light.Shade, Vector3.One, Cloud);  // flat, even light: no warm and cool sides
         return light;
     }
 
@@ -169,6 +199,8 @@ public class Weather
         Cloud = Cloud,
         Rain = Rain,
         GroundWet = GroundWet,
+        FairCover = FairCover,
+        Cover = Cover,
         Puddles = Puddles.ToSave(),
     };
 
@@ -183,6 +215,8 @@ public class Weather
         Cloud = Math.Clamp(save.Cloud, 0f, 1f);
         Rain = Math.Clamp(save.Rain, 0f, 1f);
         GroundWet = Math.Clamp(save.GroundWet, 0f, 1f);
+        if (save.FairCover is float fair) FairCover = Math.Clamp(fair, 0f, 1f);    // a save from before 5.05 keeps the cover Reset rolled
+        Cover = Math.Clamp(save.Cover ?? FairCover, 0f, 1f);
         Puddles.Restore(save.Puddles);
     }
 }

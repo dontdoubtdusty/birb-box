@@ -51,7 +51,8 @@ public static class Sounds
     private const float RainQuietShare = 0.4f;     // while the Esc menu or the Designer is open
 
     // BIRDS. Each species has one or more calls; see tools/make_sounds.py for how they're made.
-    private static readonly Dictionary<BirdType, SoundPool[]> calls = new();
+    // By species key. A Designer species' are loaded the first time one of its birds calls (CallsFor).
+    private static readonly Dictionary<string, SoundPool[]> calls = new(StringComparer.OrdinalIgnoreCase);
     private static SoundPool flapTakeoff = null!;
     private static SoundPool flapLand = null!;
     private static SoundPool[] pecks = null!;
@@ -105,10 +106,10 @@ public static class Sounds
             Raylib.PlayMusicStream(rainLoop);
         }
 
-        // Calls are found by name: call_emberwing_1.wav, call_emberwing_2.wav, and so on.
-        foreach (BirdType type in Birds.All)
+        // Calls are found by species key: call_emberwing_1.wav, call_emberwing_2.wav, and so on.
+        foreach (Species type in Birds.All.Where(species => species.BuiltIn))
         {
-            calls[type] = LoadNumbered($"call_{type.ToString().ToLowerInvariant()}");
+            calls[type.Key] = LoadNumbered($"call_{type.Key.ToLowerInvariant()}");
         }
         flapTakeoff = new SoundPool("sounds/flap_takeoff.wav");
         flapLand = new SoundPool("sounds/flap_land.wav");
@@ -118,14 +119,15 @@ public static class Sounds
     }
 
     // Every file named <prefix>_1.wav, <prefix>_2.wav, ... until a number is missing.
-    private static SoundPool[] LoadNumbered(string prefix)
+    // quiet: no log line when there are none (a Designer species borrowing a voice usually has no files of its own).
+    private static SoundPool[] LoadNumbered(string prefix, bool quiet = false)
     {
         var found = new List<SoundPool>();
         for (int i = 1; File.Exists(Assets.PathTo($"sounds/{prefix}_{i}.wav")); i++)
         {
             found.Add(new SoundPool($"sounds/{prefix}_{i}.wav"));
         }
-        if (found.Count == 0) EventLog.Add($"No sound files found for {prefix}.");
+        if (found.Count == 0 && !quiet) EventLog.Add($"No sound files found for {prefix}.");
         return found.ToArray();
     }
 
@@ -251,9 +253,22 @@ public static class Sounds
     public static void PlayCall(Bird bird)
     {
         recentCalls.Add((bird.Position, Raylib.GetTime()));
-        SoundPool[] options = calls[bird.Type];
+        SoundPool[] options = CallsFor(bird.Species);
         if (options.Length == 0) return;
-        PlayBird(options[Rng.Next(options.Length)], bird.Position, CallVolume, bird.VoicePitch * Rng.Range(0.97f, 1.03f));
+        float pitch = bird.VoicePitch * bird.Species.VoicePitch * Rng.Range(0.97f, 1.03f);
+        PlayBird(options[Rng.Next(options.Length)], bird.Position, CallVolume, pitch);
+    }
+
+    // A species' own calls (call_<key>_N.wav) if it has any, otherwise those of the built-in species whose voice it borrows.
+    private static SoundPool[] CallsFor(Species species)
+    {
+        if (!calls.TryGetValue(species.Key, out SoundPool[]? own))
+        {
+            own = LoadNumbered($"call_{species.Key.ToLowerInvariant()}", quiet: true);
+            calls[species.Key] = own;
+        }
+        if (own.Length > 0 || species.BuiltIn) return own;
+        return Birds.Find(species.VoiceKey) is { BuiltIn: true } voice ? CallsFor(voice) : own;
     }
 
     // True if some bird called within HushRadius of this spot in the last HushTime seconds.

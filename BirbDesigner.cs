@@ -14,9 +14,17 @@ public class BirbDesigner
 {
     public bool IsOpen { get; private set; }
 
-    // The birb being designed: its shape plus species details (species, size; map color and common for later).
-    private BirbFile design = FromBird(BirdType.Emberwing, Birds.Get(BirdType.Emberwing).BuiltInLooks[0]);
+    // The birb being designed: its shape, which species wears it (by key) and its size.
+    private BirbFile design = FromBird(Species.Emberwing, Species.Emberwing.BuiltInLooks[0]);
     public BirbShape Shape => design.Shape;
+
+    // SPECIES: the design's species' details while it's a Designer species (null for a built-in one, which can't be
+    // edited here). Every finished edit is saved to its species file straight away (CommitSpecies).
+    private SpeciesFile? speciesEdit;
+    private bool speciesCommit;           // an edit finished this frame: save it at the end of the section
+    private bool creatingSpecies;         // the New species row is showing
+    private string newSpeciesName = "";
+    private Species newSpeciesBase = Species.Emberwing;
 
     // SAVING
     private string? currentFile;          // the file this design was opened from or last saved to
@@ -132,9 +140,9 @@ public class BirbDesigner
         // Starting over from one of the birbs built into the box
         if (ImGui.BeginCombo("Start from", "Pick a birb..."))
         {
-            foreach (BirdType type in Birds.All)
+            foreach (Species type in Birds.All)
             {
-                foreach (BirdLook starter in Birds.Get(type).BuiltInLooks)
+                foreach (BirdLook starter in type.BuiltInLooks)
                 {
                     if (ImGui.Selectable(starter.Shape.Name)) UseDesign(FromBird(type, starter), null);
                 }
@@ -213,10 +221,11 @@ public class BirbDesigner
         status = $"Saved {fileName}.json";
         EventLog.Add($"{Shape.Name} was saved to {Path.Combine(BirbFiles.Folder, fileName)}.json");
 
-        BirdLook look = Birds.AddDesign(design, fileName);
+        BirdLook? look = Birds.AddDesign(design, fileName);
         foreach (Bird bird in World.Instance.GetAllEntities<Bird>()) bird.RefreshLook();
+        if (look == null) status = $"Saved, but there's no {design.Species} species, so it stays out of the cube.";
 
-        if (releasePending) releaseLook = look;
+        if (releasePending && look != null) releaseLook = look;
         releasePending = false;
     }
 
@@ -226,7 +235,8 @@ public class BirbDesigner
         releaseLook = null;
         Close(engine);
         Vector3 middle = new Vector3(engine.View.Center.X, 0f, engine.View.Center.Y);
-        engine.BirdSpawner.Release(design.Species, look, middle);
+        Species? species = Birds.Find(design.Species);
+        if (species != null) engine.BirdSpawner.Release(species, look, middle);
     }
 
     private void OpenFile(string fileName)
@@ -246,6 +256,7 @@ public class BirbDesigner
     {
         design = newDesign;
         currentFile = file;
+        EditSpecies(Birds.Find(design.Species));
         pendingReplace = null;
         if (file == null) status = "Not saved yet.";
         selected = 0;
@@ -253,12 +264,11 @@ public class BirbDesigner
     }
 
     // A built-in birb as a design: a copy of its shape plus its species details from the bird table.
-    private static BirbFile FromBird(BirdType type, BirdLook look)
+    private static BirbFile FromBird(Species type, BirdLook look)
     {
-        BirdInfo info = Birds.Get(type);
         return new BirbFile
         {
-            Species = type, Size = look.Size, MapColor = info.Color, Common = info.Common, Shape = look.Shape.Copy(),
+            Species = type.Key, Size = look.Size, Shape = look.Shape.Copy(),
         };
     }
 
@@ -273,31 +283,213 @@ public class BirbDesigner
         ImGui.TextDisabled($"In the world: {size.X:0.00} wide, {size.Y:0.00} tall, {size.Z:0.00} long");
     }
 
-    // Which kind of bird wears this look in the world, and how big it is.
-    // Picking a species starts the size at that species' own size.
-    // Map color and Common belong to the species for now; they're kept in the file for new species later.
+    // Which kind of bird wears this look in the world, and how big it is. Picking a species starts the size at its own.
+    // A Designer species' details can be edited here (built-in ones live in Birds.cs), and New species makes one.
     private void DrawSpeciesSection()
     {
-        if (ImGui.BeginCombo("Species##SpeciesCombo", Birds.Get(design.Species).Name))
+        Species? current = Birds.Find(design.Species);
+        if (ImGui.BeginCombo("Species##SpeciesCombo", current?.Name ?? $"{design.Species} (missing)"))
         {
-            foreach (BirdType type in Birds.All)
+            foreach (Species type in Birds.All)
             {
-                if (!ImGui.Selectable(Birds.Get(type).Name, type == design.Species) || type == design.Species) continue;
-                design.Species = type;
-                design.Size = Birds.Get(type).Size;
+                if (!ImGui.Selectable(type.Name, type == current) || type == current) continue;
+                design.Species = type.Key;
+                design.Size = type.Size;
+                EditSpecies(type);
+                current = type;
             }
             ImGui.EndCombo();
         }
+        if (current is { BuiltIn: false } && speciesEdit?.Key != current.Key) EditSpecies(current);    // keep the editor on this species
+        ImGui.SameLine();
+        if (ImGui.Button(creatingSpecies ? "Cancel##NewSpecies" : "New...")) creatingSpecies = !creatingSpecies;
+        if (creatingSpecies) DrawNewSpeciesRow();
 
         ImGui.SliderFloat("Size", ref design.Size, 0.1f, 0.6f, "%.2f");
-        ImGui.TextDisabled($"{Birds.Get(design.Species).Name} size is {Birds.Get(design.Species).Size:0.00}.");
+        if (current != null) ImGui.TextDisabled($"{current.Name} size is {current.Size:0.00}.");
 
-        ImGui.BeginDisabled();
-        Vector3 color = ToVector(design.MapColor);
-        ImGui.ColorEdit3("Map color", ref color);
-        ImGui.Checkbox("Common (lives here, no special seed)", ref design.Common);
-        ImGui.EndDisabled();
-        ImGui.TextDisabled("Map color and Common come from the species for now.");
+        if (current == null)
+        {
+            ImGui.TextWrapped($"There's no {design.Species} species file, so this birb stays out of the cube. Pick a species for it.");
+        }
+        else if (current.BuiltIn || speciesEdit == null)    // speciesEdit is only null for a built-in species
+        {
+            ImGui.TextDisabled("A built-in species: its details are written in Birds.cs.");
+        }
+        else
+        {
+            if (!current.CanAppear) ImGui.TextWrapped($"No designs yet: save this birb to give the {current.Name} its first look.");
+            DrawSpeciesDetails(speciesEdit);
+            if (speciesCommit) CommitSpecies(current);
+        }
+    }
+
+    // Name and starting point for a new species. Its tastes, feeders, leans and voice are copied from the one it's based on.
+    private void DrawNewSpeciesRow()
+    {
+        ImGui.InputText("Name##NewSpeciesName", ref newSpeciesName, 30);
+        if (ImGui.BeginCombo("Based on", newSpeciesBase.Name))
+        {
+            foreach (Species type in Birds.All)
+            {
+                if (ImGui.Selectable(type.Name, type == newSpeciesBase)) newSpeciesBase = type;
+            }
+            ImGui.EndCombo();
+        }
+        if (ImGui.Button("Make species")) MakeSpecies();
+    }
+
+    private void MakeSpecies()
+    {
+        string name = newSpeciesName.Trim();
+        string key = SpeciesFiles.NewKey(name);
+        if (key.Length == 0)
+        {
+            status = "Give the species a name with letters in it.";
+            return;
+        }
+        if (Birds.All.Any(type => string.Equals(type.Name, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            status = $"There's already a species called {name}.";
+            return;
+        }
+
+        SpeciesFile file = SpeciesFile.From(newSpeciesBase);
+        file.Key = key;
+        file.Name = name;
+        file.Clean();
+        if (!SpeciesFiles.Save(file))
+        {
+            status = "Couldn't save the species. See the Bird Log (Tab) for why.";
+            return;
+        }
+
+        Species made = new Species(file);
+        Birds.Add(made);
+        design.Species = made.Key;
+        design.Size = made.Size;
+        EditSpecies(made);
+        creatingSpecies = false;
+        newSpeciesName = "";
+        status = $"Made the {name}. Save a birb for it to bring it into the cube.";
+        EventLog.Add($"A new species, the {name}, was written to {Path.Combine(SpeciesFiles.Folder, key)}.json");
+    }
+
+    // Starts editing a species' details: a copy for a Designer species, nothing for a built-in one.
+    private void EditSpecies(Species? species)
+    {
+        speciesEdit = species is { BuiltIn: false } ? SpeciesFile.From(species) : null;
+        speciesCommit = false;
+    }
+
+    // The editable details of a Designer species. Each slider saves when let go, each box and list straight away.
+    private void DrawSpeciesDetails(SpeciesFile edit)
+    {
+        ImGui.SeparatorText("Species details");
+        ImGui.InputText("Species name", ref edit.Name, 30);
+        Finished();
+
+        Vector3 color = ToVector(edit.MapColor);
+        if (ImGui.ColorEdit3("Map color", ref color)) edit.MapColor = ToColor(color);
+        Finished();
+
+        Finished(ImGui.Checkbox("Common (no special seed needed)", ref edit.Common), instant: true);
+        if (!edit.Common) DrawLureCombo(edit);
+
+        if (ImGui.TreeNode("Seed tastes"))
+        {
+            ImGui.TextDisabled("0 means it won't eat that seed.");
+            foreach (SeedType seed in Seeds.All)
+            {
+                edit.Tastes.TryGetValue(seed, out float taste);
+                if (ImGui.SliderFloat(Seeds.Get(seed).Name, ref taste, 0f, 1f, "%.2f")) edit.Tastes[seed] = taste;
+                Finished();
+            }
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNode("Feeders"))
+        {
+            ImGui.TextDisabled("0 means it can't use that feeder.");
+            foreach (FeederStyle style in Enum.GetValues<FeederStyle>())
+            {
+                edit.Feeders.TryGetValue(style, out float appeal);
+                if (ImGui.SliderFloat(style.ToString(), ref appeal, 0f, 1f, "%.2f")) edit.Feeders[style] = appeal;
+                Finished();
+            }
+            ImGui.TreePop();
+        }
+
+        if (ImGui.TreeNode("Trait leans"))
+        {
+            ImGui.TextDisabled("1 is no lean; 2 makes a trait twice as likely, 0 never.");
+            foreach (TraitScale scale in Traits.Scales)
+            {
+                ImGui.SeparatorText(scale.ToString());
+                foreach (Trait? stop in Traits.Stops(scale))
+                {
+                    if (stop is not Trait trait) continue;
+                    float lean = edit.Leans.TryGetValue(trait, out float value) ? value : 1f;
+                    if (ImGui.SliderFloat(Traits.Get(trait).Name, ref lean, 0f, 4f, "%.1fx")) edit.Leans[trait] = lean;
+                    Finished();
+                }
+            }
+            ImGui.TreePop();
+        }
+
+        DrawVoiceCombo(edit);
+        ImGui.SliderFloat("Voice pitch", ref edit.VoicePitch, 0.5f, 2f, "%.2f");
+        Finished();
+        ImGui.TextDisabled($"Calls named call_{edit.Key.ToLowerInvariant()}_1.wav (and _2...) in sounds replace the borrowed voice.");
+    }
+
+    // A rare species' lure: the one seed that brings it until it's been seen. Only seeds it eats can be picked.
+    private void DrawLureCombo(SpeciesFile edit)
+    {
+        string shown = edit.Lure is SeedType lure && edit.Tastes.GetValueOrDefault(lure) > 0f ? Seeds.Get(lure).Name : "(its best seed)";
+        if (!ImGui.BeginCombo("Lure seed", shown)) return;
+        foreach (SeedType seed in Seeds.All.Where(seed => edit.Tastes.GetValueOrDefault(seed) > 0f))
+        {
+            if (Finished(ImGui.Selectable(Seeds.Get(seed).Name, seed == edit.Lure), instant: true)) edit.Lure = seed;
+        }
+        ImGui.EndCombo();
+    }
+
+    // Whose calls it borrows: any built-in species.
+    private void DrawVoiceCombo(SpeciesFile edit)
+    {
+        Species voice = Birds.Find(edit.Voice) is { BuiltIn: true } found ? found : Species.Emberwing;
+        if (!ImGui.BeginCombo("Voice", voice.Name)) return;
+        foreach (Species type in Birds.All.Where(type => type.BuiltIn))
+        {
+            if (Finished(ImGui.Selectable(type.Name, type == voice), instant: true)) edit.Voice = type.Key;
+        }
+        ImGui.EndCombo();
+    }
+
+    // Marks the species for saving when the widget just drawn has finished an edit: let go of a slider or left a
+    // text box (or, with instant, the moment a box is ticked or a list item picked). Returns changed, for chaining.
+    private bool Finished(bool changed = false, bool instant = false)
+    {
+        if (instant ? changed : ImGui.IsItemDeactivatedAfterEdit()) speciesCommit = true;
+        return changed;
+    }
+
+    // Tidies the edited details, writes the species file and hands the details to the species in the game,
+    // so arrivals, the bucket's ATTRACTS list, map dots and LEDs follow at once.
+    private void CommitSpecies(Species species)
+    {
+        speciesCommit = false;
+        if (speciesEdit == null) return;
+        speciesEdit.Clean();
+        if (!SpeciesFiles.Save(speciesEdit))
+        {
+            status = "Couldn't save the species. See the Bird Log (Tab) for why.";
+            return;
+        }
+        species.CopyFrom(speciesEdit);
+        Birds.Changed();
+        status = $"Saved the {species.Name} species.";
     }
 
     private void DrawMovementSection()

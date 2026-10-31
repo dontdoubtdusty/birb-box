@@ -6,6 +6,7 @@ using Raylib_cs;
 //  - "<name> has left the chat" where a bird took off to leave for good; it stays put, sinks, and is dimmer.
 //  - "<name> has rejoined the chat" instead, for a regular coming back.
 //  - name tags: just the name, floating over a bird for as long as it's in view (which birds: NameLabels setting).
+//  - sleeping z's: little z's drifting up from every roosting bird, in a pale hologram tint, so sleepers read in the dark.
 // Labels fade out, and dim near the hologram's edge like everything else in the fog.
 // Each label's text is drawn once into its own small texture, then shown on a flat rectangle
 // that always faces the camera. To stay readable over grass, dirt and birds, every label sits on a
@@ -55,6 +56,25 @@ public class ChatMessages
     private const float DistanceGrowth = 0.5f;        // 0: fixed in the box, 1: same size on screen at any distance
     private const float MaxGrowth = 1.8f;
 
+    // SLEEPING Z'S (every roosting bird, once it has settled; sizes in box units, before the distance growth)
+    private const float SleepCycle = 3.6f;        // seconds from a z appearing to it being gone
+    private const int SleepZs = 3;                // z's on their way up at once, evenly spaced through the cycle
+    private const float SleepRise = 0.55f;        // how far a z climbs over its life
+    private const float SleepDrift = 0.25f;       // how far it drifts sideways (to the screen's right)
+    private const float SleepWobble = 0.04f;      // its gentle sway side to side
+    private const float SleepStartSize = 0.06f;   // half a z's height as it appears...
+    private const float SleepEndSize = 0.11f;     // ...and as it fades away
+    private const float SleepGap = 0f;            // the first z starts this far above the head's standing height (or above its name tag);
+                                                  // the roost pose sits lower, so 0 already leaves a small gap
+    private const float SleepAlpha = 0.85f;
+    private const float SleepLighten = 0.55f;     // how far the hologram color is mixed toward white
+    private const float SleepFadeTime = 0.8f;     // seconds for a bird's z's to fade in as it settles, and out as it wakes
+    private const int ZTextureSize = 64;
+
+    private RenderTexture2D zTexture;                                // one z, drawn once in white and tinted when shown
+    private readonly Dictionary<int, float> sleepFade = new();      // by bird EntityID: 0 awake, 1 fully asleep
+    private float sleepClock;                                        // seconds; stands still while the game is paused
+
     private class Message
     {
         public Bird Bird;
@@ -81,7 +101,8 @@ public class ChatMessages
 
     // Announce birds that arrived after the game started, the first time they enter the view,
     // and birds that start leaving while in view.
-    public void Update(ViewWindow view, float dt)
+    // sleepDt moves the sleeping z's on: the frame's time, or 0 while the game is paused.
+    public void Update(ViewWindow view, float dt, float sleepDt)
     {
         IReadOnlyList<Bird> birds = World.Instance.GetAllEntities<Bird>();
 
@@ -127,6 +148,29 @@ public class ChatMessages
         }
 
         UpdateNameLabels(view, birds);
+        UpdateSleepers(birds, sleepDt);
+    }
+
+    // Each bird's z's ease in once it has settled into its roost (not while it's still flying there),
+    // and ease out when it wakes or is gone.
+    private void UpdateSleepers(IReadOnlyList<Bird> birds, float sleepDt)
+    {
+        sleepClock += sleepDt;
+        float step = sleepDt / SleepFadeTime;
+
+        foreach (Bird bird in birds)
+        {
+            bool asleep = bird.Roosting && bird.Pose == BirdPose.Roost;
+            sleepFade.TryGetValue(bird.EntityID, out float fade);
+            if (!asleep && fade <= 0f) continue;
+            sleepFade[bird.EntityID] = Math.Clamp(fade + (asleep ? step : -step), 0f, 1f);
+        }
+
+        foreach (int id in sleepFade.Keys.ToList())
+        {
+            bool gone = !birds.Any(bird => bird.EntityID == id);
+            if (gone || sleepFade[id] <= 0f) sleepFade.Remove(id);
+        }
     }
 
     // Which birds get a name tag: the ones the setting allows, in view, not leaving,
@@ -172,10 +216,36 @@ public class ChatMessages
             if (msg.Texture.Id != 0) continue;
             msg.Texture = Raylib.LoadRenderTexture(TextureWidth, TextureHeight);
             Raylib.SetTextureFilter(msg.Texture.Texture, TextureFilter.Bilinear);
-            RenderLabel(msg.Texture, msg.Bird.Name, msg.Bird.Info.Color, msg.Leaving, msg.Bird.Visits > 1);
+            RenderLabel(msg.Texture, msg.Bird.Name, msg.Bird.Species.Color, msg.Leaving, msg.Bird.Visits > 1);
         }
 
         PrepareNameTags();
+        if (zTexture.Id == 0) RenderZ();
+    }
+
+    // The sleeping z, drawn once in white with a dark outline: a top bar, a diagonal and a bottom bar, with rounded joints.
+    // Drawn as lines rather than a letter so it sits exactly in the middle of its texture.
+    private void RenderZ()
+    {
+        zTexture = Raylib.LoadRenderTexture(ZTextureSize, ZTextureSize);
+        Raylib.SetTextureFilter(zTexture.Texture, TextureFilter.Bilinear);
+
+        float s = ZTextureSize;
+        Vector2[] corners = { new(s * 0.28f, s * 0.26f), new(s * 0.72f, s * 0.26f), new(s * 0.28f, s * 0.74f), new(s * 0.72f, s * 0.74f) };
+        Raylib.BeginTextureMode(zTexture);
+            Raylib.ClearBackground(Color.Blank);
+            DrawZStrokes(corners, s * 0.11f + OutlineWidth * 2, OutlineColor);
+            DrawZStrokes(corners, s * 0.11f, Color.White);
+        Raylib.EndTextureMode();
+    }
+
+    // The three strokes of a z through its corners (top left, top right, bottom left, bottom right).
+    private static void DrawZStrokes(Vector2[] c, float thickness, Color color)
+    {
+        Raylib.DrawLineEx(c[0], c[1], thickness, color);
+        Raylib.DrawLineEx(c[1], c[2], thickness, color);
+        Raylib.DrawLineEx(c[2], c[3], thickness, color);
+        foreach (Vector2 corner in c) Raylib.DrawCircleV(corner, thickness / 2f, color);
     }
 
     // A tag's texture is made the first time its bird is labeled, redrawn after a rename,
@@ -200,7 +270,7 @@ public class ChatMessages
                 nameTags[bird.EntityID] = tag;
             }
             tag.Name = bird.Name;
-            RenderName(tag.Texture, bird.Name, bird.Info.Color);
+            RenderName(tag.Texture, bird.Name, bird.Species.Color);
         }
     }
 
@@ -275,7 +345,8 @@ public class ChatMessages
     // Called inside the 3D scene. Positions are turned with the hologram by hand (BoxToScene),
     // so the label can be built facing the camera in scene space.
     // Depth writes are off, so the clear parts of a label don't hide things behind it.
-    public void Draw(Camera3D camera, ViewWindow view)
+    // holoColor: the hologram's color, which the sleeping z's take on (lightened).
+    public void Draw(Camera3D camera, ViewWindow view, Vector3 holoColor)
     {
         Vector3 forward = Vector3.Normalize(camera.Target - camera.Position);
         Vector3 right = Vector3.Normalize(Vector3.Cross(forward, Vector3.UnitY));
@@ -287,6 +358,7 @@ public class ChatMessages
 
         Rlgl.DrawRenderBatchActive();
         Rlgl.DisableDepthMask();
+        DrawSleepers(camera, view, right, up, eye, holoColor);
         DrawNameTags(camera, view, right, up, eye);
         foreach (Message msg in messages)
         {
@@ -331,6 +403,49 @@ public class ChatMessages
         }
     }
 
+    // Each sleeping bird's z's climb from just above its head (above its name tag, if it has one showing),
+    // growing and drifting off to one side as they go, fading in at the start and out at the top.
+    // Birds are out of step with each other, so a row of sleepers doesn't pulse together.
+    private void DrawSleepers(Camera3D camera, ViewWindow view, Vector3 right, Vector3 up, Vector3 eye, Vector3 holoColor)
+    {
+        if (zTexture.Id == 0 || sleepFade.Count == 0) return;
+
+        Color tint = Palette.Mix(Palette.ToColor(holoColor), Color.White, SleepLighten);
+        float tagHeight = NameLabelWidth * TextureHeight / NameTextureWidth;    // a name tag's full height at its base size
+
+        foreach (Bird bird in World.Instance.GetAllEntities<Bird>())
+        {
+            if (!sleepFade.TryGetValue(bird.EntityID, out float fade)) continue;
+
+            Vector3 head = new Vector3(bird.Position.X, bird.Position.Y + bird.Bounds.Max.Y * bird.Size, bird.Position.Z);
+            Vector3 headLocal = view.ToLocal(head);
+            float grow = DistanceScale(camera, view.BoxToScene(headLocal));
+            float above = labeledBirds.Contains(bird) ? NameLift + tagHeight * grow : 0f;
+            Vector3 start = headLocal + new Vector3(0, above + SleepGap * grow, 0);
+            float offset = bird.EntityID * 0.618034f % 1f;
+
+            for (int i = 0; i < SleepZs; i++)
+            {
+                float life = (sleepClock / SleepCycle + offset + (float)i / SleepZs) % 1f;    // 0 as a z appears, 1 as it's gone
+                Vector3 local = start + new Vector3(0, life * SleepRise * grow, 0);
+                float alpha = SleepAlpha * fade * Smooth(0f, 0.15f, life) * (1f - Smooth(0.5f, 0.95f, life)) * view.FogFade(local, eye);
+                if (alpha <= 0.01f) continue;
+
+                float sideways = (life * SleepDrift + MathF.Sin(life * MathF.Tau) * SleepWobble) * grow;
+                float half = (SleepStartSize + (SleepEndSize - SleepStartSize) * life) * grow;
+                Vector3 center = view.BoxToScene(local) + right * sideways;
+                DrawFacingQuad(zTexture.Texture, center, right * half, up * half, alpha, tint);
+            }
+        }
+    }
+
+    // 0 below a, 1 above b, eased in between (like smoothstep in the shaders).
+    private static float Smooth(float a, float b, float x)
+    {
+        float t = Math.Clamp((x - a) / (b - a), 0f, 1f);
+        return t * t * (3f - 2f * t);
+    }
+
     // How much bigger a label is drawn at this distance from the camera: 1 up close, growing as the
     // camera pulls back so labels shrink on screen more slowly than the birds do.
     private static float DistanceScale(Camera3D camera, Vector3 center)
@@ -340,14 +455,18 @@ public class ChatMessages
     }
 
     // Render textures are stored upside down, so the top of the quad uses v = 1.
-    private static void DrawFacingQuad(Texture2D texture, Vector3 center, Vector3 right, Vector3 up, float alpha)
+    // tint colors the texture (white leaves it as drawn).
+    private static void DrawFacingQuad(Texture2D texture, Vector3 center, Vector3 right, Vector3 up, float alpha) =>
+        DrawFacingQuad(texture, center, right, up, alpha, Color.White);
+
+    private static void DrawFacingQuad(Texture2D texture, Vector3 center, Vector3 right, Vector3 up, float alpha, Color tint)
     {
         Vector3 topLeft = center - right + up, bottomLeft = center - right - up;
         Vector3 bottomRight = center + right - up, topRight = center + right + up;
 
         Rlgl.SetTexture(texture.Id);
         Rlgl.Begin(DrawMode.Quads);
-            Rlgl.Color4ub(255, 255, 255, (byte)(alpha * 255));
+            Rlgl.Color4ub(tint.R, tint.G, tint.B, (byte)(alpha * 255));
             Rlgl.TexCoord2f(0, 1); Rlgl.Vertex3f(topLeft.X, topLeft.Y, topLeft.Z);
             Rlgl.TexCoord2f(0, 0); Rlgl.Vertex3f(bottomLeft.X, bottomLeft.Y, bottomLeft.Z);
             Rlgl.TexCoord2f(1, 0); Rlgl.Vertex3f(bottomRight.X, bottomRight.Y, bottomRight.Z);
@@ -366,5 +485,8 @@ public class ChatMessages
         finished.Clear();
         foreach (NameTag tag in nameTags.Values) Raylib.UnloadRenderTexture(tag.Texture);
         nameTags.Clear();
+        if (zTexture.Id != 0) Raylib.UnloadRenderTexture(zTexture);
+        zTexture = default;
+        sleepFade.Clear();
     }
 }

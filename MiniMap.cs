@@ -221,7 +221,7 @@ public class MiniMap
         foreach (Bird bird in World.Instance.GetAllEntities<Bird>())
         {
             if (!World.Instance.IsInside(bird.Position)) continue;
-            Raylib.DrawCircleV(ToMap(bird.Position), 2f, bird.Info.Color);
+            Raylib.DrawCircleV(ToMap(bird.Position), 2f, bird.Species.Color);
         }
 
         if (engine.SelectedBird != null)

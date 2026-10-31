@@ -1,0 +1,32 @@
+# A quick look at most of the game: room view, the store, the Hologram View through a day, and rain.
+# Also the smoke test that the driver itself still works.
+
+power on
+birds 8
+wait 25                     # let them walk in
+hour 12
+shot room_noon
+
+scene store
+shot store_noon
+hour 21
+shot store_night
+scene birds
+
+view hologram
+hour 12
+shot holo_noon
+hour 19.3
+shot holo_dusk
+yaw 180
+shot holo_dusk_back
+yaw 0
+hour 23
+shot holo_night
+
+hour 12
+rain
+shot holo_rain
+view room
+shot room_rain
+print engine.DrawMs

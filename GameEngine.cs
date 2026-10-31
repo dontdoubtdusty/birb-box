@@ -8,7 +8,7 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Cube 4.97 Alpha";
+    public const string Version = "Birb Cube 5.06 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
@@ -46,6 +46,10 @@ public class GameEngine
     public bool Paused = false;
     public float SimSpeed = 1f;
     public float SimTime { get; set; }    // set directly only when loading a save
+
+    // The sim speeds the keys and the side column's buttons pick from, slowest first.
+    // (The tools panel's slider can still set anything in between.)
+    public static readonly float[] SpeedSteps = { 0.5f, 1f, 2f, 4f };
 
     // OFF-SCREEN BIRDS update less often, with a bigger time step, to save work.
     private const int OffscreenStep = 3;           // update every 3rd frame
@@ -157,7 +161,7 @@ public class GameEngine
         Renderer.Load(View);
         Rocker.Load();
         BirbBuilder.Load(Renderer.HoloShader);
-        Birds.LoadDesigns();    // Designer saves join their species' looks before the world (and its birds) loads
+        Birds.LoadAll();    // Designer species and saves join the list before the world (and its birds) loads
 
         // Fonts added between Begin and End come before ImGui's built-in one, so the first becomes the default.
         rlImGui.BeginInitImGui();
@@ -238,10 +242,7 @@ public class GameEngine
             return;
         }
 
-        if (!input.KeyboardBlocked && Raylib.IsKeyPressed(KeyboardKey.Space))
-        {
-            Paused = !Paused;
-        }
+        if (!input.KeyboardBlocked) UpdateTimeKeys();
         if (!input.KeyboardBlocked && Raylib.IsKeyPressed(KeyboardKey.Tab))
         {
             UI.ShowTools = !UI.ShowTools;
@@ -252,6 +253,49 @@ public class GameEngine
         UpdateBoxClicks(dt, input);
         UpdateSimulation(dt);
         UpdatePanels(dt, input);
+    }
+
+    // The time keys: P or Space pause, 1 / 2 / 3 pick 1x / 2x / 4x, - and + step one speed slower or faster.
+    // Picking a speed also unpauses. Both the number row and the keypad work; + also works unshifted (the = key).
+    private void UpdateTimeKeys()
+    {
+        if (Raylib.IsKeyPressed(KeyboardKey.P) || Raylib.IsKeyPressed(KeyboardKey.Space)) Paused = !Paused;
+
+        if (Raylib.IsKeyPressed(KeyboardKey.One) || Raylib.IsKeyPressed(KeyboardKey.Kp1)) SetSpeed(1f);
+        if (Raylib.IsKeyPressed(KeyboardKey.Two) || Raylib.IsKeyPressed(KeyboardKey.Kp2)) SetSpeed(2f);
+        if (Raylib.IsKeyPressed(KeyboardKey.Three) || Raylib.IsKeyPressed(KeyboardKey.Kp3)) SetSpeed(4f);
+
+        if (Raylib.IsKeyPressed(KeyboardKey.Minus) || Raylib.IsKeyPressed(KeyboardKey.KpSubtract)) StepSpeed(-1);
+        if (Raylib.IsKeyPressed(KeyboardKey.Equal) || Raylib.IsKeyPressed(KeyboardKey.KpAdd)) StepSpeed(1);
+    }
+
+    // Runs the sim at this speed (and unpauses it).
+    public void SetSpeed(float speed)
+    {
+        SimSpeed = speed;
+        Paused = false;
+    }
+
+    // One step along SpeedSteps (-1 slower, +1 faster). From a speed between steps (set with the slider),
+    // it goes to the nearest step that way. At either end it stays put, but still unpauses.
+    public void StepSpeed(int direction)
+    {
+        float next = SimSpeed;
+        if (direction > 0)
+        {
+            foreach (float step in SpeedSteps)
+            {
+                if (step > SimSpeed + 0.001f) { next = step; break; }
+            }
+        }
+        else
+        {
+            for (int i = SpeedSteps.Length - 1; i >= 0; i--)
+            {
+                if (SpeedSteps[i] < SimSpeed - 0.001f) { next = SpeedSteps[i]; break; }
+            }
+        }
+        SetSpeed(next);
     }
 
     // What keeps going no matter what: sounds, the radio, the projector and the autosave.
@@ -408,7 +452,7 @@ public class GameEngine
             Weather.Update(simDt, Clock, World, Wear);
 
             UpdateEntities(simDt);
-            BirdSpawner.CheckFrostcrestSeen(View);
+            BirdSpawner.CheckRareSeen(View);
             BirdSpawner.Update(simDt);
             FoodSpawner.Update(simDt);
             Wear.Update(simDt, World);
@@ -429,7 +473,7 @@ public class GameEngine
         Sides.Update(this, input.MouseOverImGui);
         Hud.Update(this, input.MouseOverImGui);
         Map.Update(this, input.MouseOverImGui);
-        Renderer.ChatMessages.Update(View, dt);
+        Renderer.ChatMessages.Update(View, dt, Paused ? 0f : dt);    // the sleeping z's hold still while paused
         Bucket.Update(dt, input.MouseOverImGui);
 
         if (FollowedBird != null && !input.InStore)

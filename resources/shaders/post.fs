@@ -12,6 +12,7 @@ uniform vec2 resolution;
 uniform float time;
 uniform float glowStrength;
 uniform float scanlineStrength;
+uniform float alphaFix;     // 0 normally; 1 in the Hologram View, where half-faded things must blend exactly into the sky
 
 out vec4 finalColor;
 
@@ -38,5 +39,9 @@ void main()
     float scan = 0.5 + 0.5 * sin(gl_FragCoord.y * 2.1 - time * 6.0);
     color *= 1.0 - scanlineStrength * scene.a * (1.0 - scan);
 
-    finalColor = vec4(color, scene.a);
+    // The scene texture holds alpha squared (it was blended onto a clear background), which makes half-faded things
+    // a little brighter over the backdrop. That glow suits the room view; standing in the garden it would leave a
+    // bright seam where the ground fades into the sky, so there the true alpha is put back.
+    float alpha = mix(scene.a, sqrt(scene.a), alphaFix);
+    finalColor = vec4(color, alpha);
 }

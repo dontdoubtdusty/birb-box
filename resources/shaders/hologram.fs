@@ -23,6 +23,7 @@ uniform vec2 viewCenter;     // world X,Z at the hologram's center (so the groun
 uniform float viewZoom;      // box units per world unit (so the ground pattern zooms)
 uniform float worldHalfSize; // the world spans -worldHalfSize..worldHalfSize (to find a spot on the wear map)
 uniform vec3 viewPos;        // camera position, for rim glow
+uniform float rimGlow;       // how bright the hologram-colored rim on models' edges is (tools panel, Hologram, Rim glow; 0.45 as built)
 uniform vec3 holoColor;
 uniform float time;
 uniform int isFloor;
@@ -45,6 +46,16 @@ uniform vec4 puddles[6];     // each one's world X, world Z, full radius, how fu
 uniform float edgeWidth;     // how far in from the cube's walls (box units) things start turning to pure hologram
 uniform float edgeStrength;  // how strong that edge look is: 0 off, 1 the normal look, up to 2 (0 while drawing the store)
 uniform float observer;      // 0 in the room view, 1 standing in the garden (the Hologram View): things also fade with distance from the eye
+uniform vec3 lampPos;        // the store's lamp (StoreRenderer), in scene space
+uniform vec3 lampColor;      // its light; 0 when it's off, and always 0 in the bird world
+uniform float lampReach;     // how far (scene units) until its light has dropped to half
+uniform float selfLit;       // 0 normally; 1 while drawing something that gives off its own light (the lit bulb): it isn't darkened by the night
+uniform vec3 shadeColor;     // faces turned away from the sun or moon tint their fill light by this: (1,1,1) at midday, blue-purple at golden hour
+uniform float golden;        // 0 to 1, how near golden hour: the low sun's color reaches the ground, the teal tint eases off
+uniform float nightLevel;    // 0 by day, 1 at full night (DayLight.Darkness): colors grow quieter, birds' rims brighter
+uniform float cloudCover;    // how much of the sky the drifting clouds cover (Weather.Cover): 0 clear, 1 solid
+uniform vec2 cloudDrift;     // how far the clouds have drifted, in world units (Weather.CloudDrift)
+uniform float cloudShadow;   // how dark their shadows are right now: 0 in the store, the Designer, at night and under full overcast
 
 out vec4 finalColor;
 
@@ -58,6 +69,16 @@ const float ObserverFogNear = 4.5;   // the Hologram View's round fog, in box un
 const float ObserverFogFar = 8.0;    // (the same numbers as ViewWindow.ObserverFogNear / Far)
 const float StripesPerUnit = 24.0;   // horizontal stripes per box unit of height
 const float StripeDrift = 0.5;       // how fast the stripes drift upward (stripes per second)
+const float LampIndoor = 0.55;       // how much of the time of day's light the store's lamp replaces while it's on (0.4 before 5.04's brighter nights)
+
+// TIME OF DAY LOOK (5.04)
+const float GroundSunShare = 0.45;   // at golden hour the ground catches at least this share of the low sun (light scattered by the haze)
+const float GoldenTintEase = 0.5;    // at golden hour the hologram tint drops by this share (25% to about 12%), so warm colors show
+const float NightMute = 0.3;         // at full night colors move this far toward gray: moonlight shows shapes more than colors
+const float NightRim = 0.8;          // at full night the rim glow is this much brighter, so birds keep a clear outline
+
+// CLOUD SHADOWS (5.05)
+const float ShadowSkyShare = 0.25;   // a cloud's shadow also takes this share of the light from all around (the sky above is dimmer)
 
 float hash(vec2 p)
 {
@@ -71,6 +92,19 @@ float noise(vec2 p)
     vec2 u = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x),
                mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
+}
+
+// ---------------- CLOUDS ----------------
+// The drifting clouds, by world position: 0 open sky, 1 inside a cloud. The SAME function is in horizon.fs,
+// so the shadows on the ground match the clouds overhead in the Hologram View. Keep the two in step.
+float cloudField(vec2 world, float cover)
+{
+    if (cover <= 0.001) return 0.0;
+    vec2 p = (world - cloudDrift) * 0.14;                // clouds about 5 to 8 world units across
+    float f = noise(p) * 0.5 + noise(p * 2.03 + 7.1) * 0.27 + noise(p * 4.1 + 3.7) * 0.15 + noise(p * 8.3 + 1.3) * 0.08;
+    f = (f - 0.5) * 1.8 + 0.5;                           // stretched, so cloud and open sky are clearly apart
+    float threshold = mix(0.85, 0.0, cover);             // more cover lets more of the noise through
+    return smoothstep(threshold, threshold + 0.12, f);
 }
 
 // Bare dirt, with a few light seed specks scattered on it.
@@ -310,9 +344,42 @@ void main()
         base = vec4(ground, 1.0);
     }
 
-    // Light from all around, plus the sun (or moon) from its side
-    float diffuse = max(dot(normal, normalize(lightDir)), 0.0);
-    vec3 color = base.rgb * (ambientLight + directLight * diffuse);
+    // Light from all around, plus the sun (or moon) from its side. Faces turned away from it get their fill light
+    // tinted by shadeColor (cool shade against a warm sun at golden hour). The ground counts as facing the light,
+    // and at golden hour it catches a share of the low sun even though the sun is nearly level with it.
+    float facingLight = dot(normal, normalize(lightDir));
+    float diffuse = max(facingLight, 0.0);
+    float lit = (isFloor == 1) ? 1.0 : smoothstep(-0.2, 0.4, facingLight);
+    if (isFloor == 1) diffuse = max(diffuse, GroundSunShare * golden);
+    vec3 ambient = ambientLight * mix(shadeColor, vec3(1.0), lit);
+
+    // A drifting cloud's shadow takes away most of the sun and a little of the sky's light
+    if (cloudShadow > 0.0)
+    {
+        float shadow = cloudField(boxPos.xz / viewZoom + viewCenter, cloudCover) * cloudShadow;
+        diffuse *= 1.0 - shadow;
+        ambient *= 1.0 - shadow * ShadowSkyShare;
+    }
+    vec3 color = base.rgb * (ambient + directLight * diffuse);
+
+    // At night, colors grow quieter (the lit bulb keeps its own)
+    color = mix(color, vec3(dot(color, vec3(0.299, 0.587, 0.114))), nightLevel * NightMute * (1.0 - selfLit));
+
+    // The store's lamp: a warm light from one spot, fading with distance. Faces turned away still catch half
+    // (light bouncing around a small wooden room), so the room reads as softly lit rather than spotlit.
+    if (lampColor.r + lampColor.g + lampColor.b > 0.0)
+    {
+        vec3 toLamp = lampPos - fragPosition;
+        float d = length(toLamp);
+        float falloff = 1.0 / (1.0 + (d * d) / (lampReach * lampReach));
+        float facing = max(dot(normal, toLamp / max(d, 0.001)), 0.0) * 0.5 + 0.5;
+        float on = min(max(lampColor.r, max(lampColor.g, lampColor.b)), 1.0);
+        color *= 1.0 - LampIndoor * on;    // indoors, the night's blue light gives way to the lamp
+        color += base.rgb * lampColor * falloff * facing;
+    }
+
+    // Something that gives off its own light shows its own color, bright, whatever the time of day
+    color = mix(color, base.rgb * 1.3, selfLit);
 
     // On the water: the sun's (or moon's) glint off the moving surface, a faint sky sheen at low angles,
     // a few slow sparkles, and the waterline's soft hologram glow
@@ -335,7 +402,7 @@ void main()
     // Hologram tint: blend part of the color toward the hologram hue
     float lum = dot(color, vec3(0.299, 0.587, 0.114));
     // (the floor gets less tint so the grass still reads as green and the dirt as brown)
-    float tintAmount = (isFloor == 1) ? 0.08 : 0.25;
+    float tintAmount = ((isFloor == 1) ? 0.08 : 0.25) * (1.0 - GoldenTintEase * golden);
     color = mix(color, holoColor * lum * 1.6, tintAmount);
 
     // Rim glow on the edges of models
@@ -343,7 +410,7 @@ void main()
     {
         vec3 toCamera = normalize(viewPos - fragPosition);
         float rim = pow(1.0 - max(dot(normal, toCamera), 0.0), 3.0);
-        color += holoColor * rim * 0.45;
+        color += holoColor * rim * rimGlow * (1.0 + NightRim * nightLevel);
     }
 
     // Edge look: things nearing a wall turn into plain hologram, like a projected figure (not the floor).

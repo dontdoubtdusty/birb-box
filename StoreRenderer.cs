@@ -22,6 +22,12 @@ public class StoreRenderer
     private static readonly Color Burlap = new Color(176, 150, 108, 255);
     private static readonly Color OpenSpace = new Color(8, 12, 28, 255);
     private static readonly Color Star = new Color(240, 240, 255, 255);
+    private static readonly Color BulbOff = new Color(196, 198, 194, 255);    // frosted glass, unlit
+    private static readonly Color BulbOn = new Color(255, 200, 120, 255);     // warm filament glow
+
+    // THE LAMP: the frosted bulb under the air recycler (it comes on at night, see SeedStore.LampLevel)
+    private static readonly Vector3 LampLight = new Vector3(3.6f, 2.5f, 1.3f);      // its light at full, a warm incandescent (strong, as it falls off fast)
+    private const float LampReach = 0.9f;                                           // store units until the light drops to half
 
     // ROOM
     private const float WallHeight = 2.3f;
@@ -38,7 +44,7 @@ public class StoreRenderer
 
     private readonly UnitShapes shapes = new UnitShapes();
     private Shader shader;
-    private int locBoxYaw;
+    private int locBoxYaw, locLampPos, locLampColor, locLampReach, locSelfLit;
 
     // Set at the start of each Draw so the shape helpers below can use them
     private SeedStore store = null!;
@@ -49,6 +55,10 @@ public class StoreRenderer
     {
         shader = holoShader;
         locBoxYaw = Raylib.GetShaderLocation(shader, "boxYaw");
+        locLampPos = Raylib.GetShaderLocation(shader, "lampPos");
+        locLampColor = Raylib.GetShaderLocation(shader, "lampColor");
+        locLampReach = Raylib.GetShaderLocation(shader, "lampReach");
+        locSelfLit = Raylib.GetShaderLocation(shader, "selfLit");
         shapes.Load(shader);
     }
 
@@ -57,13 +67,15 @@ public class StoreRenderer
         shapes.Unload();
     }
 
-    // The store has its own turn, so this changes the shader's boxYaw. The caller puts the birds' back afterward.
+    // The store has its own turn, so this changes the shader's boxYaw, and it switches on its lamp's light.
+    // The caller puts the birds' uniforms back afterward (which turns the lamp's light off again).
     public void Draw(SeedStore store, ViewWindow view)
     {
         this.store = store;
         yawDegrees = store.Yaw * Raylib.RAD2DEG;
         roomRadius = view.CornerReach / SeedStore.Scale;    // out to the cube's corners
         Raylib.SetShaderValue(shader, locBoxYaw, store.Yaw, ShaderUniformDataType.Float);
+        SetLampLight();
 
         DrawFloor();
         DrawWall();
@@ -295,12 +307,22 @@ public class StoreRenderer
 
     // What looks like a ceiling fan is the ship's air recycler: a steel motor housing and a guard ring,
     // with wooden-looking blades turning underneath. The rod rises up into the ceiling fog.
+    // Under the hub hangs the shop's lamp: a frosted bulb that glows warm once it's switched on.
+    private static readonly Vector3 RecyclerHub = new Vector3(0f, 2.0f, -0.15f);
+    private static readonly Vector3 BulbSpot = RecyclerHub - new Vector3(0, 0.1f, 0);
+
     private void DrawAirRecycler()
     {
-        Vector3 hub = new Vector3(0f, 2.0f, -0.15f);
+        Vector3 hub = RecyclerHub;
         Cylinder(hub + new Vector3(0, 0.08f, 0), 0.02f, 0.9f, Steel);
         Cylinder(hub, 0.12f, 0.1f, Steel);
         Cylinder(hub - new Vector3(0, 0.03f, 0), 0.06f, 0.03f, SteelLight);
+
+        // The bulb: drawn bright whatever the time of day while it's lit
+        float lit = store.LampLevel;
+        Raylib.SetShaderValue(shader, locSelfLit, lit, ShaderUniformDataType.Float);
+        Ball(BulbSpot, new Vector3(0.065f, 0.07f, 0.065f), Palette.Mix(BulbOff, BulbOn, lit));
+        Raylib.SetShaderValue(shader, locSelfLit, 0f, ShaderUniformDataType.Float);
 
         for (int i = 0; i < 4; i++)
         {
@@ -316,6 +338,16 @@ public class StoreRenderer
             float angle = i * MathF.PI * 2f / Segments;
             TurnedBox(hub + Outward(angle, GuardRadius) + new Vector3(0, 0.03f, 0), new Vector3(0.025f, 0.05f, segmentLength), Steel, angle);
         }
+    }
+
+    // Hands the shader the lamp's light: where the bulb hangs, and how bright it is right now.
+    private void SetLampLight()
+    {
+        Vector3 bulb = store.ToScene(BulbSpot);
+        Vector3 color = LampLight * store.LampLevel;
+        Raylib.SetShaderValue(shader, locLampPos, bulb, ShaderUniformDataType.Vec3);
+        Raylib.SetShaderValue(shader, locLampColor, color, ShaderUniformDataType.Vec3);
+        Raylib.SetShaderValue(shader, locLampReach, LampReach * SeedStore.Scale, ShaderUniformDataType.Float);
     }
 
     // ---------------- SHAPE HELPERS ----------------

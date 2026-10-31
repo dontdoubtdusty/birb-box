@@ -385,11 +385,11 @@ public class Food : Entity
     }
 
     // How much the bird likes eating here: 1 on the dirt, the feeder's appeal in a feeder.
-    public float AppealFor(BirdType bird) => Feeder?.Info.AppealFor(bird) ?? 1f;
+    public float AppealFor(Species bird) => Feeder?.Info.AppealFor(bird) ?? 1f;
 
     // The fresh seed left in this pile that the bird likes most, or null if there's nothing here for it
     // (including when it's in a feeder the bird can't use).
-    public SeedType? FavoriteFor(BirdType bird)
+    public SeedType? FavoriteFor(Species bird)
     {
         if (AppealFor(bird) <= 0f) return null;
 
@@ -400,7 +400,7 @@ public class Food : Entity
         {
             if (layer.Amount <= 0.01f || IsSpoiled(layer)) continue;
 
-            Seeds.Get(layer.Seed).Tastes.TryGetValue(bird, out float taste);
+            float taste = bird.TasteFor(layer.Seed);
             if (taste > bestTaste)
             {
                 best = layer.Seed;
@@ -423,11 +423,11 @@ public class Food : Entity
     // Eats one bite of seed here: the bird's own favorite seed (see Bird.FavoriteSeed) if the pile has some,
     // otherwise the seed here its kind likes most. The bite comes off the topmost fresh layers of that seed.
     // Returns false if there was nothing it wanted.
-    public bool TakeBite(BirdType bird, SeedType? ownFavorite = null)
+    public bool TakeBite(Species bird, SeedType? ownFavorite = null)
     {
         SeedType? seed = FavoriteFor(bird);
         if (seed == null) return false;
-        if (ownFavorite is SeedType own && HasFresh(own) && Seeds.Eats(bird, own)) seed = own;
+        if (ownFavorite is SeedType own && HasFresh(own) && bird.Eats(own)) seed = own;
 
         float bite = BiteSize;
         for (int i = Layers.Count - 1; i >= 0 && bite > 0.0001f; i--)

@@ -8,8 +8,7 @@ public class Bird : Entity
     public string Name { get; private set; }
     public bool IsNamed { get; private set; }      // the player renamed it
     public int Visits { get; private set; } = 1;   // 2 and up: a regular that came back
-    public BirdType Type { get; private set; }
-    public BirdInfo Info => Birds.Get(Type);
+    public Species Species { get; private set; }       // its kind (see Birds.cs)
     public BirdLook Look { get; private set; }         // its shape and base size: built in, or a Birb Designer save
     public BirbShape Shape => Look.Shape;
     public BoundingBox Bounds { get; private set; }    // around the shape, before Size is applied
@@ -100,9 +99,9 @@ public class Bird : Entity
 
     private bool removed = false;
 
-    public Bird(BirdType type, string name)
+    public Bird(Species type, string name)
     {
-        Type = type;
+        Species = type;
         Name = name;
         SetPersonality(Traits.Roll(type));
         FavoriteSeed = Seeds.RollFavorite(type);
@@ -118,7 +117,7 @@ public class Bird : Entity
         interestTimer = Rng.Range(0f, InterestCheckInterval);
         Mover = new BirdMover(this);
 
-        UseLook(Info.Looks[Rng.Next(Info.Looks.Count)]);
+        UseLook(Species.Looks[Rng.Next(Species.Looks.Count)]);
     }
 
     // Takes on a look and works out its size and how high it stands.
@@ -137,7 +136,7 @@ public class Bird : Entity
     public void RefreshLook()
     {
         if (Look.File == null) return;
-        BirdLook? fresh = Info.Looks.Find(look => Birds.SameFile(look.File, Look.File));
+        BirdLook? fresh = Species.Looks.Find(look => Birds.SameFile(look.File, Look.File));
         if (fresh == null || fresh == Look) return;
 
         bool onGround = !IsFlying;
@@ -151,9 +150,10 @@ public class Bird : Entity
     {
         if (file != null)
         {
-            return Info.Looks.Find(look => Birds.SameFile(look.File, file)) ?? Info.Looks[Rng.Next(Info.Looks.Count)];
+            return Species.Looks.Find(look => Birds.SameFile(look.File, file)) ?? Species.Looks[Rng.Next(Species.Looks.Count)];
         }
-        List<BirdLook> builtIn = Info.BuiltInLooks;
+        List<BirdLook> builtIn = Species.BuiltInLooks;
+        if (builtIn.Count == 0) return Species.Looks[Rng.Next(Species.Looks.Count)];    // a Designer species has only designs
         return builtIn[Math.Clamp(index, 0, builtIn.Count - 1)];
     }
 
@@ -186,8 +186,8 @@ public class Bird : Entity
     // Dev only (tools panel): a fresh personality and favorite seed, as if it had just arrived for the first time.
     public void RerollPersonality()
     {
-        SetPersonality(Traits.Roll(Type));
-        FavoriteSeed = Seeds.RollFavorite(Type);
+        SetPersonality(Traits.Roll(Species));
+        FavoriteSeed = Seeds.RollFavorite(Species);
         callTimer = NextCallDelay();
     }
 
@@ -195,9 +195,9 @@ public class Bird : Entity
 
     public BirdSave ToSave() => new()
     {
-        Type = Type,
+        Type = Species.Key,
         Name = Name,
-        ShapeIndex = Math.Max(0, Info.BuiltInLooks.IndexOf(Look)),
+        ShapeIndex = Math.Max(0, Species.BuiltInLooks.IndexOf(Look)),
         ShapeFile = Look.File,
         Position = Position,
         Speed = Speed,
@@ -228,9 +228,11 @@ public class Bird : Entity
     // A save from before the long lives gets a new lifespan in the new range.
     // A save from before personalities (4.85) keeps the traits and favorite seed rolled when it was made here,
     // and one from before looks (4.88) keeps the size and tint rolled here.
+    // The save's species must be there and have a look (SaveGame drops birds whose species is gone).
     public static Bird FromSave(BirdSave save)
     {
-        Bird bird = new Bird(save.Type, save.Name);
+        Species species = Birds.Find(save.Type) ?? throw new InvalidDataException($"no species {save.Type}");
+        Bird bird = new Bird(species, save.Name);
         if (save.Build > 0f) bird.SetLooks(save.Build, save.Shade, save.Warmth);
         bird.UseLook(bird.SavedLook(save.ShapeFile, save.ShapeIndex));
         bird.Position = save.Position;
@@ -249,7 +251,7 @@ public class Bird : Entity
         bird.HasHome = save.HasHome;
         bird.Home = save.Home;
         if (save.Traits != null) bird.SetPersonality(save.Traits);
-        if (save.FavoriteSeed is SeedType favorite && Seeds.Eats(save.Type, favorite)) bird.FavoriteSeed = favorite;
+        if (save.FavoriteSeed is SeedType favorite && species.Eats(favorite)) bird.FavoriteSeed = favorite;
         bird.leftForNight = save.NightAway;
         if (save.Roosting && bird.State == BirdState.Wandering && !bird.Nature.NightOwl)
         {
@@ -516,7 +518,7 @@ public class Bird : Entity
     }
 
     // A bird only eats seed it has a taste for (see the seed table in Seeds.cs).
-    public bool CanEat(Food food) => food.FavoriteFor(Type) != null;
+    public bool CanEat(Food food) => food.FavoriteFor(Species) != null;
 
     private void TryFindFood()
     {
@@ -574,7 +576,7 @@ public class Bird : Entity
         if (eatTimer >= BiteInterval * Nature.BiteTime)
         {
             eatTimer = 0f;
-            if (TargetFood.TakeBite(Type, FavoriteSeed))
+            if (TargetFood.TakeBite(Species, FavoriteSeed))
             {
                 Hunger = MathF.Min(1f, Hunger + Food.NutritionPerBite * Nature.Nourish);
             }

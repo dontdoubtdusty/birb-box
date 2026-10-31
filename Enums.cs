@@ -1,4 +1,4 @@
-// BirdType lives in Birds.cs, next to the bird table.
+// The kinds of bird are the Species class (Species.cs), with the built-in ones in Birds.cs.
 public enum BirdState
 {
     Arriving,     // walking in from the world edge or flying down from the sky

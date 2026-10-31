@@ -176,21 +176,13 @@ public static class Traits
             e => { e.RainProud = true; }),
     };
 
-    // How each species leans: a trait's commonness is multiplied by this when a bird of that kind rolls.
-    // Missing means 1 (no lean).
-    private static readonly Dictionary<BirdType, Dictionary<Trait, float>> leans = new()
-    {
-        [BirdType.Emberwing] = new() { [Trait.StoutHearted] = 2.5f, [Trait.FaintHearted] = 0.4f, [Trait.TownCrier] = 1.5f, [Trait.EarlyRiser] = 1.5f, [Trait.RainProud] = 1.5f },
-        [BirdType.DuskDove] = new() { [Trait.FaintHearted] = 2.5f, [Trait.Wary] = 1.5f, [Trait.StoutHearted] = 0.4f, [Trait.Hushed] = 1.5f, [Trait.NightOwl] = 2.5f, [Trait.EarlyRiser] = 0.5f, [Trait.RainProud] = 0.5f },
-        [BirdType.Gildfinch] = new() { [Trait.Dainty] = 2f, [Trait.TownCrier] = 1.5f, [Trait.Wayfarer] = 1.5f, [Trait.EarlyRiser] = 1.5f },
-        [BirdType.Frostcrest] = new() { [Trait.Wayfarer] = 2f, [Trait.Hushed] = 2f, [Trait.Wary] = 1.5f, [Trait.NightOwl] = 1.5f, [Trait.RainProud] = 2f },
-    };
+    // How each species leans is in its entry in Birds.cs (Species.Leans).
 
     public static TraitInfo Get(Trait trait) => info[trait];
 
     // A new personality for a bird of this kind: 2 or 3 different scales, one degree of each, in scale order.
     // Scales are picked one at a time by their weight (ScaleWeight, times the species' lean for a one-trait scale).
-    public static List<Trait> Roll(BirdType type)
+    public static List<Trait> Roll(Species type)
     {
         int count = Rng.Chance(ThreeTraitChance) ? 3 : 2;
         List<TraitScale> left = Scales.ToList();
@@ -213,7 +205,7 @@ public static class Traits
 
     // How likely a scale is to be picked. A scale with only one trait (Weather) has no other degree to lean between,
     // so the species' lean for that trait goes on the scale instead.
-    private static float PickWeight(BirdType type, TraitScale scale)
+    private static float PickWeight(Species type, TraitScale scale)
     {
         float weight = ScaleWeight.TryGetValue(scale, out float w) ? w : 1f;
         List<Trait> options = All.Where(trait => info[trait].Scale == scale).ToList();
@@ -222,7 +214,7 @@ public static class Traits
     }
 
     // One degree of a scale, weighted by commonness and the species' lean.
-    private static Trait RollDegree(BirdType type, TraitScale scale)
+    private static Trait RollDegree(Species type, TraitScale scale)
     {
         List<Trait> options = All.Where(trait => info[trait].Scale == scale).ToList();
         float total = options.Sum(trait => Weight(type, trait));
@@ -235,10 +227,9 @@ public static class Traits
         return options[^1];
     }
 
-    private static float Weight(BirdType type, Trait trait) => info[trait].Commonness * Lean(type, trait);
+    private static float Weight(Species type, Trait trait) => info[trait].Commonness * Lean(type, trait);
 
-    private static float Lean(BirdType type, Trait trait) =>
-        leans.TryGetValue(type, out var forType) && forType.TryGetValue(trait, out float l) ? l : 1f;
+    private static float Lean(Species type, Trait trait) => type.LeanFor(trait);
 
     // The same personality made a Night Owl (birds that arrive at night all are): its Hours trait swapped,
     // or, with no room left for one, another trait dropped at random, so it still has 2 or 3.

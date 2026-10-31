@@ -35,9 +35,12 @@ public class BucketPanel
     // The bucket's contents and the ATTRACTS list only change when the bucket does, so they're worked out once per change.
     private RenderTexture2D contentsTexture;
     private int contentsVersion = -1;
-    private List<KeyValuePair<BirdType, float>> shares = new();
+    private List<KeyValuePair<Species, float>> shares = new();
     private int sharesVersion = -1;
-    private bool sharesFrostcrestSeen;
+    // Species rows in the ATTRACTS list: up to 4 all show (as before 4.99); past that, 3 and an "N more" line, to fit.
+    private const int MaxAttractsRows = 4;
+    private const int RowsWithMore = 3;
+    private int sharesSpeciesVersion = -1;    // Birds.Version the list was made for (a species seen, added or changed)
 
     public BucketPanel()
     {
@@ -426,14 +429,14 @@ public class BucketPanel
         UiText.Draw("ATTRACTS", x, y, HeaderSize, accent);
         y += 16;
 
-        if (sharesVersion != Bucket.Version || sharesFrostcrestSeen != Seeds.FrostcrestSeen)
+        if (sharesVersion != Bucket.Version || sharesSpeciesVersion != Birds.Version)
         {
             shares = Bucket.PredictBirds()
                 .Where(pair => pair.Value >= 0.01f)
                 .OrderByDescending(pair => pair.Value)
                 .ToList();
             sharesVersion = Bucket.Version;
-            sharesFrostcrestSeen = Seeds.FrostcrestSeen;
+            sharesSpeciesVersion = Birds.Version;
         }
 
         if (shares.Count == 0)
@@ -442,13 +445,21 @@ public class BucketPanel
             return;
         }
 
-        foreach ((BirdType bird, float share) in shares)
+        // With many species about, only the strongest few fit; the rest are counted on one line.
+        int rows = shares.Count <= MaxAttractsRows ? shares.Count : RowsWithMore;
+        foreach ((Species bird, float share) in shares.Take(rows))
         {
             string percent = $"{share * 100f:0}%";
-            BirdInfo birdInfo = Birds.Get(bird);
-            UiText.Draw(birdInfo.Name, x, y, 20, birdInfo.Color);
+            UiText.Draw(bird.Name, x, y, 20, bird.Color);
             UiText.Draw(percent, x + width - UiText.Measure(percent, 20), y, 20, Palette.DimText);
             y += 20;
+        }
+        if (rows < shares.Count)
+        {
+            float rest = shares.Skip(rows).Sum(pair => pair.Value);
+            UiText.Draw($"{shares.Count - rows} more", x, y, HeaderSize, Palette.DimText);
+            string percent = $"{rest * 100f:0}%";
+            UiText.Draw(percent, x + width - UiText.Measure(percent, HeaderSize), y, HeaderSize, Palette.DimText);
         }
     }
 

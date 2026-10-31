@@ -162,9 +162,9 @@ public class SeedBucket
 
     // Each bird's share of the attraction, adding up to 1.
     // A bird's score is the sum over seeds of (amount of that seed x how much the bird likes it).
-    public Dictionary<BirdType, float> PredictBirds()
+    public Dictionary<Species, float> PredictBirds()
     {
-        Dictionary<BirdType, float> scores = new();
+        Dictionary<Species, float> scores = new();
 
         foreach (SeedType seed in Seeds.All)
         {
@@ -175,7 +175,7 @@ public class SeedBucket
 
         if (totalScore <= 0f) return scores;
 
-        foreach (BirdType bird in scores.Keys.ToList())
+        foreach (Species bird in scores.Keys.ToList())
         {
             scores[bird] /= totalScore;
         }

@@ -21,6 +21,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- tools\ holds Claude's screenshot driver, a separate program with its own Main; keep it out of the game -->
+    <Compile Remove="tools\**" />
+    <None Remove="tools\**" />
     <None Update="resources\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

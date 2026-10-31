@@ -51,6 +51,9 @@ public class Pedestal
     private const float LedY = -2.45f;            // halfway up the plinth
     private const float LedSpacing = 0.5f;
     private const float LedSize = 0.11f;
+    private const int LedsPerRow = 8;              // past this many species, a second row below (and a third...)
+    private const float LedRowGap = 0.28f;         // between rows, which are then centered on LedY
+    private const float LedRowShrink = 0.8f;       // bulbs are this much smaller when there's more than one row
 
     // PROJECTOR LENS: in a brass housing against the well's front wall, at the logo's height
     private const float LensRadius = 0.26f;
@@ -95,13 +98,9 @@ public class Pedestal
     private RenderTexture2D bezelTexture;
     private RenderTexture2D topTexture;
 
-    private readonly BirdType[] birdTypes = Birds.All;
-    private readonly bool[] typeInCube;
-
-    public Pedestal()
-    {
-        typeInCube = new bool[birdTypes.Length];
-    }
+    // One LED per species, in Birds.All order (read live, since Designer species can be added while playing).
+    private static IReadOnlyList<Species> birdTypes => Birds.All;
+    private readonly HashSet<Species> typeInCube = new();
 
     public void Load(Shader roomShader, ViewWindow view)
     {
@@ -246,12 +245,12 @@ public class Pedestal
     public void RefreshReadouts(ViewWindow view, int coins)
     {
         int birbs = 0;
-        Array.Clear(typeInCube);
+        typeInCube.Clear();
         foreach (Bird bird in World.Instance.GetAllEntities<Bird>())
         {
             if (!view.Contains(bird.Position)) continue;
             birbs++;
-            typeInCube[Array.IndexOf(birdTypes, bird.Type)] = true;
+            typeInCube.Add(bird.Species);
         }
 
         if (birbs != shownBirbs)
@@ -567,25 +566,34 @@ public class Pedestal
     }
 
     // ---------------- LEDS ----------------
-    // One LED per bird type, left to right in enum order. Lit LEDs shine in the bird's color with a
-    // soft halo; unlit ones are dark glass with just a hint of their color. All go dark with the power.
+    // One LED per species, left to right in Birds.All order, up to LedsPerRow in a row, then more rows below.
+    // Lit LEDs shine in the bird's color with a soft halo; unlit ones are dark glass with just a hint of their color.
+    // All go dark with the power.
 
-    // Where LED i sits, and which way is straight out from the pedestal there.
+    // How big the bulbs are: a little smaller once there's more than one row, so the rows fit on the plinth.
+    private float LedBulbSize => birdTypes.Count > LedsPerRow ? LedSize * LedRowShrink : LedSize;
+
+    // Where LED i sits, and which way is straight out from the pedestal there. Each row is centered on the front.
     private Vector3 LedSpot(float r, int i, out Vector3 outward)
     {
+        int rows = Math.Max(1, (birdTypes.Count + LedsPerRow - 1) / LedsPerRow);
+        int row = i / LedsPerRow;
+        int inRow = Math.Min(LedsPerRow, birdTypes.Count - row * LedsPerRow);
+        float y = LedY + LedRowGap * ((rows - 1) / 2f - row);
+
         float radius = r * 1.065f + 0.04f;     // plinth surface at LedY, plus a little
         float step = LedSpacing / radius;      // spacing as an angle around the pedestal
         // Bigger angles are further left when facing the front, so count down from the left end.
-        float angle = MathF.PI / 2f + step * ((birdTypes.Length - 1) / 2f - i);
+        float angle = MathF.PI / 2f + step * ((inRow - 1) / 2f - i % LedsPerRow);
         outward = new Vector3(MathF.Cos(angle), 0, MathF.Sin(angle));
-        return new Vector3(outward.X * radius, LedY, outward.Z * radius);
+        return new Vector3(outward.X * radius, y, outward.Z * radius);
     }
 
     // The brass ring around each bulb. It sits further in than the bulb, so only a rim shows.
     private void DrawLedRims(UnitShapes shapes, float r)
     {
-        float size = LedSize * 1.4f;
-        for (int i = 0; i < birdTypes.Length; i++)
+        float size = LedBulbSize * 1.4f;
+        for (int i = 0; i < birdTypes.Count; i++)
         {
             Vector3 spot = LedSpot(r, i, out Vector3 outward);
             shapes.Ball(spot - outward * 0.08f, new Vector3(size, size, size), LipBrass);
@@ -594,21 +602,21 @@ public class Pedestal
 
     private void DrawLedBulbs(float r, float power)
     {
-        for (int i = 0; i < birdTypes.Length; i++)
+        for (int i = 0; i < birdTypes.Count; i++)
         {
-            Color c = Birds.Get(birdTypes[i]).Color;
+            Color c = birdTypes[i].Color;
             Color dark = new Color(c.R / 3, c.G / 3, c.B / 3, 255);
-            Color bulb = typeInCube[i] ? Palette.Mix(dark, c, power) : dark;
-            Raylib.DrawSphereEx(LedSpot(r, i, out _), LedSize, 10, 10, bulb);
+            Color bulb = typeInCube.Contains(birdTypes[i]) ? Palette.Mix(dark, c, power) : dark;
+            Raylib.DrawSphereEx(LedSpot(r, i, out _), LedBulbSize, 10, 10, bulb);
         }
     }
 
     private void DrawLedHalos(float r, float power)
     {
-        for (int i = 0; i < birdTypes.Length; i++)
+        for (int i = 0; i < birdTypes.Count; i++)
         {
-            if (!typeInCube[i]) continue;
-            Raylib.DrawSphereEx(LedSpot(r, i, out _), LedSize * 2f, 10, 10, Raylib.Fade(Birds.Get(birdTypes[i]).Color, 0.45f * power));
+            if (!typeInCube.Contains(birdTypes[i])) continue;
+            Raylib.DrawSphereEx(LedSpot(r, i, out _), LedBulbSize * 2f, 10, 10, Raylib.Fade(birdTypes[i].Color, 0.45f * power));
         }
     }
 }
