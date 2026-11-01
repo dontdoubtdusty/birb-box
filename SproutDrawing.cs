@@ -31,7 +31,7 @@ public partial class WorldDrawer
         float time = (float)Raylib.GetTime();
         foreach (Sprout sprout in World.Instance.GetAllEntities<Sprout>())
         {
-            if (!view.Contains(sprout.Position, 0.5f + Sprout.Reach)) continue;
+            if (!view.IsShown(sprout.Position, 0.5f + Sprout.Reach)) continue;
 
             Vector3 local = view.ToLocal(sprout.Position);
             int look = sprout.Look;

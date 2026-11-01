@@ -1,64 +1,246 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
-// Finds live web stations through Radio Browser (radio-browser.info), a free directory run by volunteers.
-// What to look for is set in Radio/web-stations.txt (made on first run): genres, or your own picks
-// (stations by name, or stream addresses). If any picks are listed, the genres are ignored.
-// The search runs in the background at startup; if Radio Browser can't be reached, the last list that worked is used.
+// Live web stations from Radio Browser (radio-browser.info), a free directory run by volunteers.
+// What goes on the dial is kept in Radio/my-stations.json, edited in the game's station finder (click the radio's dial):
+//  - your own stations, saved by their Radio Browser id (so the lookup is exact) with the stream address
+//    and the frequency they landed on, so they stay put on the dial;
+//  - genre tags, each bringing its most-listened working stations (how many is set per tag).
+// A station can also be written into the file by hand with an empty "Uuid" and just a "Url".
+// Network work runs on background tasks; their results are handed to the main thread through a queue
+// (Update runs them), so the lists here are only ever touched on the main thread.
 public class WebStations
 {
-    private const string UserAgent = "BirbCube/4.83";
-    private const int DefaultPerGenre = 2;
+    private const int DefaultPerTag = 2;
+    private const int MaxPerTag = 10;
     private const int MaxNameLength = 32;
+    private const int SearchLimit = 60;
+    private static readonly string[] DefaultTags = { "ambient", "lofi", "jazz", "classical", "medieval" };
     private static readonly string[] FallbackServers = { "de1.api.radio-browser.info", "de2.api.radio-browser.info", "fi1.api.radio-browser.info" };
+    private static readonly Regex UuidPattern = new(@"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
 
-    // A station as Radio Browser describes it. Saved to the cache file as JSON.
-    // Stations from a "url:" line have no Uuid.
-    public record Info(string Uuid, string Name, string Url, string Genre, string Country);
-
-    // What web-stations.txt asks for.
-    private record Config(List<string> Genres, int PerGenre, List<string> Names, List<Info> Urls)
+    // A station as the radio needs it.
+    public record Info(string Uuid, string Name, string Url, string Genre, string Country)
     {
-        public bool HasPicks => Names.Count > 0 || Urls.Count > 0;
+        [JsonIgnore] public string Key => Uuid.Length > 0 ? Uuid : Url;
     }
 
-    public string ConfigPath { get; }
+    // A search result: the station plus what the finder shows about it.
+    // WhyNot is empty when the radio can play it, otherwise the reason it can't (shown greyed out).
+    public record Found(Info Info, string Codec, int Bitrate, string Tags, string WhyNot)
+    {
+        public bool Playable => WhyNot.Length == 0;
+    }
+
+    // One of your stations, as saved in my-stations.json. Frequency 0 means "not placed yet".
+    public class MyStation
+    {
+        public string Uuid { get; set; } = "";
+        public string Name { get; set; } = "";
+        public string Url { get; set; } = "";
+        public string Genre { get; set; } = "";
+        public string Country { get; set; } = "";
+        public float Frequency { get; set; }
+
+        [JsonIgnore] public string Key => Uuid.Length > 0 ? Uuid : Url;
+        public Info ToInfo() => new Info(Uuid, Name, Url, Genre.Length > 0 ? Genre : "web station", Country);
+    }
+
+    // One genre tag and how many of its stations go on the dial.
+    public class TagPick
+    {
+        public string Tag { get; set; } = "";
+        public int Count { get; set; } = DefaultPerTag;
+    }
+
+    // A station on the dial, with your saved entry when it's one of yours (null for a tag's station).
+    public record DialEntry(Info Info, MyStation? Mine);
+
+    private class DialFile
+    {
+        public List<MyStation> Stations { get; set; } = new();
+        public List<TagPick> Tags { get; set; } = new();
+    }
+
+    public string DialPath { get; }
     private readonly string cachePath;
-    private Task<List<Info>>? search;
-    private bool taken;
-    private volatile string? message;    // for the Bird Log; written on the main thread, since the log isn't thread-safe
-    private volatile string? server;     // the Radio Browser server that answered, for click counts
+    private DialFile dial = new();
+    private Dictionary<string, List<Info>> tagStations = new();   // each tag's playable candidates, most-listened first
+    private readonly HashSet<string> tagsSearching = new();
+
+    // Bumped whenever the dial's station list changes, so RadioPlayer knows to rebuild it.
+    public int Version { get; private set; }
+
+    public IReadOnlyList<MyStation> MyStations => dial.Stations;
+    public IReadOnlyList<TagPick> Tags => dial.Tags;
+    public bool IsSearchingTag(string tag) => tagsSearching.Contains(tag);
+    public bool HasStation(string key) => dial.Stations.Any(s => s.Key == key);
+    public int FoundForTag(string tag) => tagStations.TryGetValue(tag, out List<Info>? found) ? found.Count : 0;
+
+    private readonly ConcurrentQueue<Action> finished = new();    // results from the background, run on the main thread
     private static readonly HttpClient http = MakeClient();
+    private static readonly object serverGate = new();
+    private static Task<List<string>>? serverList;
+    private static volatile string? server;                        // the server that last answered, tried first
 
     public WebStations(string radioFolder)
     {
-        ConfigPath = Path.Combine(radioFolder, "web-stations.txt");
+        DialPath = Path.Combine(radioFolder, "my-stations.json");
         cachePath = Path.Combine(radioFolder, "web-stations-cache.json");
     }
 
     private static HttpClient MakeClient()
     {
         var client = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-        client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("BirbCube/" + GameEngine.Version.Replace("Birb Cube ", "").Replace(' ', '-'));
         return client;
     }
 
-    // Starts the background search, unless one is already running or done.
-    public void StartSearch()
+    // ---------------- START-UP AND THE MAIN THREAD ----------------
+
+    // Loads your dial (making one with the default tags the first time), puts last time's tag stations
+    // straight on it from the cache, then refreshes everything from Radio Browser in the background.
+    public void Start()
     {
-        if (search != null) return;
-        WriteDefaultConfig();
-        search = Task.Run(Search);
+        LoadDial();
+        tagStations = LoadCache();
+        Version++;
+
+        List<string> uuids = dial.Stations.Where(s => s.Uuid.Length > 0).Select(s => s.Uuid).ToList();
+        List<string> tags = dial.Tags.Select(t => t.Tag).ToList();
+        foreach (string tag in tags) tagsSearching.Add(tag);
+        Task.Run(() => RefreshAll(uuids, tags));
     }
 
-    // The finished list, handed over once (then null). Also null while still searching.
-    // Called on the main thread, which also passes the search's message on to the Bird Log.
-    public List<Info>? TakeResult()
+    // Called every frame on the main thread: applies whatever the background has finished.
+    public void Update()
     {
-        if (taken || search == null || !search.IsCompleted) return null;
-        taken = true;
-        if (message != null) EventLog.Add(message);
-        return search.IsCompletedSuccessfully ? search.Result : new List<Info>();
+        while (finished.TryDequeue(out Action? apply)) apply();
+    }
+
+    // Everything that goes on the dial: your stations first (in your order), then each tag's top stations,
+    // skipping any station that's already on.
+    public List<DialEntry> DialStations()
+    {
+        var list = new List<DialEntry>();
+        var seen = new HashSet<string>();
+        foreach (MyStation mine in dial.Stations)
+        {
+            if (mine.Url.Length > 0 && seen.Add(mine.Key)) list.Add(new DialEntry(mine.ToInfo(), mine));
+        }
+        foreach (TagPick pick in dial.Tags)
+        {
+            if (!tagStations.TryGetValue(pick.Tag, out List<Info>? candidates)) continue;
+            int added = 0;
+            foreach (Info info in candidates)
+            {
+                if (added >= pick.Count) break;
+                if (seen.Add(info.Key))
+                {
+                    list.Add(new DialEntry(info, null));
+                    added++;
+                }
+            }
+        }
+        return list;
+    }
+
+    // ---------------- EDITING (main thread, from the station finder) ----------------
+
+    // Adds a station to your list and the dial. Does nothing if it's already yours.
+    public void AddStation(Info info)
+    {
+        if (HasStation(info.Key)) return;
+        dial.Stations.Add(new MyStation { Uuid = info.Uuid, Name = info.Name, Url = info.Url, Genre = info.Genre, Country = info.Country });
+        SaveDial();
+        Version++;
+    }
+
+    public void RemoveStation(MyStation station)
+    {
+        if (!dial.Stations.Remove(station)) return;
+        SaveDial();
+        Version++;
+    }
+
+    // Adds a genre tag and looks up its stations. Tags are kept in lower case, each once.
+    public void AddTag(string tag)
+    {
+        tag = tag.Trim().ToLowerInvariant();
+        if (tag.Length == 0 || dial.Tags.Any(t => t.Tag == tag)) return;
+        dial.Tags.Add(new TagPick { Tag = tag });
+        SaveDial();
+        Version++;
+        tagsSearching.Add(tag);
+        Task.Run(async () =>
+        {
+            List<Info>? found = await SearchTagSafe(tag);
+            finished.Enqueue(() => ApplyTag(tag, found, reportEmpty: true));
+        });
+    }
+
+    public void RemoveTag(TagPick pick)
+    {
+        if (!dial.Tags.Remove(pick)) return;
+        SaveDial();
+        Version++;
+    }
+
+    // How many of a tag's stations go on the dial (1 to 10). The candidates are already known, so no lookup.
+    public void SetTagCount(TagPick pick, int count)
+    {
+        count = Math.Clamp(count, 1, MaxPerTag);
+        if (pick.Count == count) return;
+        pick.Count = count;
+        SaveDial();
+        Version++;
+    }
+
+    // RadioPlayer calls this once your station has landed on the dial, so it keeps that spot next time.
+    public void RememberFrequency(MyStation station, float frequency)
+    {
+        if (MathF.Abs(station.Frequency - frequency) < 0.01f) return;
+        station.Frequency = frequency;
+        SaveDial();
+    }
+
+    // ---------------- SEARCH (for the finder) ----------------
+
+    public enum SearchBy { Name, Genre, Country }
+
+    // Searches Radio Browser, most-listened first. Text holding a station id (or a radio-browser.info link with one)
+    // looks up exactly that station. Throws if no server answers; the finder shows that.
+    public static async Task<List<Found>> Search(string text, SearchBy by)
+    {
+        text = text.Trim();
+        Match id = UuidPattern.Match(text);
+        string path;
+        if (id.Success)
+        {
+            path = $"/json/stations/byuuid?uuids={id.Value}";
+        }
+        else
+        {
+            string field = by switch
+            {
+                SearchBy.Genre => "tag",
+                SearchBy.Country => text.Length == 2 ? "countrycode" : "country",
+                _ => "name",
+            };
+            path = $"/json/stations/search?{field}={Uri.EscapeDataString(text)}&hidebroken=true&order=clickcount&reverse=true&limit={SearchLimit}";
+        }
+
+        using JsonDocument doc = JsonDocument.Parse(await Get(path));
+        var results = new List<Found>();
+        foreach (JsonElement station in doc.RootElement.EnumerateArray())
+        {
+            Found? found = ReadStation(station);
+            if (found != null && !results.Any(r => r.Info.Uuid == found.Info.Uuid)) results.Add(found);
+        }
+        return results;
     }
 
     // Tells Radio Browser a station was listened to; it uses this to rank stations. Fire and forget.
@@ -68,125 +250,164 @@ public class WebStations
         _ = http.GetAsync($"https://{server}/json/url/{uuid}").ContinueWith(_ => { });
     }
 
-    // ---------------- SEARCH (background thread) ----------------
+    // ---------------- BACKGROUND ----------------
 
-    // Looks up the genres or the named stations on Radio Browser, and adds the stream addresses as they are.
-    private async Task<List<Info>> Search()
+    // At start-up: fresh stream addresses for your stations (they move now and then), then every tag.
+    private async Task RefreshAll(List<string> uuids, List<string> tags)
     {
-        Config config = ReadConfig();
-        if (!config.HasPicks && config.Genres.Count == 0) return new List<Info>();
-
-        // Only stream addresses: nothing to look up.
-        if (config.HasPicks && config.Names.Count == 0)
+        bool reached = true;
+        if (uuids.Count > 0)
         {
-            message = $"The radio tuned in {config.Urls.Count} web stations from your list.";
-            return config.Urls;
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(await Get($"/json/stations/byuuid?uuids={string.Join(",", uuids)}"));
+                var fresh = new Dictionary<string, string>();
+                foreach (JsonElement station in doc.RootElement.EnumerateArray())
+                {
+                    Found? found = ReadStation(station);
+                    if (found != null && found.Playable) fresh[found.Info.Uuid] = found.Info.Url;
+                }
+                finished.Enqueue(() => ApplyFreshUrls(fresh));
+            }
+            catch (Exception)
+            {
+                reached = false;
+            }
         }
 
-        var found = new List<Info>();
-        var missing = new List<string>();
+        int tagStationsFound = 0;
+        foreach (string tag in tags)
+        {
+            List<Info>? found = await SearchTagSafe(tag);
+            if (found == null) reached = false;
+            else tagStationsFound += found.Count;
+            finished.Enqueue(() => ApplyTag(tag, found, reportEmpty: false));
+        }
+
+        int mine = uuids.Count;
+        finished.Enqueue(() =>
+        {
+            if (reached) EventLog.Add($"The radio tuned in {mine} of your web stations and found {tagStationsFound} more for your genres.");
+            else if (DialStations().Count > 0) EventLog.Add("The radio couldn't reach Radio Browser, so it's using the web stations it knew last time.");
+            else EventLog.Add("The radio couldn't reach Radio Browser. Web stations are off until it can.");
+        });
+    }
+
+    // A tag's playable stations, most-listened first, or null if Radio Browser couldn't be reached.
+    private static async Task<List<Info>?> SearchTagSafe(string tag)
+    {
         try
         {
-            foreach (string host in await FindServers())
+            string path = $"/json/stations/bytag/{Uri.EscapeDataString(tag)}?hidebroken=true&order=clickcount&reverse=true&limit=40";
+            using JsonDocument doc = JsonDocument.Parse(await Get(path));
+            var picked = new List<Info>();
+            foreach (JsonElement station in doc.RootElement.EnumerateArray())
             {
-                try
-                {
-                    found.Clear();
-                    missing.Clear();
-                    if (config.HasPicks)
-                    {
-                        foreach (string name in config.Names)
-                        {
-                            Info? station = await SearchName(host, name, found);
-                            if (station != null) found.Add(station);
-                            else missing.Add(name);
-                        }
-                    }
-                    else
-                    {
-                        foreach (string genre in config.Genres) found.AddRange(await SearchGenre(host, genre, config.PerGenre, found));
-                    }
-                    server = host;
-                    break;
-                }
-                catch (Exception)
-                {
-                    // try the next server
-                }
+                if (picked.Count >= MaxPerTag) break;
+                Found? found = ReadStation(station);
+                if (found == null || !found.Playable) continue;
+                if (picked.Any(s => s.Uuid == found.Info.Uuid || s.Name == found.Info.Name)) continue;
+                picked.Add(found.Info with { Genre = tag });
             }
+            return picked;
         }
         catch (Exception)
         {
+            return null;
         }
-
-        if (server != null && (found.Count > 0 || config.HasPicks))
-        {
-            found.AddRange(config.Urls);
-            SaveCache(found);
-            message = config.HasPicks
-                ? $"The radio found {found.Count} of the {config.Names.Count + config.Urls.Count} web stations on your list."
-                : $"The radio found {found.Count} live web stations.";
-            if (missing.Count > 0) message += $" Not found on Radio Browser: {string.Join(", ", missing)}.";
-            return found;
-        }
-
-        // Offline: the last list that worked. With picks, the stream addresses come from the file as it is now.
-        List<Info> cached = LoadCache();
-        if (config.HasPicks) cached = cached.Where(s => s.Uuid.Length > 0).Concat(config.Urls).ToList();
-        message = cached.Count > 0
-            ? "The radio couldn't reach Radio Browser, so it's using the web stations it found last time."
-            : "The radio couldn't reach Radio Browser. Web stations are off until next time.";
-        return cached;
     }
 
-    // The most-listened working stations for one genre that Windows can play (MP3 or AAC, not HLS playlists).
-    private static async Task<List<Info>> SearchGenre(string host, string genre, int perGenre, List<Info> already)
+    // ---------------- APPLYING RESULTS (main thread) ----------------
+
+    private void ApplyFreshUrls(Dictionary<string, string> fresh)
     {
-        string url = $"https://{host}/json/stations/bytag/{Uri.EscapeDataString(genre)}?hidebroken=true&order=clickcount&reverse=true&limit=40";
-        using JsonDocument doc = JsonDocument.Parse(await http.GetStringAsync(url));
-
-        var picked = new List<Info>();
-        foreach (JsonElement station in doc.RootElement.EnumerateArray())
+        bool changed = false;
+        foreach (MyStation station in dial.Stations)
         {
-            if (picked.Count >= perGenre) break;
-            if (!TryReadPlayable(station, out string uuid, out string name, out string stream)) continue;
-            if (already.Any(s => s.Uuid == uuid || s.Name == name) || picked.Any(s => s.Uuid == uuid || s.Name == name)) continue;
-
-            picked.Add(new Info(uuid, Shorten(name), stream, genre, Text(station, "countrycode")));
+            if (fresh.TryGetValue(station.Uuid, out string? url) && url != station.Url)
+            {
+                station.Url = url;
+                changed = true;
+            }
         }
-        return picked;
+        if (!changed) return;
+        SaveDial();
+        Version++;
     }
 
-    // One station by name: an exact match (ignoring case) if there is one, otherwise the most-listened
-    // station whose name contains it. Null if none of them can be played.
-    private static async Task<Info?> SearchName(string host, string wanted, List<Info> already)
+    // A tag's search came back. Null (unreachable) keeps the cached stations it already had.
+    private void ApplyTag(string tag, List<Info>? found, bool reportEmpty)
     {
-        string url = $"https://{host}/json/stations/byname/{Uri.EscapeDataString(wanted)}?hidebroken=true&order=clickcount&reverse=true&limit=30";
-        using JsonDocument doc = JsonDocument.Parse(await http.GetStringAsync(url));
-
-        Info? best = null;
-        foreach (JsonElement station in doc.RootElement.EnumerateArray())
+        tagsSearching.Remove(tag);
+        if (found == null)
         {
-            if (!TryReadPlayable(station, out string uuid, out string name, out string stream)) continue;
-            if (already.Any(s => s.Uuid == uuid)) continue;
-
-            string firstTag = Text(station, "tags").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? "";
-            var info = new Info(uuid, Shorten(name), stream, firstTag.Length > 0 ? firstTag : "web station", Text(station, "countrycode"));
-            if (name.Equals(wanted, StringComparison.OrdinalIgnoreCase)) return info;
-            best ??= info;
+            if (reportEmpty) EventLog.Add($"The radio couldn't reach Radio Browser to look up \"{tag}\". It'll try again next time.");
+            return;
         }
-        return best;
+        if (found.Count == 0 && reportEmpty) EventLog.Add($"Radio Browser has no stations the radio can play tagged \"{tag}\".");
+        tagStations[tag] = found;
+        SaveCache();
+        Version++;
     }
 
-    // Reads a station's id, name and stream, if Windows can play it (MP3 or AAC, not an HLS playlist).
-    private static bool TryReadPlayable(JsonElement station, out string uuid, out string name, out string stream)
+    // ---------------- READING RADIO BROWSER ----------------
+
+    // One station from Radio Browser's JSON, with the reason the radio can't play it if it can't.
+    // The radio plays MP3 and AAC streams through Windows; HLS playlists and other codecs won't work.
+    private static Found? ReadStation(JsonElement station)
     {
-        string codec = Text(station, "codec").ToUpperInvariant();
-        uuid = Text(station, "stationuuid");
-        name = Text(station, "name").Trim();
-        stream = Text(station, "url_resolved");
-        bool playable = (codec.StartsWith("MP3") || codec.StartsWith("AAC")) && Number(station, "hls") == 0;
-        return playable && stream.StartsWith("http") && name.Length > 0;
+        string uuid = Text(station, "stationuuid");
+        string name = Text(station, "name").Trim();
+        if (uuid.Length == 0 || name.Length == 0) return null;
+
+        string stream = Text(station, "url_resolved");
+        if (stream.Length == 0) stream = Text(station, "url");
+        string codec = Text(station, "codec").Trim().ToUpperInvariant();
+        string tags = Text(station, "tags");
+        string firstTag = tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).FirstOrDefault() ?? "";
+
+        string whyNot = "";
+        if (Number(station, "hls") != 0 || stream.Contains(".m3u8", StringComparison.OrdinalIgnoreCase)) whyNot = "HLS playlist";
+        else if (codec.Length == 0 || codec == "UNKNOWN") whyNot = "unknown format";
+        else if (!codec.StartsWith("MP3") && !codec.StartsWith("AAC")) whyNot = $"{codec} stream";
+        else if (!stream.StartsWith("http", StringComparison.OrdinalIgnoreCase)) whyNot = "no stream link";
+
+        var info = new Info(uuid, Shorten(name), stream, firstTag.Length > 0 ? firstTag : "web station", Text(station, "countrycode"));
+        return new Found(info, codec, Number(station, "bitrate"), tags, whyNot);
+    }
+
+    // A GET against Radio Browser, trying the server that answered last, then the others. Throws if none answer.
+    private static async Task<string> Get(string pathAndQuery)
+    {
+        List<string> hosts = new(await Servers());
+        string? last = server;
+        if (last != null)
+        {
+            hosts.Remove(last);
+            hosts.Insert(0, last);
+        }
+
+        Exception? error = null;
+        foreach (string host in hosts)
+        {
+            try
+            {
+                string body = await http.GetStringAsync($"https://{host}{pathAndQuery}");
+                server = host;
+                return body;
+            }
+            catch (Exception e)
+            {
+                error = e;
+            }
+        }
+        throw error ?? new HttpRequestException("No Radio Browser server answered.");
+    }
+
+    // The server list, looked up once per run (see FindServers).
+    private static Task<List<string>> Servers()
+    {
+        lock (serverGate) return serverList ??= FindServers();
     }
 
     // Radio Browser asks apps to look up its servers rather than rely on one: all.api.radio-browser.info
@@ -227,7 +448,7 @@ public class WebStations
         if (!e.TryGetProperty(field, out JsonElement v)) return 0;
         return v.ValueKind switch
         {
-            JsonValueKind.Number => v.GetInt32(),
+            JsonValueKind.Number => v.TryGetInt32(out int n) ? n : 0,
             JsonValueKind.True => 1,
             JsonValueKind.String => int.TryParse(v.GetString(), out int n) ? n : 0,
             _ => 0,
@@ -238,95 +459,52 @@ public class WebStations
 
     // ---------------- FILES ----------------
 
-    private void WriteDefaultConfig()
-    {
-        if (File.Exists(ConfigPath)) return;
-        try
-        {
-            File.WriteAllText(ConfigPath,
-                "# Live web stations for the Birb Cube radio, found through Radio Browser (radio-browser.info),\r\n" +
-                "# a free directory run by volunteers. Lines starting with # are skipped.\r\n" +
-                "# Changes are read the next time Birb Cube starts. Write \"off\" on its own line to switch web stations off.\r\n" +
-                "#\r\n" +
-                "# GENRES: one per line. For each genre the radio picks the most-listened stations that are working.\r\n" +
-                "#\r\n" +
-                "# YOUR OWN PICKS: if any of these lines are here, the genres are ignored.\r\n" +
-                "#   station: Radio Paradise              (looked up on Radio Browser by name)\r\n" +
-                "#   url: Night Owl FM https://...        (a stream address, played as it is; the name in front is optional)\r\n" +
-                "# Streams must be MP3 or AAC, not .m3u8 playlists.\r\n" +
-                "#\r\n" +
-                $"stations per genre: {DefaultPerGenre}\r\n" +
-                "ambient\r\nlofi\r\njazz\r\nclassical\r\nmedieval\r\n");
-        }
-        catch (Exception) { }
-    }
+    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
-    // Reads genres, "station:" names and "url:" streams from web-stations.txt.
-    private Config ReadConfig()
+    // Reads my-stations.json. Missing: a new one with the default tags. Unreadable: kept aside as .broken.json.
+    private void LoadDial()
     {
-        var config = new Config(new List<string>(), DefaultPerGenre, new List<string>(), new List<Info>());
-        int perGenre = DefaultPerGenre;
-        try
+        if (File.Exists(DialPath))
         {
-            foreach (string raw in File.ReadAllLines(ConfigPath))
+            try
             {
-                string line = raw.Trim();
-                if (line.Length == 0 || line.StartsWith('#')) continue;
-                if (line.Equals("off", StringComparison.OrdinalIgnoreCase))
-                    return new Config(new List<string>(), 0, new List<string>(), new List<Info>());
-
-                if (TryValue(line, "stations per genre:", out string count))
+                dial = JsonSerializer.Deserialize<DialFile>(File.ReadAllText(DialPath)) ?? new DialFile();
+                dial.Stations.RemoveAll(s => s.Url.Length == 0 && s.Uuid.Length == 0);
+                foreach (TagPick pick in dial.Tags)
                 {
-                    if (int.TryParse(count, out int n)) perGenre = Math.Clamp(n, 1, 10);
+                    pick.Tag = pick.Tag.Trim().ToLowerInvariant();
+                    pick.Count = Math.Clamp(pick.Count, 1, MaxPerTag);
                 }
-                else if (TryValue(line, "station:", out string name))
-                {
-                    if (name.Length > 0 && !config.Names.Contains(name, StringComparer.OrdinalIgnoreCase)) config.Names.Add(name);
-                }
-                else if (TryValue(line, "url:", out string value))
-                {
-                    Info? stream = ParseUrl(value);
-                    if (stream != null) config.Urls.Add(stream);
-                }
-                else
-                {
-                    config.Genres.Add(line.ToLowerInvariant());
-                }
+                dial.Tags.RemoveAll(t => t.Tag.Length == 0);
+                return;
+            }
+            catch (Exception e)
+            {
+                EventLog.Add($"The radio couldn't read my-stations.json ({e.Message}). It was renamed my-stations.broken.json.");
+                try { File.Move(DialPath, Path.ChangeExtension(DialPath, ".broken.json"), overwrite: true); } catch (Exception) { }
             }
         }
-        catch (Exception) { }
-        return config with { PerGenre = perGenre };
+
+        dial = new DialFile { Tags = DefaultTags.Select(t => new TagPick { Tag = t }).ToList() };
+        SaveDial();
     }
 
-    // The text after a "key:" at the start of a line, ignoring case.
-    private static bool TryValue(string line, string key, out string value)
+    private void SaveDial()
     {
-        bool match = line.StartsWith(key, StringComparison.OrdinalIgnoreCase);
-        value = match ? line[key.Length..].Trim() : "";
-        return match;
-    }
-
-    // "Night Owl FM https://..." or just "https://...". Without a name, the stream's host name is used.
-    private static Info? ParseUrl(string value)
-    {
-        int at = value.IndexOf("http", StringComparison.OrdinalIgnoreCase);
-        if (at < 0) return null;
-
-        string url = value[at..].Trim();
-        string name = value[..at].Trim();
-        if (name.Length == 0) name = Uri.TryCreate(url, UriKind.Absolute, out Uri? uri) ? uri.Host : url;
-        return new Info("", Shorten(name), url, "web stream", "");
-    }
-
-    private void SaveCache(List<Info> stations)
-    {
-        try { File.WriteAllText(cachePath, JsonSerializer.Serialize(stations)); }
+        try { File.WriteAllText(DialPath, JsonSerializer.Serialize(dial, Indented)); }
         catch (Exception) { }
     }
 
-    private List<Info> LoadCache()
+    private void SaveCache()
     {
-        try { return JsonSerializer.Deserialize<List<Info>>(File.ReadAllText(cachePath)) ?? new List<Info>(); }
-        catch (Exception) { return new List<Info>(); }
+        try { File.WriteAllText(cachePath, JsonSerializer.Serialize(tagStations)); }
+        catch (Exception) { }
+    }
+
+    // Last time's tag stations. The cache from before 5.08 was a plain list; that just reads as empty.
+    private Dictionary<string, List<Info>> LoadCache()
+    {
+        try { return JsonSerializer.Deserialize<Dictionary<string, List<Info>>>(File.ReadAllText(cachePath)) ?? new(); }
+        catch (Exception) { return new(); }
     }
 }

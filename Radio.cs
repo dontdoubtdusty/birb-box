@@ -6,6 +6,7 @@ using Raylib_cs;
 // a glowing tuning window, and a row of brass controls along the bottom:
 //   [volume knob]  [power button]  [next button]  [tuning knob]
 // Knobs turn with a drag (sideways or up/down) or the mouse wheel; buttons press on click.
+// Clicking the tuning window (the dial) opens the station finder (see StationFinder).
 // Hovering shows a small tag with what's playing. The sound itself is in RadioPlayer.
 //
 // It's part of the room (drawn in Backdrop's pass, lit by room.fs), so it never picks up the hologram's glow.
@@ -14,6 +15,12 @@ using Raylib_cs;
 public class Radio
 {
     public RadioPlayer Player { get; } = new RadioPlayer();
+    public StationFinder Finder { get; }
+
+    public Radio()
+    {
+        Finder = new StationFinder(Player);
+    }
 
     // WHERE IT SITS: right of the pedestal, turned to face the camera
     public static readonly Vector3 Spot = new Vector3(10.4f, Backdrop.TableY, -0.3f);
@@ -64,7 +71,7 @@ public class Radio
     private static readonly Vector3 Right = Vector3.Transform(Vector3.UnitX, TurnMatrix);
     private static readonly Vector3 Forward = Vector3.Transform(Vector3.UnitZ, TurnMatrix);
 
-    private enum Part { None, Body, Volume, Power, Next, Tuning }
+    private enum Part { None, Body, Volume, Power, Next, Tuning, Dial }
     private Part hovered = Part.None;
     private Part held = Part.None;          // a knob being dragged, or a button held down
     private float powerPush, nextPush;      // 0 = up, 1 = pushed all the way in
@@ -153,6 +160,13 @@ public class Radio
                 Sounds.PlayRadioButton();
                 Player.NextTrack();
                 break;
+            case Part.Tuning:
+                Player.StopPreview();    // reaching for the tuning knob means back to the dial
+                break;
+            case Part.Dial:
+                Sounds.PlayRadioButton();
+                Finder.Toggle();
+                break;
             case Part.Body:
                 held = Part.None;    // the cabinet itself does nothing; it just keeps the click off the hologram
                 break;
@@ -200,6 +214,7 @@ public class Radio
         if (HitsControl(local, KnobX, KnobRadius + 0.05f, KnobRadius + 0.05f)) return Part.Tuning;
         if (HitsControl(local, -ButtonX, ButtonHalfWidth + 0.03f, ButtonHalfHeight + 0.03f)) return Part.Power;
         if (HitsControl(local, ButtonX, ButtonHalfWidth + 0.03f, ButtonHalfHeight + 0.03f)) return Part.Next;
+        if (HitsDial(local)) return Part.Dial;
         return Part.Body;
     }
 
@@ -208,6 +223,14 @@ public class Radio
     {
         Vector3 min = new Vector3(x - halfWidth, ControlY - halfHeight, Front);
         Vector3 max = new Vector3(x + halfWidth, ControlY + halfHeight, PlateFront + 0.3f);
+        return Hits(local, min, max);
+    }
+
+    // The tuning window with its brass frame.
+    private static bool HitsDial(Ray local)
+    {
+        Vector3 min = new Vector3(-DialHalfWidth - 0.08f, DialY - DialHalfHeight - 0.08f, Front);
+        Vector3 max = new Vector3(DialHalfWidth + 0.08f, DialY + DialHalfHeight + 0.08f, DialFront + 0.2f);
         return Hits(local, min, max);
     }
 
@@ -230,6 +253,7 @@ public class Radio
             case Part.Tuning: point = ToScene(KnobX, ControlY, PlateFront + KnobLength * 0.5f); return true;
             case Part.Power: point = ToScene(-ButtonX, ControlY, PlateFront + ButtonDepth - powerPush * ButtonTravel); return true;
             case Part.Next: point = ToScene(ButtonX, ControlY, PlateFront + ButtonDepth - nextPush * ButtonTravel); return true;
+            case Part.Dial: point = ToScene(0f, DialY, DialFront); return true;    // a fingertip on the glass
             default: point = Vector3.Zero; return false;
         }
     }
@@ -385,6 +409,7 @@ public class Radio
             Part.Tuning => $"TUNING  {Player.TunedFrequency:0.0} FM",
             Part.Power => Player.On ? "POWER  on" : "POWER  off",
             Part.Next => Player.CanSkip || !Player.On ? "NEXT SONG" : "NEXT SONG  (live, can't skip)",
+            Part.Dial => Finder.IsOpen ? "STATIONS  (click to close)" : "STATIONS  (click to find more)",
             _ => "RADIO",
         };
     }

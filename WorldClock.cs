@@ -62,6 +62,8 @@ public class WorldClock
     private const float RoostAfterSunset = 0.3f;    // and they settle this long after sunset
     private const float ChorusAfterSunrise = 1f;    // the dawn chorus runs until this long after sunrise
     private const float QuietBeforeSunset = 0.5f;   // calls thin out from this long before sunset
+    private const float OwlSleepAfterSunrise = 0.5f;  // Night Owls go to sleep this long after sunrise
+    private const float OwlWakeBeforeSunset = 0.5f;   // and wake this long before sunset, so they're about at dusk, night and dawn
 
     // LIGHT KEYS: sun elevation (degrees) -> light from everywhere, light from the sun or moon, the shade tint
     // (what faces turned away from the light lean toward) and how golden the hour is (see DayLight).
@@ -288,6 +290,14 @@ public class WorldClock
         float wake = Sunrise - WakeBeforeSunrise + shift;
         float roost = Sunset + RoostAfterSunset + shift;
         return Hour < wake || Hour > roost;
+    }
+
+    // Whether a Night Owl whose hours are moved by this much should be asleep now: through the middle of the day.
+    public bool IsOwlBedtime(float shift)
+    {
+        float sleep = Sunrise + OwlSleepAfterSunrise + shift;
+        float wake = Sunset - OwlWakeBeforeSunset + shift;
+        return Hour > sleep && Hour < wake;
     }
 
     // How many day birds arrive, 0 to 1: none at night, building up through dawn, thinning out toward dusk.

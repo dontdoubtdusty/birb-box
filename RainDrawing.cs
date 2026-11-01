@@ -59,11 +59,13 @@ public partial class WorldDrawer
     private void AddRain(ViewWindow view, Vector3 eye)
     {
         Weather weather = Weather.Instance;
-        int count = (int)(RainDrops * weather.Rain);
+        // In the Hologram View rain also falls on the misty margin past the walls, with more drops so it's just as dense
+        float spread = view.ShownReach;
+        int count = (int)(RainDrops * weather.Rain * spread * spread);
         if (count == 0) return;
 
         float top = view.Height;
-        float reach = view.HalfWidth * 0.98f;
+        float reach = view.HalfWidth * 0.98f * spread;
         float clock = weather.RainClock;
         Vector3 streak = new Vector3(StreakWidth, StreakLength, StreakWidth);
 
@@ -93,8 +95,8 @@ public partial class WorldDrawer
             Vector3 ground = new Vector3(x, 0.01f, z);
             float shrink = NearShrink(Vector3.Distance(ground, eye));
             if (shrink <= 0f) continue;
-            float spread = (since - fallTime) / SplatTime;
-            Vector3 splat = new Vector3(0.06f, 0.012f, 0.06f) * (0.6f + spread) * shrink;
+            float grow = (since - fallTime) / SplatTime;
+            Vector3 splat = new Vector3(0.06f, 0.012f, 0.06f) * (0.6f + grow) * shrink;
             AddGrain(GrainMesh.Round, ground, Quaternion.Identity, splat, SplatColor, view);
         }
     }

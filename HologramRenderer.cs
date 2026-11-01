@@ -19,7 +19,8 @@ using Raylib_cs;
 //  4. The player's hands (see Hands), in the room's 3D space again, on top of the hologram.
 //
 // The Hologram View (the observer mode, see HoloCamera): as the camera steps into the garden, the cube's edges fade out,
-// the hologram's fog widens and turns round (observer in hologram.fs), and the room behind it fades into a sky
+// the fog moves out past the walls (the whole cube clear, the same patch as before, with a misty margin beyond; observer
+// in hologram.fs), and the room behind it fades into a sky
 // (HorizonSky: the time of day's sky with a misty treeline), whose horizon color the fog takes on, so the garden melts
 // into it at every edge. Once the room is gone it isn't drawn.
 //
@@ -279,7 +280,7 @@ public class HologramRenderer
     // in the bird world while the ring turns it.
     // edges: whether things near the walls get the edge look (off for the store, whose floor runs into the fog).
     // observer: how far the camera has stepped into the garden (the Hologram View). The edge look fades away with it
-    // (no wall should show), the fog turns round (see hologram.fs), and its haze becomes the sky's horizon color.
+    // (no wall should show), the fog moves out past the walls (see hologram.fs), and its haze becomes the sky's horizon color.
     // clouds: whether the drifting clouds' shadows fall here (not in the store, which has a roof, nor in the Designer).
     private void SetHologramUniforms(Camera3D camera, ViewWindow view, float swallow, float reveal, bool edges = true, float observer = 0f,
                                      bool clouds = true)
@@ -320,7 +321,7 @@ public class HologramRenderer
     {
         private readonly Shader shader;
         private readonly int origin, boxYaw, halfWidth, fogStart, swallow, reveal, cubeHeight, viewCenter, viewZoom, viewPos, holoColor, rimGlow, time, isFloor;
-        private readonly int lightDir, ambientLight, directLight, hazeColor, edgeWidth, edgeStrength, observer, lampColor, selfLit;
+        private readonly int lightDir, ambientLight, directLight, hazeColor, edgeWidth, edgeStrength, observer, worldHalf, lampColor, selfLit;
         private readonly int shadeColor, golden, nightLevel, cloudCover, cloudDrift, cloudShadow;
 
         public HoloUniforms(Shader shader)
@@ -347,6 +348,7 @@ public class HologramRenderer
             edgeWidth = Raylib.GetShaderLocation(shader, "edgeWidth");
             edgeStrength = Raylib.GetShaderLocation(shader, "edgeStrength");
             observer = Raylib.GetShaderLocation(shader, "observer");
+            worldHalf = Raylib.GetShaderLocation(shader, "worldHalf");
             lampColor = Raylib.GetShaderLocation(shader, "lampColor");
             selfLit = Raylib.GetShaderLocation(shader, "selfLit");
             shadeColor = Raylib.GetShaderLocation(shader, "shadeColor");
@@ -364,7 +366,7 @@ public class HologramRenderer
             Raylib.SetShaderValue(shader, origin, Vector3.Zero, ShaderUniformDataType.Vec3);
             Raylib.SetShaderValue(shader, boxYaw, view.Yaw, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, halfWidth, view.HalfWidth, ShaderUniformDataType.Float);
-            Raylib.SetShaderValue(shader, fogStart, view.FogStartShown, ShaderUniformDataType.Float);
+            Raylib.SetShaderValue(shader, fogStart, view.FogStart, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, swallow, swallowAmount, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, reveal, revealAmount, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, cubeHeight, view.Height, ShaderUniformDataType.Float);
@@ -382,6 +384,7 @@ public class HologramRenderer
             Raylib.SetShaderValue(shader, edgeWidth, edgeWidthAmount, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, edgeStrength, v.EdgeStrength, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, observer, v.Observer, ShaderUniformDataType.Float);
+            Raylib.SetShaderValue(shader, worldHalf, World.Instance.HalfSize, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, lampColor, Vector3.Zero, ShaderUniformDataType.Vec3);    // only the store lights its lamp
             Raylib.SetShaderValue(shader, selfLit, 0f, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, shadeColor, light.Shade, ShaderUniformDataType.Vec3);

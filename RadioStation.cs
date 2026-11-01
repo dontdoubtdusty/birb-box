@@ -16,7 +16,12 @@ public class RadioStation
     public string Name = "";
     public float Frequency;
     public bool FrequencyChosen;          // set in station.txt, so the radio leaves it where it is
+    public bool Placed;                   // already has a spot on the dial, so a rebuild leaves it there
     public bool IsWeb;
+
+    // What stays the same about a station from one dial rebuild to the next: its folder, or its Radio Browser id
+    // (its stream address when it has none).
+    public string Key => !IsWeb ? FolderPath : Uuid.Length > 0 ? Uuid : Url;
 
     // Where it sits on the dial, 0..1
     public float Position => (Frequency - LowestFrequency) / (HighestFrequency - LowestFrequency);
@@ -37,6 +42,7 @@ public class RadioStation
     public string Details = "";          // genre and country, for the hover tag
     public double RetryAt;               // radio-clock seconds before trying a stream that failed again
     public bool CountedClick;            // Radio Browser asks to be told once when a station is played
+    public WebStations.MyStation? Mine;  // your saved entry, for a station you added (null for a genre's station)
 
     // DRIFT: each station's signal wanders a little on its own schedule
     public readonly float DriftPhaseA = Rng.Range(0f, MathF.Tau), DriftPhaseB = Rng.Range(0f, MathF.Tau);

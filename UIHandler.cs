@@ -78,6 +78,8 @@ public class UIHandler
 
         ImGui.SeparatorText("Birds");
         Slider("Hunger rate", ref t.HungerRate, d.HungerRate, 0.5f, 20f, "%.1f s per 5%%");
+        Slider("Thirst rate", ref t.ThirstRate, d.ThirstRate, 1f, 60f, "%.1f s per 5%%");
+        Slider("Tiring rate", ref t.RestRate, d.RestRate, 1f, 90f, "%.1f s awake per 5%%");
         Slider("Arrivals", ref t.ArrivalsPerFoodPerMinute, d.ArrivalsPerFoodPerMinute, 0f, 3f, "%.2f per food/min");
         Slider("Max birds", ref t.MaxBirds, d.MaxBirds, 5, 150);
         if (ImGui.Button("Call a bird")) engine.BirdSpawner.SpawnArrival();
@@ -135,6 +137,7 @@ public class UIHandler
         {
             Slider("Sip chance", ref t.DrinkChance, d.DrinkChance, 0f, 1f, "%.2f per pause");
             Slider("Bath chance", ref t.BathChance, d.BathChance, 0f, 1f, "%.2f per pause");
+            Slider("Thirsty bathe", ref t.ThirstyBathShare, d.ThirstyBathShare, 0f, 1f, "%.2f of thirsty trips");
             Slider("Max bathers", ref t.MaxBathers, d.MaxBathers, 0, 15);
         }
         t.Clamp();    // a min slider pushed past its max drags the max along
@@ -194,7 +197,7 @@ public class UIHandler
     private static void SendToWater(ViewWindow view, bool bath)
     {
         Bird? pick = World.Instance.GetAllEntities<Bird>()
-            .Where(b => b.State == BirdState.Wandering && !b.IsFlying && !b.Roosting && !b.IsHungry() && view.Contains(b.Position))
+            .Where(b => b.State == BirdState.Wandering && !b.IsFlying && !b.Asleep && !b.IsHungry() && view.Contains(b.Position))
             .OrderBy(b => Pool.Distance(b.Position))
             .FirstOrDefault();
         if (pick == null || !pick.Mover.StartWaterVisit(bath)) EventLog.Add("No bird in view could go to the water.");
@@ -341,7 +344,7 @@ public class UIHandler
             if (ImGui.IsItemHovered())
             {
                 engine.HoveredBird = bird;
-                ImGui.SetTooltip($"HUNGER: {bird.Hunger:0.00}\nSPEED: {bird.Speed * 100:0}\nAGE: {bird.FormatAge()}\n"
+                ImGui.SetTooltip($"HUNGER: {bird.Hunger:0.00}  THIRST: {bird.Thirst:0.00}  REST: {bird.Rest:0.00}\nSPEED: {bird.Speed * 100:0}\nAGE: {bird.FormatAge()}\n"
                                  + $"FOND OF: {Seeds.Get(bird.FavoriteSeed).Name}\n"
                                  + $"BUILD x{bird.Build:0.00}  SHADE {bird.Shade:0.00}  WARMTH {bird.Warmth:+0.00;-0.00}\n{NatureNumbers(bird.Nature)}");
             }
@@ -358,7 +361,8 @@ public class UIHandler
              + $"HUNGER x{n.HungerSpeed:0.0}  HUNGRY <{n.HungryAt:0.00}  FULL {n.FullAt:0.00}\n"
              + $"BITE x{n.Nourish:0.0}  BITE TIME x{n.BiteTime:0.0}  RANGE x{n.FoodRange:0.0}\n"
              + $"HOME x{n.HomeRadius:0.0}  BORED x{n.LoseInterest:0.0}  RETURN x{n.ReturnWeight:0.0}\n"
-             + $"CALLS x{n.CallDelay:0.0}  IGNORE HUSH {n.IgnoreHush:0.0}";
+             + $"CALLS x{n.CallDelay:0.0}  IGNORE HUSH {n.IgnoreHush:0.0}\n"
+             + $"THIRST x{n.ThirstSpeed:0.0}  TIRING x{n.RestSpeed:0.00}  BATHS x{n.BathShare:0.0}  BATH TIME x{n.BathLength:0.0}";
     }
 
     // ---------------- EVENT LOG ----------------

@@ -355,7 +355,10 @@ public class BirdSave
     public float Shade { get; set; }
     public float Warmth { get; set; }
     public bool Roosting { get; set; }               // staying the night (Bird.Roosting)
-    public bool NightAway { get; set; }              // a regular who flew off to roost for the night: comes back first at dawn
+    public bool NightAway { get; set; }              // a regular who flew off to sleep: comes back first when its hours come round
+    public float? Thirst { get; set; }               // null in a save from before 5.10: rolled on load
+    public float? Rest { get; set; }
+    public bool Napping { get; set; }
 }
 
 public class FoodSave

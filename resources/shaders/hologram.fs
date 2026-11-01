@@ -45,7 +45,8 @@ uniform int puddleCount;     // rain puddles on bare dirt (Puddles.cs)
 uniform vec4 puddles[6];     // each one's world X, world Z, full radius, how full 0 to 1
 uniform float edgeWidth;     // how far in from the cube's walls (box units) things start turning to pure hologram
 uniform float edgeStrength;  // how strong that edge look is: 0 off, 1 the normal look, up to 2 (0 while drawing the store)
-uniform float observer;      // 0 in the room view, 1 standing in the garden (the Hologram View): things also fade with distance from the eye
+uniform float observer;      // 0 in the room view, 1 standing in the garden (the Hologram View): the fog moves out past the walls
+uniform float worldHalf;     // half the bird world's width (World.HalfSize), so nothing past its edge ever shows
 uniform vec3 lampPos;        // the store's lamp (StoreRenderer), in scene space
 uniform vec3 lampColor;      // its light; 0 when it's off, and always 0 in the bird world
 uniform float lampReach;     // how far (scene units) until its light has dropped to half
@@ -65,8 +66,7 @@ const float EdgeGaps = 0.45;         // share of each stripe that's see-through
 const float EdgeSeeThrough = 0.45;   // how much fainter the solid stripes get
 const float EdgeRim = 0.6;           // extra rim glow
 const float EdgeCutGlow = 0.9;       // the bright line where the fog cuts through
-const float ObserverFogNear = 4.5;   // the Hologram View's round fog, in box units from the eye along the ground
-const float ObserverFogFar = 8.0;    // (the same numbers as ViewWindow.ObserverFogNear / Far)
+const float ObserverMargin = 1.0;    // the Hologram View's misty margin past the walls, as a share of holoHalfWidth (ViewWindow.ObserverMargin)
 const float StripesPerUnit = 24.0;   // horizontal stripes per box unit of height
 const float StripeDrift = 0.5;       // how fast the stripes drift upward (stripes per second)
 const float LampIndoor = 0.55;       // how much of the time of day's light the store's lamp replaces while it's on (0.4 before 5.04's brighter nights)
@@ -444,10 +444,14 @@ void main()
     float clearUntil = mix(fogStart, -0.4, swallow);
     float goneBy = mix(1.0, 0.0, swallow);
     float fade = 1.0 - smoothstep(clearUntil, goneBy, edge);
+    // Standing in the garden (5.09): the whole cube is clear, so you see the same patch as in the room view, and the garden
+    // carries on past the walls, fading over ObserverMargin. Measured as distance outside the square (round corners),
+    // and the same past the world's edge, so the world never shows beyond it. Same math as ViewWindow.FogFade.
+    vec2 pastWall = max(abs(boxPos.xz) - holoHalfWidth, 0.0);
+    vec2 pastWorld = max(abs(boxPos.xz / viewZoom + viewCenter) - worldHalf, 0.0) * viewZoom;
+    float outside = max(length(pastWall), length(pastWorld)) / (holoHalfWidth * ObserverMargin);
+    fade = mix(fade, 1.0 - smoothstep(0.0, 1.0, outside), observer);
     fade *= 1.0 - smoothstep(cubeHeight * 0.7, cubeHeight, boxPos.y);
-    // Standing in the garden, things also fade with how far they are from the eye, so the far fog is round like a horizon
-    float fromEye = length(fragPosition.xz - viewPos.xz);
-    fade *= 1.0 - observer * smoothstep(ObserverFogNear, ObserverFogFar, fromEye);
 
     // Starting up: only what's below the rising edge shows, softly, and the whole picture brightens as it rises
     float revealY = reveal * (cubeHeight + 1.0) - 0.5;

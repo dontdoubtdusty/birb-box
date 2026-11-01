@@ -33,7 +33,21 @@ public class BirdMover
     private float splashTimer;           // seconds until its next splash while bathing
     private float wadeRippleTimer;       // seconds until wading leaves its next small ripple
     private Puddle? puddle;              // sipping at this rain puddle instead of the pool (see Puddles.cs)
+    private bool thirstTrip;             // went because it was thirsty (Bird.SeeToNeeds), not on a whim: a little hunger won't stop it
+    private bool waterFlight;            // flying most of the way there, the water being far off
+    private Vector3 flightFrom, flightLanding;
     public bool IsBathTrip => water != WaterVisit.None && bathTrip && !shaking;
+    public bool OnWaterTrip => water != WaterVisit.None;
+
+    // What it's doing at the water, for the bird card (null when it isn't on a visit).
+    public string? WaterActivity => water switch
+    {
+        WaterVisit.Going => "Off to the water",
+        WaterVisit.Sipping => "Drinking",
+        WaterVisit.Bathing => "Bathing",
+        WaterVisit.Drying => "Drying off",
+        _ => null,
+    };
 
     // TUNING
     private const float TurnRate = 4f;            // radians per second
@@ -57,6 +71,10 @@ public class BirdMover
     private const float ShakeTime = 1.3f;         // shaking off after a bath
     private const float PuddleReach = 5f;         // how far from a rain puddle a bird will walk over to sip from it
     private const float PuddleMinFill = 0.4f;     // a puddle must be at least this full to drink from
+    private const float FlyToWaterReach = 10f;    // a thirsty bird farther than this from the water flies there
+    private const float WaterFlightArc = 2.5f;    // how high that flight goes at its middle (lower for short ones)
+    private const float SipDrink = 0.2f;          // how much thirst one sip quenches (a bath quenches it all)
+    private const int MaxSips = 6;                // a thirsty bird sips until quenched, up to this many
     public const float SipRate = 4.5f;            // HopPhase speed while sipping: one full turn is one sip
     public const float BathRate = 14f;            // HopPhase speed while bathing (the wing flutter)
     // HopPhase speeds: how fast the bird's rhythm runs (BirbAnimator draws from it)
@@ -88,6 +106,13 @@ public class BirdMover
             return;
         }
 
+        // On its way to far-off water: flying, then it walks the last bit like any visit
+        if (waterFlight)
+        {
+            if (FlyArc(flightFrom, flightLanding, dt)) waterFlight = false;
+            return;
+        }
+
         if (bird.IsFlying)
         {
             Vector2 back = -HeadingVector(bird.Heading) * 0.5f;
@@ -97,8 +122,8 @@ public class BirdMover
         }
         landingSpot = null;
 
-        // Roosting on the ground: it sits still where it is until morning
-        if (bird.Roosting)
+        // Asleep on the ground (roosting, or a nap): it sits still where it is until it wakes
+        if (bird.Asleep)
         {
             bird.Pose = BirdPose.Roost;
             PutOnGround();
@@ -239,7 +264,7 @@ public class BirdMover
 
         float now = Pool.Distance(bird.Position);
         bool wading = bathTrip && (water == WaterVisit.Going || water == WaterVisit.Bathing);
-        float margin = wading ? -WadeDepth : bird.Roosting ? PoolRoom : MathF.Min(PoolRoom, now - 0.001f);
+        float margin = wading ? -WadeDepth : bird.Asleep ? PoolRoom : MathF.Min(PoolRoom, now - 0.001f);
         bool sipping = !bathTrip && (water == WaterVisit.Going || water == WaterVisit.Sipping);
         if (sipping) margin = MathF.Min(margin, waterStand);
         spot = Pool.PushOut(spot, margin);
@@ -412,12 +437,12 @@ public class BirdMover
 
     // ---------------- ROOSTING (see Bird.UpdateNight) ----------------
 
-    // Bedtime: a bird already up on a rock sleeps there. Otherwise it flies to the nearest rock within RoostReach
+    // Bedtime, or a nap (Bird.StartNap): a bird already up on a rock sleeps there. Otherwise it flies to the nearest rock within RoostReach
     // that has room and company it's happy with, or, with none about, sleeps on the ground where it is.
     public void StartRoost()
     {
         pauseTimer = 0f;
-        water = WaterVisit.None;
+        EndWaterVisit();
         if (perchRock != null) return;
 
         Rock? best = null;
@@ -442,7 +467,7 @@ public class BirdMover
         if (rock != null) SetPerch(rock, bird.Position, seated: true);
     }
 
-    // Morning: a bird up on a rock sits a few seconds more, then hops down (see UpdatePerching).
+    // Morning, or the end of a nap: a bird up on a rock sits a few seconds more, then hops down (see UpdatePerching).
     public void EndRoost()
     {
         if (perchRock != null) perchTimer = Rng.Range(1f, 4f);
@@ -499,7 +524,7 @@ public class BirdMover
     private void UpdatePerching(float dt)
     {
         Bird bird = ParentBird;
-        bool canStay = bird.State == BirdState.Wandering && (bird.Roosting || !bird.IsHungry());
+        bool canStay = bird.State == BirdState.Wandering && (bird.Asleep || !bird.IsHungry());
 
         if (!perchSeated)
         {
@@ -512,13 +537,13 @@ public class BirdMover
             return;
         }
 
-        if (!bird.Roosting) perchTimer -= dt;
+        if (!bird.Asleep) perchTimer -= dt;
         if (perchTimer <= 0f || !canStay)
         {
             GetDownFromRock();
             return;
         }
-        if (bird.Roosting)
+        if (bird.Asleep)
         {
             bird.Pose = BirdPose.Roost;
             bird.Position = perchSpot;
@@ -558,10 +583,11 @@ public class BirdMover
     // to bathe in the shallows (if fewer than SimTuning.MaxBathers are, and it isn't raining), or just to sip at the shore.
     // Its spot is the shore nearest to it, nudged a little along so birds don't all crowd one spot.
     // A rain puddle nearer than the pool is only for sipping. Returns true when it sets off.
+    // (A thirsty bird doesn't wait for this: see StartThirstVisit.)
     private bool TryStartWaterVisit()
     {
         Bird bird = ParentBird;
-        if (bird.IsHungry() || bird.Roosting) return false;
+        if (bird.IsHungry() || bird.Asleep) return false;
         Pool? pool = Pool.Current;
         float toPool = pool?.DistanceAt(bird.Position) ?? float.MaxValue;
         Puddle? near = Weather.Instance.Puddles.Nearest(bird.Position, PuddleReach, PuddleMinFill);
@@ -572,9 +598,60 @@ public class BirdMover
         }
         if (pool == null || toPool > WaterReach) return false;
 
-        bool bath = !Weather.Instance.IsRaining && Bathers() < SimTuning.Now.MaxBathers && Rng.Chance(SimTuning.Now.BathChance);
+        bool bath = CanBathe() && Rng.Chance(SimTuning.Now.BathChance * bird.Nature.BathShare);
         if (!bath && !Rng.Chance(SimTuning.Now.DrinkChance)) return false;
         return StartWaterVisit(bath);
+    }
+
+    // A thirsty bird (Bird.SeeToNeeds) sets off for the nearest water from anywhere in the garden: a rain puddle if one
+    // is nearer than the pool (to sip), otherwise the pool, to bathe now and then (SimTuning.ThirstyBathShare, more for a
+    // Dabbler) or to sip. Farther than FlyToWaterReach it flies most of the way. False if there's no water it can get to.
+    public bool StartThirstVisit()
+    {
+        Bird bird = ParentBird;
+        Pool? pool = Pool.Current;
+        float toPool = pool?.DistanceAt(bird.Position) ?? float.MaxValue;
+        Puddle? near = Weather.Instance.Puddles.Nearest(bird.Position, MathF.Min(toPool, World.Instance.HalfSize * 3f), PuddleMinFill);
+
+        bool started = false;
+        if (near != null && near.EdgeDistance(bird.Position) < toPool)
+        {
+            started = StartPuddleVisit(near);
+        }
+        if (!started && pool != null)
+        {
+            bool bath = CanBathe() && Rng.Chance(SimTuning.Now.ThirstyBathShare * bird.Nature.BathShare);
+            started = StartWaterVisit(bath) || (bath && StartWaterVisit(false));
+        }
+        if (!started) return false;
+
+        thirstTrip = true;
+        if (Vector2.Distance(Flat(bird.Position), Flat(waterSpot)) > FlyToWaterReach)
+        {
+            // Lands on the shore: right at its sipping spot, or beside the shallows it's going to bathe in
+            Vector3 land = waterSpot;
+            if (bathTrip)
+            {
+                Vector2 shore = pool!.MoveTo(Flat(waterSpot), 0.35f);
+                land = new Vector3(shore.X, 0f, shore.Y);
+            }
+            land = Rock.PushOut(land, RockRoom);
+            flightFrom = bird.Position;
+            flightLanding = new Vector3(land.X, bird.GroundY, land.Z);
+            waterFlight = true;
+        }
+        return true;
+    }
+
+    // Room for one more bather, and it isn't raining.
+    private static bool CanBathe() => !Weather.Instance.IsRaining && Bathers() < SimTuning.Now.MaxBathers;
+
+    // Ends a visit (finished, cut short, or the bird is off to sleep or leaving).
+    private void EndWaterVisit()
+    {
+        water = WaterVisit.None;
+        thirstTrip = false;
+        waterFlight = false;
     }
 
     // Sets off for the water now, from wherever it is: to bathe, or to sip. Also the tools panel's cheat.
@@ -594,6 +671,8 @@ public class BirdMover
         if (Rock.At(spot3, RockRoom + 0.1f) != null) return false;
 
         puddle = null;
+        thirstTrip = false;
+        waterFlight = false;
         water = WaterVisit.Going;
         bathTrip = bath;
         waterStand = stand;
@@ -617,6 +696,8 @@ public class BirdMover
         if (Rock.At(spot3, RockRoom + 0.1f) != null || Pool.IsWater(spot3, 0.1f)) return false;
 
         puddle = target;
+        thirstTrip = false;
+        waterFlight = false;
         water = WaterVisit.Going;
         bathTrip = false;
         waterStand = stand;
@@ -628,16 +709,18 @@ public class BirdMover
     }
 
     // One step of the visit. Returns false when it's over (or cut short by hunger, bedtime or leaving,
-    // or its puddle drying up), so the bird carries on as usual this frame.
+    // or its puddle drying up), so the bird carries on as usual this frame. A thirsty bird only lets hunger
+    // stop it once it's pressing (Bird.IsStarving).
     private bool UpdateWaterVisit(float dt)
     {
         Bird bird = ParentBird;
         Pool? pool = Pool.Current;
         bool hasWater = puddle != null ? Weather.Instance.Puddles.Contains(puddle) && puddle.Fill > 0.15f : pool != null;
-        bool canStay = hasWater && bird.State == BirdState.Wandering && !bird.IsHungry() && !bird.Roosting;
+        bool fed = thirstTrip ? !bird.IsStarving() : !bird.IsHungry();
+        bool canStay = hasWater && bird.State == BirdState.Wandering && fed && !bird.Asleep;
         if (!canStay)
         {
-            water = WaterVisit.None;
+            EndWaterVisit();
             return false;
         }
 
@@ -645,11 +728,11 @@ public class BirdMover
         {
             case WaterVisit.Going:
                 waterTimer -= dt;
-                if (waterTimer <= 0f) { water = WaterVisit.None; return false; }
+                if (waterTimer <= 0f) { EndWaterVisit(); return false; }
                 if (IsCloseTo(waterSpot, 0.12f))
                 {
                     water = bathTrip ? WaterVisit.Bathing : WaterVisit.Sipping;
-                    waterTimer = bathTrip ? Rng.Range(3f, 6f) : (2 + Rng.Next(3)) * MathF.Tau / SipRate;
+                    waterTimer = bathTrip ? Rng.Range(3f, 6f) * bird.Nature.BathLength : Sips() * MathF.Tau / SipRate;
                     bird.HopPhase = 0f;
                     splashTimer = 0f;
                     return true;
@@ -667,11 +750,12 @@ public class BirdMover
                     Vector2 beak = Flat(bird.Position) + HeadingVector(bird.Heading) * bird.BeakReach;
                     pool?.AddRipple(new Vector3(beak.X, 0f, beak.Y), 0.35f);    // the floor shader draws ripples on puddles too
                     Sounds.PlaySip(bird.Position);
+                    bird.Drink(SipDrink);
                 }
                 bird.Pose = BirdPose.Sip;
                 PutOnGround();
                 waterTimer -= dt;
-                if (waterTimer <= 0f) water = WaterVisit.None;
+                if (waterTimer <= 0f) EndWaterVisit();
                 return true;
 
             case WaterVisit.Bathing:
@@ -690,7 +774,8 @@ public class BirdMover
                 waterTimer -= dt;
                 if (waterTimer <= 0f)
                 {
-                    // Out onto the shore, the way it's facing or straight back if that's quicker
+                    // Out onto the shore, the way it's facing or straight back if that's quicker. It drank its fill in there.
+                    bird.Drink(1f);
                     water = WaterVisit.Drying;
                     Vector2 shore = pool!.MoveTo(Flat(bird.Position), 0.35f);
                     waterSpot = new Vector3(shore.X, 0f, shore.Y);
@@ -714,9 +799,41 @@ public class BirdMover
                 bird.Pose = BirdPose.ShakeOff;
                 PutOnGround();
                 waterTimer -= dt;
-                if (waterTimer <= 0f) water = WaterVisit.None;
+                if (waterTimer <= 0f) EndWaterVisit();
                 return true;
         }
+        return false;
+    }
+
+    // How many sips: a thirsty bird drinks until quenched (2 to MaxSips), a passing one 2 to 4.
+    private int Sips()
+    {
+        if (!thirstTrip) return 2 + Rng.Next(3);
+        return Math.Clamp((int)MathF.Ceiling((1f - ParentBird.Thirst) / SipDrink), 2, MaxSips);
+    }
+
+    // Flies to a spot on the ground in a low arc, highest at the middle (up to WaterFlightArc). True on landing.
+    private bool FlyArc(Vector3 from, Vector3 to, float dt)
+    {
+        Bird bird = ParentBird;
+        bird.Pose = BirdPose.Fly;
+        Vector2 here = Flat(bird.Position);
+        Vector2 target = Flat(to);
+        float total = MathF.Max(0.01f, Vector2.Distance(Flat(from), target));
+        float left = Vector2.Distance(here, target);
+        float step = FlySpeed * dt;
+        if (left <= step)
+        {
+            bird.Position = to;
+            return true;
+        }
+
+        Vector2 dir = (target - here) / left;
+        here += dir * step;
+        float progress = Math.Clamp(1f - (left - step) / total, 0f, 1f);
+        float height = MathF.Min(WaterFlightArc, total * 0.25f) * MathF.Sin(MathF.PI * progress);
+        bird.Position = new Vector3(here.X, to.Y + height, here.Y);
+        TurnToward(dir, dt);
         return false;
     }
 
@@ -784,7 +901,7 @@ public class BirdMover
     {
         // Fly off in roughly the direction the bird is already facing, up and out of the world.
         perchRock = null;
-        water = WaterVisit.None;
+        EndWaterVisit();
         float angle = ParentBird.Heading + Rng.Range(-0.8f, 0.8f);
         Vector2 dir = HeadingVector(angle);
         float dist = World.Instance.HalfSize * 2f;

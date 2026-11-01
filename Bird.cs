@@ -45,6 +45,23 @@ public class Bird : Entity
     private const float OldSaveLifespan = 3600f;   // saves from before 4.54 had shorter lifespans; those birds get a new one
     // Lifespan, losing interest, coin chance and call delay are tunable: see SimTuning.
 
+    // NEEDS: thirst and rest, alongside hunger (5.10). Each is 1 when met and runs down. Below its line the bird goes to
+    // see to it (water, or a nap); with more than one, the need furthest below its line goes first (SeeToNeeds).
+    // At zero for NeedLimit seconds it leaves, like hunger. How fast they run down: SimTuning.ThirstRate, RestRate.
+    public float Thirst { get; private set; } = 1f;     // 1 = quenched, 0 = parched
+    public float Rest { get; private set; } = 1f;       // 1 = rested, 0 = worn out
+    public bool Napping { get; private set; }           // a short sleep while the others are up (see StartNap)
+    public bool Asleep => Roosting || Napping;
+    private const float ThirstyAt = 0.35f;              // goes for water below this
+    private const float TiredAt = 0.3f;                 // takes a nap below this
+    private const float RestedAt = 0.95f;               // a nap ends here
+    private const float NapRest = 1f / 60f;             // rest gained per second napping (empty to full in a minute)
+    private const float RoostRest = 1f / 90f;           // and per second roosting
+    private const float UrgentNeed = 0.1f;              // hunger or thirst this low wakes a napper, and hunger this low ends a trip to the water
+    private const float NeedLimit = 40f;                // seconds at zero thirst or rest before leaving
+    private float thirstTimer = 0f;
+    private float tiredTimer = 0f;
+
     // HOME: the patch a bird keeps coming back to (see BirdMover.HomeForce). Set when it arrives, moved after each meal.
     public Vector3 Home { get; private set; }
     public bool HasHome { get; private set; }
@@ -57,7 +74,8 @@ public class Bird : Entity
     private bool returnsLater = true;                  // false once it leaves for good (old age)
 
     // NIGHT (see WorldClock): at bedtime a bird either stays the night (Roosting) or flies off, and is back first
-    // thing in the morning. Night Owls stay up. Tunable: SimTuning.RoostChance, MaxRoosting.
+    // thing in the morning. Night Owls keep the other hours: their bedtime is the middle of the day (5.10; they used to
+    // never sleep). Tunable: SimTuning.RoostChance, MaxRoosting.
     public bool Roosting { get; private set; }
     private bool nightDecided;                         // has made its choice for tonight
     private bool leftForNight;                         // flew off at bedtime (BirdSpawner brings these back first at dawn)
@@ -88,8 +106,8 @@ public class Bird : Entity
     // TIMERS
     private float eatTimer = 0f;
     private const float BiteInterval = 1.5f;
-    private float foodSearchTimer;                  // hungry birds look for food only when this runs out
-    private const float FoodSearchInterval = 0.5f;
+    private float needTimer;                        // a bird sees to its needs (food, water, a nap) only when this runs out
+    private const float NeedInterval = 0.5f;
 
     // VOICE
     public float VoicePitch { get; private set; }  // each bird sounds a little higher or lower than the rest
@@ -109,9 +127,11 @@ public class Bird : Entity
         Speed = Rng.Range(0.45f, 1f);
         Lifespan = NewLifespan();
         Hunger = Rng.Range(0.5f, 1f);
+        Thirst = Rng.Range(0.5f, 1f);
+        Rest = Rng.Range(0.6f, 1f);
         Heading = Rng.Range(0f, MathF.PI * 2f);
         HopPhase = Rng.Range(0f, 10f);
-        foodSearchTimer = Rng.Range(0f, FoodSearchInterval);    // staggered so birds don't all search on one frame
+        needTimer = Rng.Range(0f, NeedInterval);    // staggered so birds don't all search on one frame
         VoicePitch = Rng.Range(0.92f, 1.08f);
         callTimer = NextCallDelay();
         interestTimer = Rng.Range(0f, InterestCheckInterval);
@@ -221,6 +241,9 @@ public class Bird : Entity
         Warmth = Warmth,
         Roosting = Roosting,
         NightAway = leftForNight,
+        Thirst = Thirst,
+        Rest = Rest,
+        Napping = Napping,
     };
 
     // A bird that was heading for or eating some seed goes back to wandering; it finds its food again in a moment.
@@ -242,6 +265,8 @@ public class Bird : Entity
         bird.Age = save.Age;
         bird.Lifespan = save.Lifespan >= OldSaveLifespan ? save.Lifespan : NewLifespan();
         bird.Hunger = save.Hunger;
+        if (save.Thirst is float thirst) bird.Thirst = thirst;    // saves from before 5.10 keep the level rolled above
+        if (save.Rest is float rest) bird.Rest = rest;
         bird.State = save.State is BirdState.SeekingFood or BirdState.Eating ? BirdState.Wandering : save.State;
         bird.FlightTarget = save.FlightTarget;
         bird.ArrivingByAir = save.ArrivingByAir;
@@ -253,11 +278,16 @@ public class Bird : Entity
         if (save.Traits != null) bird.SetPersonality(save.Traits);
         if (save.FavoriteSeed is SeedType favorite && species.Eats(favorite)) bird.FavoriteSeed = favorite;
         bird.leftForNight = save.NightAway;
-        if (save.Roosting && bird.State == BirdState.Wandering && !bird.Nature.NightOwl)
+        if (save.Roosting && bird.State == BirdState.Wandering)
         {
             bird.Roosting = true;
             bird.nightDecided = true;
             bird.Mover.ResumeRoost();    // back on the rock it was sleeping on, if it was on one
+        }
+        else if (save.Napping && bird.State == BirdState.Wandering)
+        {
+            bird.Napping = true;
+            bird.Mover.ResumeRoost();
         }
         bird.callTimer = bird.NextCallDelay();
         return bird;
@@ -266,7 +296,7 @@ public class Bird : Entity
     public override void Update(float dt)
     {
         Age += dt;
-        TickDownHunger(dt);
+        TickDownNeeds(dt);
 
         if (State != BirdState.Leaving)
         {
@@ -277,6 +307,14 @@ public class Bird : Entity
             else if (starveTimer >= StarveLimit)
             {
                 StartLeaving($"{Name} got too hungry and left to find food elsewhere.");
+            }
+            else if (thirstTimer >= NeedLimit)
+            {
+                StartLeaving($"{Name} grew parched and left to find water elsewhere.");
+            }
+            else if (tiredTimer >= NeedLimit)
+            {
+                StartLeaving($"{Name} was worn out and flew off to find a quiet roost.");
             }
             else
             {
@@ -292,14 +330,15 @@ public class Bird : Entity
                 break;
 
             case BirdState.Wandering:
-                // Not while up on a feeder or a rock (it gets down first, see BirdMover), nor while roosting
-                if (IsHungry() && !IsFlying && !Roosting)
+                if (Napping) UpdateNap();
+                // Not while up on a feeder or a rock (it gets down first, see BirdMover), asleep, or on its way to the water
+                if (!IsFlying && !Asleep && !Mover.OnWaterTrip)
                 {
-                    foodSearchTimer -= dt;
-                    if (foodSearchTimer <= 0f)
+                    needTimer -= dt;
+                    if (needTimer <= 0f)
                     {
-                        foodSearchTimer = FoodSearchInterval;
-                        TryFindFood();
+                        needTimer = NeedInterval;
+                        SeeToNeeds();
                     }
                 }
                 Mover.UpdateWalking(dt);
@@ -344,7 +383,7 @@ public class Bird : Entity
     // Every so often a wandering bird may lose interest and leave. Much likelier when nothing it eats is lying about.
     private void CheckInterest(float dt)
     {
-        if (State != BirdState.Wandering || IsFlying || Roosting) return;
+        if (State != BirdState.Wandering || IsFlying || Asleep) return;
 
         interestTimer -= dt;
         if (interestTimer > 0f) return;
@@ -373,8 +412,13 @@ public class Bird : Entity
         Visits++;
         returnsLater = true;
         starveTimer = 0f;
+        thirstTimer = 0f;
+        tiredTimer = 0f;
+        Rest = leftForNight ? 1f : MathF.Max(Rest, Rng.Range(0.7f, 1f));    // slept while it was away
+        Thirst = MathF.Max(Thirst, Rng.Range(0.5f, 1f));                      // and drank somewhere
         leftForNight = false;
         Roosting = false;
+        Napping = false;
         nightDecided = false;
     }
 
@@ -383,16 +427,13 @@ public class Bird : Entity
     // At bedtime (its own hours: WorldClock.IsBedtime, moved by an Early Riser's shift and a little jitter),
     // a wandering bird either stays the night or flies off to roost out of view. Most fly off; a few stay
     // (Hearthbound ones more often, never a hungry one, and only up to MaxRoosting). At its waking hour a
-    // roosting bird gets up and calls. Night Owls stay up all night.
+    // roosting bird gets up and calls. A Night Owl does the same through the middle of the day (WorldClock.IsOwlBedtime).
+    // A bird napping when bedtime comes either sleeps on where it is or wakes and flies off.
     private void UpdateNight()
     {
-        if (Nature.NightOwl)
-        {
-            if (Roosting) WakeUp();
-            return;
-        }
-
-        bool bedtime = WorldClock.Instance.IsBedtime(Nature.HourShift + bedJitter);
+        bool owl = Nature.NightOwl;
+        WorldClock clock = WorldClock.Instance;
+        bool bedtime = owl ? clock.IsOwlBedtime(bedJitter) : clock.IsBedtime(Nature.HourShift + bedJitter);
         if (Roosting)
         {
             if (!bedtime) WakeUp();
@@ -411,14 +452,15 @@ public class Bird : Entity
             && RoostingCount() < SimTuning.Now.MaxRoosting;
         if (stays)
         {
+            if (!Napping) Mover.StartRoost();    // a napper sleeps on where it is
+            Napping = false;
             Roosting = true;
-            Mover.StartRoost();
-            EventLog.Add($"{Name} has settled in for the night.");
+            EventLog.Add(owl ? $"{Name} has settled in to sleep the day away." : $"{Name} has settled in for the night.");
         }
         else
         {
             leftForNight = true;
-            StartLeaving($"{Name} flew off to roost for the night.");
+            StartLeaving(owl ? $"{Name} flew off to sleep the day away." : $"{Name} flew off to roost for the night.");
         }
     }
 
@@ -430,6 +472,14 @@ public class Bird : Entity
     }
 
     private static int RoostingCount() => World.Instance.GetAllEntities<Bird>().Count(bird => bird.Roosting);
+
+    // Takes away its Night Owl trait, if it has one: a new bird that comes by day isn't one (see BirdSpawner.SpawnArrival).
+    public void BecomeDayBird()
+    {
+        if (!Nature.NightOwl) return;
+        SetPersonality(Traits.AsDayBird(personality, Species));
+        callTimer = NextCallDelay();
+    }
 
     // Makes it a Night Owl: every bird that arrives at night is one (see BirdSpawner.SpawnArrival).
     public void BecomeNightOwl()
@@ -450,7 +500,7 @@ public class Bird : Entity
     // (a Town Crier sometimes calls anyway).
     private void UpdateVoice(float dt)
     {
-        if (!Roosting) callTimer -= dt;    // a roosting bird sleeps quietly
+        if (!Asleep) callTimer -= dt;    // a sleeping bird is quiet
         if (callTimer <= 0f)
         {
             float ignoreHush = Nature.IgnoreHush + (WorldClock.Instance.IsDawnChorus ? DawnChorusIgnoreHush : 0f);
@@ -499,17 +549,64 @@ public class Bird : Entity
         IsNamed = true;
     }
 
-    private void TickDownHunger(float dt)
-    {
-        // The slider value is "seconds per 5% hunger".
-        float rate = 0.05f / SimTuning.Now.HungerRate * Nature.HungerSpeed * (Roosting ? RoostHunger : 1f);
-        Hunger = MathF.Max(0f, Hunger - rate * dt);
+    // ---------------- NEEDS ----------------
 
-        if (Hunger <= 0f) starveTimer += dt;
-        else starveTimer = 0f;
+    // Hunger and thirst run down (slowly while asleep). Rest runs down while awake and comes back while asleep.
+    // Each one's timer counts the seconds it has sat at zero (see Update: the bird leaves at the limit).
+    private void TickDownNeeds(float dt)
+    {
+        // The slider values are "seconds per 5%".
+        float sleepy = Asleep ? RoostHunger : 1f;
+        Hunger = MathF.Max(0f, Hunger - 0.05f / SimTuning.Now.HungerRate * Nature.HungerSpeed * sleepy * dt);
+        Thirst = MathF.Max(0f, Thirst - 0.05f / SimTuning.Now.ThirstRate * Nature.ThirstSpeed * sleepy * dt);
+        if (Napping) Rest = MathF.Min(1f, Rest + NapRest * dt);
+        else if (Roosting) Rest = MathF.Min(1f, Rest + RoostRest * dt);
+        else Rest = MathF.Max(0f, Rest - 0.05f / SimTuning.Now.RestRate * Nature.RestSpeed * dt);
+
+        starveTimer = Hunger <= 0f ? starveTimer + dt : 0f;
+        thirstTimer = Thirst <= 0f ? thirstTimer + dt : 0f;
+        tiredTimer = Rest <= 0f ? tiredTimer + dt : 0f;
     }
 
     public bool IsHungry() => Hunger < Nature.HungryAt;
+    public bool IsThirsty() => Thirst < ThirstyAt;
+    public bool IsTired() => Rest < TiredAt;
+
+    // A sip or a bath (see BirdMover's WATER section).
+    public void Drink(float amount) => Thirst = MathF.Min(1f, Thirst + amount);
+
+    // Hunger or thirst so low it can't wait (a trip to the water gives way to food at this point, and a napper wakes).
+    public bool IsStarving() => Hunger < UrgentNeed;
+
+    // Sees to whichever need is furthest below its line: food, water or a nap. If that one can't be met right now
+    // (no seed it eats in reach, no water it can reach), it tries the next.
+    private void SeeToNeeds()
+    {
+        List<(float urgency, Func<bool> act)> needs = new();
+        if (IsHungry()) needs.Add((Hunger / Nature.HungryAt, TryFindFood));
+        if (IsThirsty()) needs.Add((Thirst / ThirstyAt, Mover.StartThirstVisit));
+        if (IsTired()) needs.Add((Rest / TiredAt, StartNap));
+        foreach ((float _, Func<bool> act) in needs.OrderBy(need => need.urgency))
+        {
+            if (act()) return;
+        }
+    }
+
+    // A nap: it settles down where it is, or on a rock close by (the same spots as a night's roost), in the Roost pose.
+    private bool StartNap()
+    {
+        Napping = true;
+        Mover.StartRoost();
+        return true;
+    }
+
+    // It wakes once rested, or when hunger or thirst gets too pressing to sleep through.
+    private void UpdateNap()
+    {
+        if (Rest < RestedAt && Hunger >= UrgentNeed && Thirst >= UrgentNeed) return;
+        Napping = false;
+        Mover.EndRoost();
+    }
 
     // Birds drawn in by seed arrive ready to eat it.
     public void ArriveHungry()
@@ -520,14 +617,14 @@ public class Bird : Entity
     // A bird only eats seed it has a taste for (see the seed table in Seeds.cs).
     public bool CanEat(Food food) => food.FavoriteFor(Species) != null;
 
-    private void TryFindFood()
+    // True when it found some and set off for it.
+    private bool TryFindFood()
     {
         Food? nearest = Mover.FindNearestFood(10f * Nature.FoodRange, FavoriteSeed, FavoritePull);
-        if (nearest != null)
-        {
-            TargetFood = nearest;
-            State = BirdState.SeekingFood;
-        }
+        if (nearest == null) return false;
+        TargetFood = nearest;
+        State = BirdState.SeekingFood;
+        return true;
     }
 
     private void UpdateSeeking(float dt)
@@ -609,6 +706,7 @@ public class Bird : Entity
         returnsLater = returns;
         State = BirdState.Leaving;
         Roosting = false;
+        Napping = false;
         TargetFood = null;
         Mover.PickLeavingTarget();
         EventLog.Add(reason);

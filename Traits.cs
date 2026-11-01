@@ -1,6 +1,6 @@
 // A bird's personality: 2 or 3 traits, fixed for its whole life (Step 12a).
 //
-// Each trait is one degree on a scale (Nerve, Appetite, Roaming, Voice, Hours, Weather). A bird holds at most one degree of
+// Each trait is one degree on a scale (Nerve, Appetite, Roaming, Voice, Hours, Weather, Bathing). A bird holds at most one degree of
 // each scale, so opposite traits never roll together. A scale the bird has no trait on is average.
 // Traits only nudge numbers the simulation already has (personal space, hunger, home radius, call delay...).
 // The numbers live in TraitEffects; each trait in the table below says which ones it changes.
@@ -13,7 +13,8 @@ public enum TraitScale
     Roaming,
     Voice,
     Hours,       // when it keeps to its roost (added at 4.92 with day and night)
-    Weather      // how it takes the rain (added at 4.96 with rain; one trait only, so it's rolled less often, see ScaleWeight)
+    Weather,     // how it takes the rain (added at 4.96 with rain; one trait only, so it's rolled less often, see ScaleWeight)
+    Bathing      // how it takes to the water (added at 5.10 with thirst; one trait only, like Weather)
 }
 
 public enum Trait
@@ -23,7 +24,8 @@ public enum Trait
     Hearthbound, Wayfarer,               // Roaming
     Hushed, TownCrier,                   // Voice
     EarlyRiser, NightOwl,                // Hours
-    RainProud                            // Weather
+    RainProud,                           // Weather
+    Dabbler                              // Bathing
 }
 
 // Which birds a bird is easy around: on a rock it hops up to, and at a pile or feeder it picks to eat from.
@@ -51,6 +53,7 @@ public class TraitEffects
     public float BiteTime = 1f;           // times: seconds between bites
     public float FoodRange = 1f;          // times: how far it looks for food
     public float BuildLean = 1f;          // times: its body size, rolled once when it's first made (see Bird.RollLooks)
+    public float ThirstSpeed = 1f;        // times: how fast it gets thirsty
 
     // ROAMING
     public float HomeRadius = 1f;         // times: how far it roams from home (SimTuning.HomeRadius)
@@ -64,10 +67,15 @@ public class TraitEffects
 
     // HOURS
     public float HourShift = 0f;          // hours: when it wakes and goes to roost, earlier (-) or later (+) than most
-    public bool NightOwl = false;         // never roosts; the only kind of bird that arrives at night
+    public bool NightOwl = false;         // sleeps by day, up at dusk, night and dawn; the only kind of bird that arrives at night
+    public float RestSpeed = 1f;          // times: how fast it tires while awake
 
     // WEATHER
     public bool RainProud = false;        // doesn't mind the rain: no hunching, no leaving early, calls as usual
+
+    // BATHING
+    public float BathShare = 1f;          // times: how likely a trip to the pool is a bath rather than a sip
+    public float BathLength = 1f;         // times: how long a bath lasts
 }
 
 // One trait: its name, the line shown when hovering it, its scale, how common it is, and what it changes.
@@ -104,6 +112,7 @@ public static class Traits
     private static readonly Dictionary<TraitScale, float> ScaleWeight = new()
     {
         [TraitScale.Weather] = 0.2f,
+        [TraitScale.Bathing] = 0.2f,
     };
 
     // Each scale from one end to the other, as the bird card's sliders show it. null is the average spot.
@@ -115,6 +124,7 @@ public static class Traits
         [TraitScale.Voice] = new Trait?[] { Trait.Hushed, null, Trait.TownCrier },
         [TraitScale.Hours] = new Trait?[] { Trait.EarlyRiser, null, Trait.NightOwl },
         [TraitScale.Weather] = new Trait?[] { null, Trait.RainProud },
+        [TraitScale.Bathing] = new Trait?[] { null, Trait.Dabbler },
     };
 
     public static IReadOnlyList<Trait?> Stops(TraitScale scale) => stops[scale];
@@ -137,11 +147,11 @@ public static class Traits
         // APPETITE
         [Trait.Dainty] = new TraitInfo("Dainty", TraitScale.Appetite, 1f,
             "Takes its seed one grain at a time, and is full before the others have begun.",
-            e => { e.HungerSpeed = 0.7f; e.HungryAt = 0.3f; e.FullAt = 0.6f; e.BiteTime = 1.5f; e.BuildLean = 0.94f; }),
+            e => { e.HungerSpeed = 0.7f; e.HungryAt = 0.3f; e.FullAt = 0.6f; e.BiteTime = 1.5f; e.BuildLean = 0.94f; e.ThirstSpeed = 0.75f; }),
 
         [Trait.BigEater] = new TraitInfo("Big Eater", TraitScale.Appetite, 1f,
             "Eats as if the granary closes at dusk. Hungry often, gobbles fast, and roams far for a meal.",
-            e => { e.HungerSpeed = 1.4f; e.HungryAt = 0.55f; e.FullAt = 0.98f; e.Nourish = 0.6f; e.BiteTime = 0.75f; e.FoodRange = 1.4f; e.BuildLean = 1.06f; }),
+            e => { e.HungerSpeed = 1.4f; e.HungryAt = 0.55f; e.FullAt = 0.98f; e.Nourish = 0.6f; e.BiteTime = 0.75f; e.FoodRange = 1.4f; e.BuildLean = 1.06f; e.ThirstSpeed = 1.3f; }),
 
         // ROAMING
         [Trait.Hearthbound] = new TraitInfo("Hearthbound", TraitScale.Roaming, 1f,
@@ -163,17 +173,22 @@ public static class Traits
 
         // HOURS
         [Trait.EarlyRiser] = new TraitInfo("Early Riser", TraitScale.Hours, 1f,
-            "Up before the first glow and singing about it. Off to roost while the others are still at supper.",
-            e => { e.HourShift = -0.75f; }),
+            "Up before the first glow and singing about it. Tires early, and is off to roost while the others are still at supper.",
+            e => { e.HourShift = -0.75f; e.RestSpeed = 1.15f; }),
 
         [Trait.NightOwl] = new TraitInfo("Night Owl", TraitScale.Hours, 0.6f,
-            "Keeps lantern hours. Wanders the dark garden long after the rest have gone to roost.",
+            "Keeps lantern hours. Sleeps the day away, and wanders the dark garden long after the rest have gone to roost.",
             e => { e.NightOwl = true; }),
 
         // WEATHER
         [Trait.RainProud] = new TraitInfo("Rain-proud", TraitScale.Weather, 1f,
             "Takes a downpour as a compliment. Stays out in it, eats, and sings while the others huddle.",
             e => { e.RainProud = true; }),
+
+        // BATHING
+        [Trait.Dabbler] = new TraitInfo("Dabbler", TraitScale.Bathing, 1f,
+            "Never passes water without wading in. Bathes long and often, and comes out looking pleased with itself.",
+            e => { e.BathShare = 3f; e.BathLength = 1.8f; }),
     };
 
     // How each species leans is in its entry in Birds.cs (Species.Leans).
@@ -238,6 +253,27 @@ public static class Traits
         List<Trait> kept = traits.Where(trait => info[trait].Scale != TraitScale.Hours).ToList();
         if (kept.Count >= 3) kept.RemoveAt(Rng.Next(kept.Count));
         kept.Add(Trait.NightOwl);
+        return Clean(kept);
+    }
+
+    // The same personality with no Night Owl in it (a new bird that comes by day, when Night Owls are asleep):
+    // its Hours trait dropped, and if that leaves it with only one, a trait on another scale rolled in its place.
+    public static List<Trait> AsDayBird(IEnumerable<Trait> traits, Species type)
+    {
+        List<Trait> kept = traits.Where(trait => trait != Trait.NightOwl).ToList();
+        if (kept.Count >= 2 || kept.Count == traits.Count()) return Clean(kept);
+
+        // Picked by the same weights as a first roll, so the rarer scales stay rare
+        List<TraitScale> free = Scales.Where(scale => scale != TraitScale.Hours && kept.All(trait => info[trait].Scale != scale)).ToList();
+        if (free.Count == 0) return Clean(kept);
+        float roll = Rng.Range(0f, free.Sum(scale => PickWeight(type, scale)));
+        TraitScale chosen = free[^1];
+        foreach (TraitScale scale in free)
+        {
+            roll -= PickWeight(type, scale);
+            if (roll <= 0f) { chosen = scale; break; }
+        }
+        kept.Add(RollDegree(type, chosen));
         return Clean(kept);
     }
 

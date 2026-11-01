@@ -24,13 +24,12 @@ public class ViewWindow
     public const float MaxCubeScale = 0.74f;
     public float FogStart = 0.97f;          // share of the way to the sides that stays clear; a thin fog fills the rest
 
-    // THE HOLOGRAM VIEW'S FOG (hologram.fs has the same numbers). Standing in the garden, the fog at the sides widens a
-    // little, and things also fade with how far they are from the eye along the ground, so the far fog is round like a
-    // horizon and no wall of the cube ever shows.
-    public const float ObserverFogStart = 0.85f;
-    public const float ObserverFogNear = 4.5f, ObserverFogFar = 8f;   // box units from the eye
+    // THE HOLOGRAM VIEW'S FOG (5.09; hologram.fs has the same number). Standing in the garden, the whole cube is clear, so you
+    // see the same patch as in the room view, and the garden carries on past the walls for this share of the cube's
+    // half-width, fading into the sky there. The fade is measured as distance outside the square, so its corners are round.
+    public const float ObserverMargin = 1.0f;
     public float Immersion;                 // set each frame from HoloCamera: 0 in the room view, 1 standing in the garden
-    public float FogStartShown => FogStart + (MathF.Min(FogStart, ObserverFogStart) - FogStart) * Immersion;
+    public float ShownReach => 1f + ObserverMargin * Immersion;    // how far out things are drawn, as a share of HalfWidth
     public float HalfWidth => HalfSize * CubeScale;          // the cube spans -HalfWidth..HalfWidth on X and Z
     public float CornerReach => HalfWidth * MathF.Sqrt(2f);  // from the middle out to a corner
     public float PanSpeed = 8f;
@@ -68,23 +67,37 @@ public class ViewWindow
         return MathF.Max(MathF.Abs(x), MathF.Abs(z)) / halfWidth;
     }
 
-    // How much of something at this box position shows through the fog (1 clear, 0 gone), seen from an eye at eyeBox
-    // (also in box units). The same math as the fog in hologram.fs, so labels fade with what they float over.
-    public float FogFade(Vector3 boxPos, Vector3 eyeBox)
+    // How much of something at this box position shows through the fog (1 clear, 0 gone): the room view's thin fade at
+    // the walls, blended into the Hologram View's margin past them. The same math as the fog in hologram.fs, so labels
+    // fade with what they float over.
+    public float FogFade(Vector3 boxPos)
     {
-        float start = FogStartShown;
-        float side = Math.Clamp((EdgeAmount(boxPos.X, boxPos.Z, HalfWidth) - start) / (1f - start), 0f, 1f);
-        float fade = 1f - side * side * (3f - 2f * side);
+        float side = Math.Clamp((EdgeAmount(boxPos.X, boxPos.Z, HalfWidth) - FogStart) / (1f - FogStart), 0f, 1f);
+        float roomFade = 1f - Smooth(side);
 
-        float fromEye = Vector2.Distance(new Vector2(boxPos.X, boxPos.Z), new Vector2(eyeBox.X, eyeBox.Z));
-        float far = Math.Clamp((fromEye - ObserverFogNear) / (ObserverFogFar - ObserverFogNear), 0f, 1f);
-        return fade * (1f - Immersion * far * far * (3f - 2f * far));
+        float pastX = MathF.Max(MathF.Abs(boxPos.X) - HalfWidth, 0f), pastZ = MathF.Max(MathF.Abs(boxPos.Z) - HalfWidth, 0f);
+        float outside = Math.Clamp(MathF.Sqrt(pastX * pastX + pastZ * pastZ) / (HalfWidth * ObserverMargin), 0f, 1f);
+        float observerFade = 1f - Smooth(outside);
+        return roomFade + (observerFade - roomFade) * Immersion;
     }
+
+    // Eases 0..1 in and out (smoothstep, as in the shader).
+    private static float Smooth(float t) => t * t * (3f - 2f * t);
 
     // Is this world position inside the cube (plus an optional margin, in world units)?
     public bool Contains(Vector3 worldPos, float margin = 0f)
     {
         float reach = WorldHalfWidth + margin;
+        float dx = worldPos.X - Center.X, dz = worldPos.Z - Center.Y;
+        if (reach <= 0f) return false;
+        return EdgeAmount(dx, dz, reach) <= 1f && worldPos.Y <= WorldHeight + margin;
+    }
+
+    // Is this world position close enough to the cube to be drawn? The same as Contains in the room view; in the
+    // Hologram View it also takes in the misty margin past the walls (ShownReach).
+    public bool IsShown(Vector3 worldPos, float margin = 0f)
+    {
+        float reach = WorldHalfWidth * ShownReach + margin;
         float dx = worldPos.X - Center.X, dz = worldPos.Z - Center.Y;
         if (reach <= 0f) return false;
         return EdgeAmount(dx, dz, reach) <= 1f && worldPos.Y <= WorldHeight + margin;

@@ -8,7 +8,7 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Cube 5.07 Alpha";
+    public const string Version = "Birb Cube 5.10 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
@@ -394,7 +394,7 @@ public class GameEngine
         bool wheelZoomsWorld = input.BirdsShowing
             && (Camera.InHologramView ? !input.MouseBlocked : input.MouseOverBox);
         Camera.Update(input.MouseBlocked, wheelZoomsWorld);
-        View.Immersion = Camera.Immersion;    // the fog widens as the room fades away
+        View.Immersion = Camera.Immersion;    // stepping into the garden opens up the misty margin past the walls
         if (wheelZoomsWorld) View.ZoomBy(wheel);
         // A double-click on a bird follows it; anywhere else on the box it enters or leaves the Hologram View
         input.DoubleClickFollowed = input.BirdsShowing && !overControl && FollowBirdOnDoubleClick();
@@ -645,6 +645,7 @@ public class GameEngine
 
             rlImGui.Begin();
                 if (!Menu.IsOpen && !Designer.IsOpen) UI.Draw(this);
+                if (!Menu.IsOpen && !Designer.IsOpen) Radio.Finder.Draw();    // the station finder, opened from the radio's dial
                 if (!Menu.IsOpen) Designer.DrawWindow(this);
             rlImGui.End();
             Menu.Draw(this, accent);

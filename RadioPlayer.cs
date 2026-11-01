@@ -11,6 +11,10 @@ using Raylib_cs;
 //    so turning the volume or the tuning knob is heard straight away.
 //  - Each station's signal drifts a little over time, so now and then static creeps in and you nudge the tuning.
 //  - The folder is read again every time the radio is switched on, so new music shows up without a restart.
+//  - Web stations change while playing (the station finder adds and removes them); the dial is rebuilt then,
+//    and stations already on it keep their spot.
+//  - Preview: the station finder can play a station that isn't on the dial. While it does, the dial is ignored;
+//    stopping the preview (or touching the power or tuning knob) goes back to the dial.
 // While developing, the Radio folder sits in the project (next to BirdsApp.csproj); in a Release copy, next to the .exe.
 public class RadioPlayer
 {
@@ -44,7 +48,8 @@ public class RadioPlayer
     public IReadOnlyList<RadioStation> Stations => stations;
     public float TunedFrequency => RadioStation.LowestFrequency + Tuning * (RadioStation.HighestFrequency - RadioStation.LowestFrequency);
 
-    private readonly WebStations web;
+    public WebStations Web { get; }
+    private int webVersionShown = -1;            // the WebStations.Version the dial was last built from
     private List<RadioStation> folderStations = new();
     private List<RadioStation> webStations = new();
     private List<RadioStation> stations = new();
@@ -63,17 +68,23 @@ public class RadioPlayer
     private readonly HashSet<string> reported = new();                        // problems already written to the Bird Log
     private bool reportedEmpty = false;
 
+    // PREVIEW (the station finder's Listen button)
+    private RadioStation? preview;
+    private bool previewWasOn;                   // whether the radio was on before the preview switched it on
+    private string? previewError;                // why the preview isn't playing, once it has given up
+
     public RadioPlayer()
     {
         Folder = Path.Combine(Assets.ProjectFolder ?? AppContext.BaseDirectory, "Radio");
-        web = new WebStations(Folder);
+        Web = new WebStations(Folder);
     }
 
     public void Load()
     {
         CreateFolder();
         ScanFolder();
-        web.StartSearch();
+        Web.Start();
+        RebuildWebStations();
         if (stations.Count > 0) Tuning = stations[0].Position;
 
         // The stream's chunk size is set just for this stream, then put back to Raylib's default
@@ -110,7 +121,8 @@ public class RadioPlayer
                 "To name a station and pick its frequency, put a station.txt in its folder:\r\n" +
                 "    name: Emberwing FM\r\n" +
                 "    frequency: 92.3\r\n\r\n" +
-                "Live web stations come from Radio Browser; pick genres or your own stations in web-stations.txt.\r\n" +
+                "Live web stations come from Radio Browser: click the radio's dial to find stations and pick genres.\r\n" +
+                "They're kept in my-stations.json here.\r\n" +
                 "The radio looks at this folder again every time you switch it on.\r\n");
         }
         catch (Exception e)
@@ -124,6 +136,7 @@ public class RadioPlayer
     // The power button. Switching on reads the folder again; if the needle was on a station, it stays on it.
     public void SetOn(bool on)
     {
+        if (!on) preview = null;    // switching off ends a preview too
         if (on == On) return;
         On = on;
         if (!on) return;
@@ -148,6 +161,52 @@ public class RadioPlayer
     }
 
     public bool CanSkip => current != null && !current.IsWeb;
+
+    // ---------------- PREVIEW ----------------
+
+    // Plays a station from the finder in place of the dial, switching the radio on if it was off.
+    public void StartPreview(WebStations.Info info)
+    {
+        if (preview == null) previewWasOn = On;
+        StopDecoder();
+        preview = MakeWebStation(info);
+        previewError = null;
+        SetOn(true);
+    }
+
+    // Back to the dial (and off again, if the preview had switched the radio on).
+    public void StopPreview()
+    {
+        if (preview == null) return;
+        preview = null;
+        StopDecoder();
+        current = null;
+        if (!previewWasOn) SetOn(false);
+    }
+
+    public bool IsPreviewing(string key) => preview != null && preview.Key == key;
+    public string? PreviewName => preview?.Name;
+
+    // One line for the finder: how the preview is going.
+    public string PreviewStatus()
+    {
+        if (preview == null) return "";
+        if (previewError != null) return $"Not playing: {previewError}";
+        return decoder != null && decoder.HasSound ? "Playing." : "Tuning in...";
+    }
+
+    // Moves the needle onto one of the dial's stations (the finder's Tune button), switching the radio on.
+    public void TuneTo(string key)
+    {
+        RadioStation? station = stations.Find(s => s.Key == key);
+        if (station == null) return;
+        StopPreview();
+        Tuning = station.Position;
+        SetOn(true);
+    }
+
+    // Where a station sits on the dial, or 0 if it isn't on it (yet).
+    public float FrequencyOf(string key) => stations.Find(s => s.Key == key)?.Frequency ?? 0f;
 
     // How far either side of a station the needle still picks it up, as a share of the dial.
     public float Reach => stations.Count == 0 ? 0f : MathF.Min(0.04f, 0.45f / stations.Count);
@@ -186,6 +245,7 @@ public class RadioPlayer
     public (string station, string detail) Describe()
     {
         if (!On) return ("Switched off.", "");
+        if (preview != null) return ($"Listening to {preview.Name}", PreviewStatus());
         if (stations.Count == 0) return ("No stations yet.", "See the Bird Log.");
         if (current == null) return ($"{TunedFrequency:0.0} FM", "Static between stations.");
 
@@ -209,14 +269,16 @@ public class RadioPlayer
         float duckTarget = ducked ? DuckedShare : 1f - (1f - ObserverShare) * observer;
         duck += (duckTarget - duck) * MathF.Min(1f, DuckRate * dt);
 
-        List<WebStations.Info>? found = web.TakeResult();
-        if (found != null)
-        {
-            webStations = found.Select(MakeWebStation).ToList();
-            RebuildDial();
-        }
+        Web.Update();
+        if (Web.Version != webVersionShown) RebuildWebStations();
 
+        // A preview takes the dial's place, always clear
         RadioStation? nearest = NearestStation(out float clarity);
+        if (preview != null)
+        {
+            nearest = preview;
+            clarity = 1f;
+        }
         if (nearest != current)
         {
             StopDecoder();
@@ -225,7 +287,8 @@ public class RadioPlayer
 
         if (On && current != null)
         {
-            if (current.IsWeb) KeepWebPlaying(current);
+            if (current == preview) KeepPreviewPlaying(current);
+            else if (current.IsWeb) KeepWebPlaying(current);
             else KeepFolderPlaying(current);
         }
         else
@@ -283,7 +346,7 @@ public class RadioPlayer
             StartDecoder(station.Url, 0);
             if (!station.CountedClick)
             {
-                web.CountClick(station.Uuid);
+                Web.CountClick(station.Uuid);
                 station.CountedClick = true;
             }
             return;
@@ -302,6 +365,27 @@ public class RadioPlayer
             StopDecoder();
             station.RetryAt = now + 3;
         }
+    }
+
+    // The preview: connect once, and if it fails or never answers, say why and don't retry (the finder shows it).
+    private void KeepPreviewPlaying(RadioStation station)
+    {
+        if (previewError != null) return;
+        if (decoder == null)
+        {
+            StartDecoder(station.Url, 0);
+            if (!station.CountedClick)
+            {
+                Web.CountClick(station.Uuid);
+                station.CountedClick = true;
+            }
+            return;
+        }
+
+        if (decoder.Failed) previewError = decoder.Error ?? "the stream wouldn't open";
+        else if (!decoder.HasSound && Now - decoderStartedAt > WebConnectTimeout) previewError = $"no answer after {WebConnectTimeout:0} s";
+        else if (decoder.Ended && decoder.Available == 0) previewError = "the stream stopped";
+        if (previewError != null) StopDecoder();
     }
 
     // Tops up the Raylib stream: whenever one of its two chunks has been played, decode the next one into it.
@@ -344,17 +428,46 @@ public class RadioPlayer
         return new RadioStation { IsWeb = true, Name = info.Name, Url = info.Url, Uuid = info.Uuid, Details = details };
     }
 
-    // Puts folder and web stations together and gives a frequency to every station that didn't choose one.
+    // The web stations from WebStations' current list. Stations already on the dial are kept (with their spot,
+    // retry timer and click count); your own stations go back to the frequency saved for them, and one placed
+    // for the first time has its new frequency saved.
+    private void RebuildWebStations()
+    {
+        webVersionShown = Web.Version;
+        var list = new List<RadioStation>();
+        foreach (WebStations.DialEntry entry in Web.DialStations())
+        {
+            RadioStation station = webStations.Find(s => s.Key == entry.Info.Key) ?? MakeWebStation(entry.Info);
+            station.Url = entry.Info.Url;
+            station.Mine = entry.Mine;
+            if (!station.Placed && entry.Mine != null && entry.Mine.Frequency > 0f)
+            {
+                station.Frequency = Math.Clamp(entry.Mine.Frequency, RadioStation.LowestFrequency, RadioStation.HighestFrequency);
+                station.Placed = true;
+            }
+            list.Add(station);
+        }
+        webStations = list;
+        RebuildDial();
+
+        foreach (RadioStation station in webStations)
+        {
+            if (station.Mine != null) Web.RememberFrequency(station.Mine, station.Frequency);
+        }
+    }
+
+    // Puts folder and web stations together and gives a frequency to every station that has none yet.
     // Each goes where it's farthest from the others (and the dial's ends). Folder stations are placed first,
-    // in folder order, so they land in the same spots every time.
+    // in folder order, so they land in the same spots every time. A station that already has a spot keeps it,
+    // so adding or removing one never moves the rest.
     private void RebuildDial()
     {
         stations = folderStations.Concat(webStations).ToList();
 
         var taken = new List<float> { RadioStation.LowestFrequency, RadioStation.HighestFrequency };
-        taken.AddRange(stations.Where(s => s.FrequencyChosen).Select(s => s.Frequency));
+        taken.AddRange(stations.Where(s => s.FrequencyChosen || s.Placed).Select(s => s.Frequency));
 
-        foreach (RadioStation station in stations.Where(s => !s.FrequencyChosen))
+        foreach (RadioStation station in stations.Where(s => !s.FrequencyChosen && !s.Placed))
         {
             float best = 98.1f, bestGap = -1f;
             for (int i = 0; i < 100; i++)
@@ -368,6 +481,7 @@ public class RadioPlayer
                 }
             }
             station.Frequency = MathF.Round(best * 10f) / 10f;
+            station.Placed = true;
             taken.Add(station.Frequency);
         }
     }

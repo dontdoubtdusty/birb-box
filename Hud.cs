@@ -16,12 +16,14 @@ public class Hud
     private const int Pad = 10;
     private const int HeaderSize = 12;
     private const int NameSize = 20;
-    private const int CardWidth = 300, CardHeight = 324;
+    private const int CardWidth = 300, CardHeight = 346;
     private const int TraitSize = 16;                                         // the "Fond of" line
     private const int FlavorSize = 14, FlavorLineHeight = 17;
 
     // TRAIT SLIDERS: one row per scale (name, brass track, the trait's word), a glowing pip on the bird's spot.
     private const int SliderRowHeight = 22;
+    private const int NeedGap = 6;                                    // between the three need bars
+    private static readonly Color NeedLow = new Color(240, 158, 38, 255);    // a need the bird is going to see to
     private const int SliderWordSize = 14;
     private const int SliderGap = 10;               // between the name, the track and the word
     private const float PipRadius = 4f;
@@ -382,7 +384,8 @@ public class Hud
 
         DrawNameField(bird, x, y, nameHovered, accent);
         y += 24;
-        UiText.Draw(bird.Roosting ? "Roosting" : bird.State.ToString(), x, y, 20, Palette.DimText);
+        string doing = bird.Roosting ? "Roosting" : bird.Napping ? "Napping" : bird.Mover.WaterActivity ?? bird.State.ToString();
+        UiText.Draw(doing, x, y, 20, Palette.DimText);
         if (bird.Visits > 1)
         {
             string visit = $"Visit {bird.Visits}";
@@ -390,11 +393,11 @@ public class Hud
         }
         y += 28;
 
-        // Hunger bar: hologram color normally, orange when the bird is hungry
-        Color barColor = bird.IsHungry() ? new Color(240, 158, 38, 255) : accent;
-        Raylib.DrawRectangle(x, y, innerWidth, 16, Palette.PanelDark);
-        Raylib.DrawRectangle(x, y, (int)(innerWidth * bird.Hunger), 16, Raylib.Fade(barColor, 0.8f));
-        UiText.Draw($"Hunger {bird.Hunger * 100:0}%", x + 6, y + 3, HeaderSize, Palette.Text);
+        // Its three needs side by side: food, water, rest
+        int barWidth = (innerWidth - 2 * NeedGap) / 3;
+        DrawNeedBar("Food", bird.Hunger, bird.IsHungry(), x, y, barWidth, accent);
+        DrawNeedBar("Water", bird.Thirst, bird.IsThirsty(), x + barWidth + NeedGap, y, barWidth, accent);
+        DrawNeedBar("Rest", bird.Rest, bird.IsTired(), x + 2 * (barWidth + NeedGap), y, barWidth, accent);
         y += 24;
 
         UiText.Draw($"Age {bird.FormatAge()}", x, y, 20, Palette.DimText);
@@ -412,6 +415,15 @@ public class Hud
         UiDraw.Button(centerButton, "Center", accent);
 
         if (hoveredTrait is Trait trait) DrawFlavor(trait, accent);
+    }
+
+    // One need's bar: hologram color normally, orange once the bird goes to see to it.
+    private static void DrawNeedBar(string label, float level, bool low, int x, int y, int width, Color accent)
+    {
+        Color barColor = low ? NeedLow : accent;
+        Raylib.DrawRectangle(x, y, width, 16, Palette.PanelDark);
+        Raylib.DrawRectangle(x, y, (int)(width * level), 16, Raylib.Fade(barColor, 0.8f));
+        UiText.Draw($"{label} {level * 100:0}%", x + 5, y + 3, HeaderSize, Palette.Text);
     }
 
     // One row per scale: its name, a brass track with a tick per stop (a small ring marks average),

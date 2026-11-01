@@ -47,7 +47,7 @@ public partial class WorldDrawer
         foreach (Food food in World.Instance.GetAllEntities<Food>())
         {
             if (food.Layers.Count == 0 || food.Plant != null) continue;    // seedheads are drawn with their sprout
-            if (!view.Contains(food.Position, 0.5f + food.HeapRadius)) continue;
+            if (!view.IsShown(food.Position, 0.5f + food.HeapRadius)) continue;
             if (food.Feeder?.Style == FeederStyle.Tube) continue;
 
             Vector3 local = view.ToLocal(food.Position);
@@ -252,7 +252,7 @@ public partial class WorldDrawer
         if (pool == null) return;
         foreach (Pool.Droplet droplet in pool.Droplets)
         {
-            if (!view.Contains(droplet.Position, 0.2f)) continue;
+            if (!view.IsShown(droplet.Position, 0.2f)) continue;
             Vector3 stretch = new Vector3(1f, 1.4f, 1f) * droplet.Size * view.Zoom;    // a little long, like a falling drop
             AddGrain(GrainMesh.Round, view.ToLocal(droplet.Position), Quaternion.Identity, stretch, DropletColor, view);
         }

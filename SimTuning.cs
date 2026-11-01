@@ -11,6 +11,10 @@ public class SimTuning
     public float ArrivalsPerFoodPerMinute = 0.4f;
     public int MaxBirds = 15;
 
+    // NEEDS (see the NEEDS block in Bird.cs): thirst and tiredness, alongside hunger
+    public float ThirstRate = 15f;                 // seconds per 5% thirst (about 5 minutes from quenched to parched)
+    public float RestRate = 25f;                   // seconds awake per 5% rest (about 8 minutes from rested to worn out)
+
     // BIRD LIFETIMES
     public float LifespanMinMinutes = 60f, LifespanMaxMinutes = 180f;
     public float LoseInterestMinutes = 45f;        // on average, while food is about (sooner when there's none)
@@ -47,6 +51,7 @@ public class SimTuning
     public float DrinkChance = 0.08f;              // chance a pause near the pool becomes a walk down to sip
     public float BathChance = 0.04f;               // chance it becomes a bath instead
     public int MaxBathers = 3;                     // at most this many birds bathe at once
+    public float ThirstyBathShare = 0.25f;         // chance a thirsty bird's trip to the pool is a bath (a Dabbler's is 3x)
 
     // SPROUTS (see Sprout.cs)
     public float SproutChancePerSeed = 0.05f;      // chance each rotted seed comes up as a sprout (1 seed 5%, 10 seed 40%)
@@ -59,6 +64,8 @@ public class SimTuning
         HungerRate = MathF.Max(0.1f, HungerRate);
         ArrivalsPerFoodPerMinute = MathF.Max(0f, ArrivalsPerFoodPerMinute);
         MaxBirds = Math.Clamp(MaxBirds, 1, 500);
+        ThirstRate = MathF.Max(0.1f, ThirstRate);
+        RestRate = MathF.Max(0.1f, RestRate);
         LifespanMinMinutes = MathF.Max(1f, LifespanMinMinutes);
         LifespanMaxMinutes = MathF.Max(LifespanMinMinutes, LifespanMaxMinutes);
         LoseInterestMinutes = MathF.Max(1f, LoseInterestMinutes);
@@ -83,6 +90,7 @@ public class SimTuning
         DrinkChance = Math.Clamp(DrinkChance, 0f, 1f);
         BathChance = Math.Clamp(BathChance, 0f, 1f);
         MaxBathers = Math.Clamp(MaxBathers, 0, 50);
+        ThirstyBathShare = Math.Clamp(ThirstyBathShare, 0f, 1f);
         SproutChancePerSeed = Math.Clamp(SproutChancePerSeed, 0f, 1f);
         SproutMinutes = MathF.Max(1f, SproutMinutes);
         MaxSprouts = Math.Clamp(MaxSprouts, 0, 200);

@@ -45,8 +45,9 @@ public partial class WorldDrawer
         locRippleLife = Raylib.GetShaderLocation(holoShader, "rippleLife");
         FindWeatherUniforms();
 
-        // A square floor big enough for the widest the cube can be; the shader's fog cuts off the rest.
-        float floorSize = view.HalfSize * ViewWindow.MaxCubeScale * 2f;
+        // A square floor big enough for the widest the cube can be, plus the Hologram View's misty margin past its walls;
+        // the shader's fog cuts off the rest.
+        float floorSize = view.HalfSize * ViewWindow.MaxCubeScale * 2f * (1f + ViewWindow.ObserverMargin);
         floorModel = Raylib.LoadModelFromMesh(Raylib.GenMeshPlane(floorSize, floorSize, 1, 1));
         grainRoundMesh = Raylib.GenMeshSphere(0.5f, 6, 8);
         grainBlockMesh = Raylib.GenMeshCube(1f, 1f, 1f);
@@ -166,7 +167,7 @@ public partial class WorldDrawer
         Raylib.SetShaderValue(holoShader, locFlatShade, 1, ShaderUniformDataType.Int);
         foreach (Rock rock in World.Instance.GetAllEntities<Rock>())
         {
-            if (!view.Contains(rock.Position, rock.Radius + 0.5f)) continue;
+            if (!view.IsShown(rock.Position, rock.Radius + 0.5f)) continue;
 
             Vector3 local = view.ToLocal(rock.Position);
             int look = rock.Look;
@@ -206,7 +207,7 @@ public partial class WorldDrawer
         GameEngine engine = GameEngine.Instance;
         foreach (Feeder feeder in World.Instance.GetAllEntities<Feeder>())
         {
-            if (!view.Contains(feeder.Position, feeder.Info.FootRadius + 0.5f)) continue;
+            if (!view.IsShown(feeder.Position, feeder.Info.FootRadius + 0.5f)) continue;
 
             float fill = feeder.Held / feeder.Info.Capacity;
             Color seedColor = feeder.Seed != null ? Seeds.Get(feeder.Seed.MainSeed).Color : Color.Blank;
@@ -236,7 +237,7 @@ public partial class WorldDrawer
     {
         foreach (Coin coin in World.Instance.GetAllEntities<Coin>())
         {
-            if (!view.Contains(coin.Position, 0.5f)) continue;
+            if (!view.IsShown(coin.Position, 0.5f)) continue;
 
             float spin = (float)Raylib.GetTime() * 3f + coin.EntityID + view.Yaw;
             coinModel.Transform = Raymath.MatrixMultiply(Raymath.MatrixRotateX(MathF.PI / 2f), Raymath.MatrixRotateY(spin));
@@ -255,7 +256,7 @@ public partial class WorldDrawer
 
         foreach (Bird bird in World.Instance.GetAllEntities<Bird>())
         {
-            if (!view.Contains(bird.Position, 0.5f)) continue;
+            if (!view.IsShown(bird.Position, 0.5f)) continue;
 
             BirbMotion motion = animator.Animate(bird, animDt);
             Vector3 scenePos = view.BoxToScene(view.ToLocal(bird.Position)) + new Vector3(0f, motion.Bounce * view.Zoom, 0f);

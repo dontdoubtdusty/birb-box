@@ -160,7 +160,7 @@ public class ChatMessages
 
         foreach (Bird bird in birds)
         {
-            bool asleep = bird.Roosting && bird.Pose == BirdPose.Roost;
+            bool asleep = bird.Asleep && bird.Pose == BirdPose.Roost;
             sleepFade.TryGetValue(bird.EntityID, out float fade);
             if (!asleep && fade <= 0f) continue;
             sleepFade[bird.EntityID] = Math.Clamp(fade + (asleep ? step : -step), 0f, 1f);
@@ -187,7 +187,7 @@ public class ChatMessages
             if (bird.State == BirdState.Leaving) continue;
             taggableBirds.Add(bird.EntityID);
 
-            if (!view.Contains(bird.Position, 0.5f)) continue;
+            if (!view.IsShown(bird.Position, 0.5f)) continue;
             if (messages.Any(msg => !msg.Leaving && msg.Bird == bird)) continue;
             labeledBirds.Add(bird);
         }
@@ -354,12 +354,10 @@ public class ChatMessages
         float halfWidth = LabelWidth / 2f;
         float halfHeight = halfWidth * TextureHeight / TextureWidth;
 
-        Vector3 eye = view.SceneToBox(camera.Position);    // labels fade in the fog as seen from here (ViewWindow.FogFade)
-
         Rlgl.DrawRenderBatchActive();
         Rlgl.DisableDepthMask();
-        DrawSleepers(camera, view, right, up, eye, holoColor);
-        DrawNameTags(camera, view, right, up, eye);
+        DrawSleepers(camera, view, right, up, holoColor);
+        DrawNameTags(camera, view, right, up);
         foreach (Message msg in messages)
         {
             if (msg.Texture.Id == 0) continue;
@@ -370,7 +368,7 @@ public class ChatMessages
 
             float drift = msg.Leaving ? -msg.Age * RiseSpeed : msg.Age * RiseSpeed;    // leaving labels sink
             Vector3 local = view.ToLocal(msg.LastPosition) + new Vector3(0, StartHeight + drift, 0);
-            alpha *= view.FogFade(local, eye);
+            alpha *= view.FogFade(local);
             if (alpha <= 0.01f) continue;
 
             Vector3 center = view.BoxToScene(local);
@@ -383,7 +381,7 @@ public class ChatMessages
 
     // Each tag floats a little above the top of its bird's head and follows it.
     // A grown tag rises by its extra height so its bottom edge stays the same gap above the head.
-    private void DrawNameTags(Camera3D camera, ViewWindow view, Vector3 right, Vector3 up, Vector3 eye)
+    private void DrawNameTags(Camera3D camera, ViewWindow view, Vector3 right, Vector3 up)
     {
         float halfWidth = NameLabelWidth / 2f;
         float halfHeight = halfWidth * TextureHeight / NameTextureWidth;
@@ -396,7 +394,7 @@ public class ChatMessages
             Vector3 headLocal = view.ToLocal(head);
             float grow = DistanceScale(camera, view.BoxToScene(headLocal));
             Vector3 local = headLocal + new Vector3(0, NameLift + halfHeight * grow, 0);
-            float alpha = NameAlpha * view.FogFade(local, eye);
+            float alpha = NameAlpha * view.FogFade(local);
             if (alpha <= 0.01f) continue;
 
             DrawFacingQuad(tag.Texture.Texture, view.BoxToScene(local), right * halfWidth * grow, up * halfHeight * grow, alpha);
@@ -406,7 +404,7 @@ public class ChatMessages
     // Each sleeping bird's z's climb from just above its head (above its name tag, if it has one showing),
     // growing and drifting off to one side as they go, fading in at the start and out at the top.
     // Birds are out of step with each other, so a row of sleepers doesn't pulse together.
-    private void DrawSleepers(Camera3D camera, ViewWindow view, Vector3 right, Vector3 up, Vector3 eye, Vector3 holoColor)
+    private void DrawSleepers(Camera3D camera, ViewWindow view, Vector3 right, Vector3 up, Vector3 holoColor)
     {
         if (zTexture.Id == 0 || sleepFade.Count == 0) return;
 
@@ -428,7 +426,7 @@ public class ChatMessages
             {
                 float life = (sleepClock / SleepCycle + offset + (float)i / SleepZs) % 1f;    // 0 as a z appears, 1 as it's gone
                 Vector3 local = start + new Vector3(0, life * SleepRise * grow, 0);
-                float alpha = SleepAlpha * fade * Smooth(0f, 0.15f, life) * (1f - Smooth(0.5f, 0.95f, life)) * view.FogFade(local, eye);
+                float alpha = SleepAlpha * fade * Smooth(0f, 0.15f, life) * (1f - Smooth(0.5f, 0.95f, life)) * view.FogFade(local);
                 if (alpha <= 0.01f) continue;
 
                 float sideways = (life * SleepDrift + MathF.Sin(life * MathF.Tau) * SleepWobble) * grow;
