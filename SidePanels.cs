@@ -16,7 +16,10 @@ public class SidePanels
     private const int RimPad = 12;          // brass showing around each screen
     private const int SlotGap = 14;         // between screens in the same column
     public const int ColumnWidth = BucketPanel.PanelWidth + RimPad * 2;
-    public const int StatsHeight = 146;     // room for the time of day and the weather under the counts
+    private const int StatsBaseHeight = 124;   // the counts, the time of day and the weather
+    public const int FeatherColumns = 4;        // the collection of feathers under them, a species to a cell
+    public const int FeatherMaxShown = 8;       // more species than this are summed up in a "+N more" line
+    public const int FeatherCellWidth = 50, FeatherRowHeight = 20, FeatherOverflowHeight = 16;
     private const int ButtonRadius = 15;
     private const int ButtonSpacing = 40;
     private const int ButtonRowGap = 10;    // between the stats screen and the buttons under it
@@ -96,6 +99,15 @@ public class SidePanels
         return Raylib.CheckCollisionPointRec(mouse, LeftColumn) || Raylib.CheckCollisionPointRec(mouse, RightColumn);
     }
 
+    // The stats screen is taller the more species' feathers there are to show under the counts.
+    public static int StatsHeightFor(int collectedSpecies)
+    {
+        if (collectedSpecies == 0) return StatsBaseHeight;
+        int shown = Math.Min(collectedSpecies, FeatherMaxShown);
+        int rows = (shown + FeatherColumns - 1) / FeatherColumns;
+        return StatsBaseHeight + rows * FeatherRowHeight + 8 + (collectedSpecies > FeatherMaxShown ? FeatherOverflowHeight : 0);
+    }
+
     // Recalculated every frame so it follows window resizes.
     public void Layout()
     {
@@ -109,8 +121,9 @@ public class SidePanels
         // Right column: stats, buttons, map, top to bottom
         float rightX = width - Margin - ColumnWidth + SlideOffset(rightShown);
         float y = Margin + RimPad;
-        StatsSlot = new Rectangle(rightX + RimPad, y, BucketPanel.PanelWidth, StatsHeight);
-        y += StatsHeight + ButtonRowGap + ButtonRadius;
+        int statsHeight = StatsHeightFor(GameEngine.Instance.Feathers.CollectedCount);
+        StatsSlot = new Rectangle(rightX + RimPad, y, BucketPanel.PanelWidth, statsHeight);
+        y += statsHeight + ButtonRowGap + ButtonRadius;
 
         for (int i = 0; i < buttonCenters.Length; i++)
         {

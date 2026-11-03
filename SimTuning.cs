@@ -23,11 +23,12 @@ public class SimTuning
     // BIRD BEHAVIOR
     public float CallDelayMin = 30f, CallDelayMax = 90f;    // seconds between a bird's own calls
     public float PerchChance = 0.3f;               // chance a pause near a rock becomes a sit on top of it
+    public float SitChance = 0.2f;                 // chance a standing pause (not a peck) becomes a long sit (BirdMover.SitMin-SitMax)
     public float HomeRadius = 7f;                  // a wandering bird roams this far from home before turning back
 
-    // COINS
-    public float CoinDropChance = 0.66f;           // chance to drop a coin after a full meal
-    public float CoinLifetime = 30f;               // seconds a coin waits to be clicked (half that out of view)
+    // FEATHERS
+    public float FeatherDropChance = 0.22f;        // chance to drop a feather after a full meal (about 1 in 4.5; regulars and named birds 1.5x)
+    public float FeatherLifetime = 60f;            // seconds a feather waits to be clicked (half that out of view)
 
     // FOOD AND WORLD
     public bool NaturalDrops = true;
@@ -73,9 +74,10 @@ public class SimTuning
         CallDelayMin = MathF.Max(1f, CallDelayMin);
         CallDelayMax = MathF.Max(CallDelayMin, CallDelayMax);
         PerchChance = Math.Clamp(PerchChance, 0f, 1f);
+        SitChance = Math.Clamp(SitChance, 0f, 1f);
         HomeRadius = MathF.Max(1f, HomeRadius);
-        CoinDropChance = Math.Clamp(CoinDropChance, 0f, 1f);
-        CoinLifetime = MathF.Max(1f, CoinLifetime);
+        FeatherDropChance = Math.Clamp(FeatherDropChance, 0f, 1f);
+        FeatherLifetime = MathF.Max(1f, FeatherLifetime);
         DropsPerMinute = MathF.Max(0f, DropsPerMinute);
         MaxFood = Math.Clamp(MaxFood, 1, 2000);
         SpoilSpeed = MathF.Max(0.01f, SpoilSpeed);

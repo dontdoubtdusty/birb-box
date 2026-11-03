@@ -43,10 +43,13 @@ public partial class Species
     public string? VoiceKey;
     public float VoicePitch = 1f;
 
+    // What its feather is called (a Designer species' is "<Name> Feather"). Birds of this species drop it; see Feather.cs.
+    public string FeatherName;
+
     // A built-in species, from the table in Birds.cs.
     public Species(string key, string name, BirbShape[] shapes, float size, Color color, bool common,
                    Dictionary<SeedType, float> tastes, Dictionary<FeederStyle, float> feeders, Dictionary<Trait, float> leans,
-                   SeedType? lure = null)
+                   SeedType? lure = null, string? featherName = null)
     {
         Key = key;
         BuiltIn = true;
@@ -59,6 +62,7 @@ public partial class Species
         Tastes = tastes;
         Feeders = feeders;
         Leans = leans;
+        FeatherName = featherName ?? $"{name} Feather";
     }
 
     // A Designer species, from its file. It has no looks until designs are saved for it.
@@ -77,12 +81,14 @@ public partial class Species
         Leans = new(file.Leans);
         VoiceKey = file.Voice;
         VoicePitch = file.VoicePitch;
+        FeatherName = $"{file.Name} Feather";
     }
 
     // Takes on the details from an edited file (everything but the key and the looks). Designer species only.
     public void CopyFrom(SpeciesFile file)
     {
         Name = file.Name;
+        FeatherName = $"{file.Name} Feather";
         Size = file.Size;
         Color = file.MapColor;
         Common = file.Common;

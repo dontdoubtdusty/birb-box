@@ -89,6 +89,10 @@ public class UIHandler
             for (int i = 0; i < 10; i++) engine.BirdSpawner.SpawnArrival();
         }
         if (engine.SelectedBird is Bird selected && ImGui.Button("Re-roll selected bird's traits")) selected.RerollPersonality();
+        if (engine.SelectedBird is Bird watched && ImGui.CollapsingHeader("Selected bird", ImGuiTreeNodeFlags.DefaultOpen))
+        {
+            DrawBirdInsides(watched);
+        }
 
         ImGui.SeparatorText("Food");
         FoodSpawner food = engine.FoodSpawner;
@@ -105,9 +109,9 @@ public class UIHandler
         Slider("Sprout lives", ref t.SproutMinutes, d.SproutMinutes, 1f, 60f, "%.0f min");
         Slider("Max sprouts", ref t.MaxSprouts, d.MaxSprouts, 0, 50);
 
-        ImGui.SeparatorText("Coins");
-        Slider("Drop chance", ref t.CoinDropChance, d.CoinDropChance, 0f, 1f, "%.2f per meal");
-        Slider("Coin lasts", ref t.CoinLifetime, d.CoinLifetime, 5f, 120f, "%.0f s");
+        ImGui.SeparatorText("Feathers");
+        Slider("Drop chance", ref t.FeatherDropChance, d.FeatherDropChance, 0f, 1f, "%.2f per meal");
+        Slider("Feather lasts", ref t.FeatherLifetime, d.FeatherLifetime, 5f, 180f, "%.0f s");
 
         if (ImGui.CollapsingHeader("Bird lifetimes"))
         {
@@ -123,6 +127,7 @@ public class UIHandler
             Slider("Call every min", ref t.CallDelayMin, d.CallDelayMin, 5f, 120f, "%.0f s");
             Slider("Call every max", ref t.CallDelayMax, d.CallDelayMax, 5f, 240f, "%.0f s");
             Slider("Rock perch", ref t.PerchChance, d.PerchChance, 0f, 1f, "%.2f chance");
+            Slider("Sit still", ref t.SitChance, d.SitChance, 0f, 1f, "%.2f of stops");
             Slider("Home radius", ref t.HomeRadius, d.HomeRadius, 2f, 20f, "%.1f");
         }
 
@@ -154,7 +159,7 @@ public class UIHandler
 
         if (ImGui.CollapsingHeader("Cheats"))
         {
-            if (ImGui.Button("+10 coins")) engine.Coins += 10;
+            if (ImGui.Button("+10 of each feather")) engine.Feathers.AddToAll(10);
             ImGui.SameLine();
             if (ImGui.Button("Fill bucket")) FillBucket(engine.Bucket.Bucket);
             if (ImGui.Button("Clear ground seed")) FoodSpawner.ClearGroundSeed();
@@ -353,6 +358,35 @@ public class UIHandler
 
         ImGui.End();
     }
+
+    // Dev readout for the selected bird: what the simulation has it doing and where it's headed,
+    // beyond the card's one-word "doing" (state, pose, food target, flight target, home, perch).
+    private static void DrawBirdInsides(Bird bird)
+    {
+        Vector3 here = bird.Position;
+        string sleep = bird.Roosting ? "  roosting" : bird.Napping ? "  napping" : "";
+        ImGui.Text($"{bird.Name}: {bird.State}, pose {bird.Pose}{sleep}");
+        ImGui.Text($"At {here.X:0.0}, {here.Z:0.0}   {(bird.IsFlying ? $"flying, {here.Y - bird.GroundY:0.0} up" : "on the ground")}");
+
+        if (bird.TargetFood is Food food)
+        {
+            string where = food.Feeder != null ? $"the {food.Feeder.Info.Name}" : food.Plant != null ? "a sprout" : "a pile";
+            ImGui.Text($"Food: {where} of {Seeds.Get(food.MainSeed).Name}, {Flat(here, food.Position):0.0} away, {food.Total:0.0} seed left");
+        }
+        else ImGui.TextDisabled("Food: none picked");
+
+        if (bird.IsFlying || bird.State is BirdState.Arriving or BirdState.Leaving)
+        {
+            Vector3 to = bird.FlightTarget;
+            ImGui.Text($"Flying to {to.X:0.0}, {to.Z:0.0} ({Flat(here, to):0.0} away)");
+        }
+        if (bird.Mover.WaterActivity is string water) ImGui.Text($"Water: {water}{(bird.Mover.IsBathTrip ? " (bath trip)" : "")}");
+        if (bird.Mover.PerchRock != null) ImGui.Text("Perched on a rock");
+        ImGui.Text(bird.HasHome ? $"Home {Flat(here, bird.Home):0.0} away" : "No home patch yet");
+    }
+
+    // Distance across the ground, ignoring height.
+    private static float Flat(Vector3 a, Vector3 b) => Vector2.Distance(new Vector2(a.X, a.Z), new Vector2(b.X, b.Z));
 
     // The raw numbers a bird's traits set (dev): personal space, perching, appetite, roaming, voice.
     private static string NatureNumbers(TraitEffects n)

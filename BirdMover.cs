@@ -11,6 +11,8 @@ public class BirdMover
     private float pauseTimer = 0f;       // > 0 means standing still
     private float nextPauseIn;
     private BirdPose pausePose;          // what the bird does while it stands still
+    private bool sitting;                // this pause is a long sit (looks about, turns a little)
+    private float sitLookTimer;          // seconds until a sitting bird looks somewhere else
     private Vector3? landingSpot;        // where it's fluttering down to after eating up on a feeder or sitting on a rock
 
     // PERCHING on a rock
@@ -72,6 +74,7 @@ public class BirdMover
     private const float PuddleReach = 5f;         // how far from a rain puddle a bird will walk over to sip from it
     private const float PuddleMinFill = 0.4f;     // a puddle must be at least this full to drink from
     private const float FlyToWaterReach = 10f;    // a thirsty bird farther than this from the water flies there
+    private const float SitMin = 10f, SitMax = 40f;    // seconds a long sit lasts (how often: SimTuning.SitChance)
     private const float WaterFlightArc = 2.5f;    // how high that flight goes at its middle (lower for short ones)
     private const float SipDrink = 0.2f;          // how much thirst one sip quenches (a bath quenches it all)
     private const int MaxSips = 6;                // a thirsty bird sips until quenched, up to this many
@@ -165,7 +168,9 @@ public class BirdMover
     {
         if (pauseTimer > 0f)
         {
+            if (sitting && ParentBird.IsHungry()) pauseTimer = 0f;    // hunger ends a sit (thirst and naps end it on their own)
             pauseTimer -= dt;
+            if (sitting) LookAboutWhileSitting(dt);
             ParentBird.Pose = pausePose;
             if (pausePose == BirdPose.Peck) AdvancePeck(dt);
             PutOnGround();
@@ -183,8 +188,28 @@ public class BirdMover
             pauseTimer = Rng.Range(0.8f, 2.5f);
             nextPauseIn = Rng.Range(3f, 9f);
             pausePose = PickPausePose();
+            sitting = pausePose != BirdPose.Peck && Rng.Chance(SimTuning.Now.SitChance);
+            if (sitting)
+            {
+                pauseTimer = Rng.Range(SitMin, SitMax);
+                sitLookTimer = 0f;
+            }
         }
         return false;
+    }
+
+    // A long sit: every few seconds it looks another way or just stands, and turns a little on the spot
+    // (the same as sitting on a rock). The animator's idle acts (preen, scratch...) play in between.
+    private void LookAboutWhileSitting(float dt)
+    {
+        sitLookTimer -= dt;
+        if (sitLookTimer <= 0f)
+        {
+            sitLookTimer = Rng.Range(1.2f, 3f);
+            pausePose = Rng.Chance(0.6) ? BirdPose.LookAround : BirdPose.Idle;
+            wanderAngle = ParentBird.Heading + Rng.Range(-1.5f, 1.5f);
+        }
+        TurnToward(HeadingVector(wanderAngle), dt * 0.4f);
     }
 
     private static BirdPose PickPausePose()

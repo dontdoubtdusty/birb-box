@@ -57,7 +57,7 @@ public class PriceTag
         ShelfItem? item = store.SelectedItem;
         if (item == null) return;
 
-        int coins = GameEngine.Instance.Coins;
+        int feathers = GameEngine.Instance.Feathers.Total;
         int x = (int)rect.X, y = (int)rect.Y;
 
         // The string runs from the item on the shelf to the tag's hole, so it follows the item if the store turns
@@ -86,12 +86,12 @@ public class PriceTag
             UiText.Draw($"{item.Amount:0} seed", x + Pad, y + Pad + 48, SmallText, Palette.DimText);
         }
 
-        string price = $"{item.Price} coin{(item.Price == 1 ? "" : "s")}";
+        string price = $"{item.Price} feather{(item.Price == 1 ? "" : "s")}";
         UiText.Draw(price, x + Width - Pad - UiText.Measure(price, BigText), y + Pad + 44, BigText, Palette.Text);
 
-        if (coins < item.Price)
+        if (feathers < item.Price)
         {
-            UiText.Draw($"You have {coins}.", x + Pad, y + Pad + 66, SmallText, Warning);
+            UiText.Draw($"You have {feathers}.", x + Pad, y + Pad + 66, SmallText, Warning);
         }
         else if (item.IsFeeder)
         {

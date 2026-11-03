@@ -6,7 +6,7 @@ using Raylib_cs;
 // Left-drag up/down tilts the camera a little.
 // Each drag locks to whichever direction it started in, so turning never tilts and tilting never turns.
 // The mouse wheel zooms this camera in the room view unless something else is using it (see GameEngine).
-// A left click that doesn't drag is reported as a click (for selecting / picking up coins), and two quick
+// A left click that doesn't drag is reported as a click (for selecting / picking up feathers), and two quick
 // clicks in the same spot as a double-click (GameEngine uses it to enter and leave the Hologram View).
 //
 // Two views, each with its own tilt, and an eased move between them:

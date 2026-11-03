@@ -103,7 +103,7 @@ public class SaveGame
             SimTime = engine.SimTime,
             ClockDays = engine.Clock.Days,
             Weather = engine.Weather.ToSave(),
-            Coins = engine.Coins,
+            Feathers = engine.Feathers.ToSave(),
             FrostcrestSeen = Birds.IsDiscovered(Species.Frostcrest),    // also in SeenSpecies; kept so older versions still read it
             SeenSpecies = Birds.SaveSeen(),
             VisitedStore = engine.Store.VisitedBefore,
@@ -136,7 +136,7 @@ public class SaveGame
                 case Food food when food.Feeder == null && food.Plant == null: data.Seed.Add(food.ToSave()); break;
                 case Sprout sprout: data.Sprouts.Add(sprout.ToSave()); break;
                 case Feeder feeder: data.Feeders.Add(feeder.ToSave()); break;
-                case Coin coin: data.LooseCoins.Add(coin.ToSave()); break;
+                case Feather feather: data.LooseFeathers.Add(feather.ToSave()); break;
                 case Rock rock: data.Rocks.Add(rock.ToSave()); break;
                 // the pool is saved on its own, above
             }
@@ -161,7 +161,7 @@ public class SaveGame
         else engine.Clock.Reset(data.Birds.Count > 0 ? WorldClock.OldSaveStartHour : WorldClock.StartHour);
         engine.Clock.Refresh();                                         // before the birds load, so roosting birds stay roosting
         engine.Weather.Restore(data.Weather);                           // a new world, or a save from before 4.96, starts fair and dry
-        engine.Coins = data.Coins;
+        engine.Feathers.Restore(data.Feathers);    // a save from before feathers (5.14) had coins instead; they are dropped
         Birds.RestoreSeen(data.FrostcrestSeen ? data.SeenSpecies.Append(Species.Frostcrest.Key) : data.SeenSpecies);
         engine.Store.VisitedBefore = data.VisitedStore;
 
@@ -213,10 +213,12 @@ public class SaveGame
             if (food.Position.Y <= 0f) food.Position = Pool.PushOut(Rock.PushOut(food.Position));
             world.AddEntity(Food.FromSave(food));
         }
-        foreach (CoinSave coin in data.LooseCoins)
+        foreach (FeatherSave feather in data.LooseFeathers)
         {
-            coin.Position = Pool.PushOut(Rock.PushOut(world.PullInside(coin.Position), Coin.Radius), Coin.Radius);
-            world.AddEntity(Coin.FromSave(coin));
+            Species? species = Birds.Find(feather.Species);
+            if (species == null) continue;    // its species' file is gone
+            feather.Position = Pool.PushOut(Rock.PushOut(world.PullInside(feather.Position), Feather.Radius), Feather.Radius);
+            world.AddEntity(Feather.FromSave(feather, species));
         }
         foreach (BirdSave save in KeepKnownSpecies(data.Birds, away: false))
         {
@@ -281,7 +283,7 @@ public class SaveData
     public float SimTime { get; set; }
     public double? ClockDays { get; set; }                            // the world's calendar (WorldClock.Days); null before 4.92
     public WeatherSave? Weather { get; set; }                         // the rain, the clouds, the wet ground and its puddles; null before 4.96
-    public int Coins { get; set; }
+    public Dictionary<string, int> Feathers { get; set; } = new();    // how many of each species' feather, by species key (FeatherPurse)
     public bool FrostcrestSeen { get; set; }                          // from before 4.99; now also in SeenSpecies
     public List<string> SeenSpecies { get; set; } = new();            // keys of rare species seen at least once (Birds.IsDiscovered)
     public bool VisitedStore { get; set; }
@@ -300,7 +302,7 @@ public class SaveData
     public List<BirdSave> Birds { get; set; } = new();
     public List<FoodSave> Seed { get; set; } = new();                 // piles on the dirt, or still falling
     public List<FeederSave> Feeders { get; set; } = new();
-    public List<CoinSave> LooseCoins { get; set; } = new();
+    public List<FeatherSave> LooseFeathers { get; set; } = new();
     public List<SproutSave> Sprouts { get; set; } = new();
     public string GroundWear { get; set; } = "";                      // worn grass, one byte per cell (GroundWear.ToSave)
     public List<RockSave>? Rocks { get; set; }                        // null in a new world or a save from before rocks: new ones are placed
@@ -434,9 +436,12 @@ public class SproutSave
     public float ShedTimer { get; set; }
 }
 
-public class CoinSave
+public class FeatherSave
 {
     public Vector3 Position { get; set; }
     public Vector3 Velocity { get; set; }
     public float LifeLeft { get; set; }
+    public bool Landed { get; set; }
+    public float Heading { get; set; }
+    public string Species { get; set; } = "";    // the species key
 }

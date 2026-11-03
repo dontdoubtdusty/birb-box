@@ -1,7 +1,7 @@
 using System.Numerics;
 using Raylib_cs;
 
-// Draws the bird world's contents inside the hologram: floor (with the pool's water), feeders, seed heaps, sprouts, splash droplets, coins and birds.
+// Draws the bird world's contents inside the hologram: floor (with the pool's water), feeders, seed heaps, sprouts, splash droplets, feathers and birds.
 // Used by both the main scene pass and the zoo camera. Nothing in here changes the simulation.
 // A partial class: the seed is drawn in SeedDrawing.cs (which also owns the grain batches), the sprouts in SproutDrawing.cs,
 // the rain (falling drops, and the floor's wet ground, rain rings and puddles) in RainDrawing.cs.
@@ -25,7 +25,7 @@ public partial class WorldDrawer
     private const double WearUploadInterval = 0.2;    // seconds of real time between uploads
 
     private Model floorModel;
-    private Model coinModel;
+    private Model featherModel;    // a unit sphere, squashed flat into a vane or thinned into a quill
     private Model rockModel;     // a low, faceted sphere; each rock is a few of these squashed together
     private readonly BirbAnimator animator = new BirbAnimator();
     private readonly UnitShapes shapes = new UnitShapes();    // for feeders
@@ -53,12 +53,12 @@ public partial class WorldDrawer
         grainBlockMesh = Raylib.GenMeshCube(1f, 1f, 1f);
         grainMaterial = Raylib.LoadMaterialDefault();
         grainMaterial.Shader = grain;
-        coinModel = Raylib.LoadModelFromMesh(Raylib.GenMeshCylinder(Coin.Radius, 0.03f, 20));
+        featherModel = Raylib.LoadModelFromMesh(Raylib.GenMeshSphere(0.5f, 8, 12));
         rockModel = Raylib.LoadModelFromMesh(Raylib.GenMeshSphere(0.5f, 6, 9));
         shapes.Load(holoShader);
 
         Raylib.SetMaterialShader(ref floorModel, 0, ref holo);
-        Raylib.SetMaterialShader(ref coinModel, 0, ref holo);
+        Raylib.SetMaterialShader(ref featherModel, 0, ref holo);
         Raylib.SetMaterialShader(ref rockModel, 0, ref holo);
     }
 
@@ -69,7 +69,7 @@ public partial class WorldDrawer
         // The grain material isn't unloaded: that would unload its shader too, which HologramRenderer owns.
         Raylib.UnloadMesh(grainRoundMesh);
         Raylib.UnloadMesh(grainBlockMesh);
-        Raylib.UnloadModel(coinModel);
+        Raylib.UnloadModel(featherModel);
         Raylib.UnloadModel(rockModel);
         shapes.Unload();
     }
@@ -152,7 +152,7 @@ public partial class WorldDrawer
         DrawRocks(view);
         DrawFeeders(view, ringColor);
         DrawFood(view, eye);
-        DrawCoins(view);
+        DrawFeathers(view);
         DrawBirds(view, selected, hovered, ringColor);
     }
 
@@ -232,18 +232,25 @@ public partial class WorldDrawer
         }
     }
 
-    // Coins stand on their edge and spin, so they catch the eye from any angle.
-    private void DrawCoins(ViewWindow view)
+    // Feathers: a flat oval vane in the species' color with a paler quill down the middle. They rock as they fall
+    // and lie flat once landed, each pointing its own way (turned with the view so they stay put on the ground).
+    private void DrawFeathers(ViewWindow view)
     {
-        foreach (Coin coin in World.Instance.GetAllEntities<Coin>())
+        foreach (Feather feather in World.Instance.GetAllEntities<Feather>())
         {
-            if (!view.IsShown(coin.Position, 0.5f)) continue;
+            if (!view.IsShown(feather.Position, 0.5f)) continue;
 
-            float spin = (float)Raylib.GetTime() * 3f + coin.EntityID + view.Yaw;
-            coinModel.Transform = Raymath.MatrixMultiply(Raymath.MatrixRotateX(MathF.PI / 2f), Raymath.MatrixRotateY(spin));
+            Vector3 at = view.BoxToScene(view.ToLocal(feather.Position));
+            Matrix4x4 turn = Raymath.MatrixMultiply(Raymath.MatrixRotateX(feather.Tilt), Raymath.MatrixRotateY(feather.Heading + view.Yaw));
+            int alpha = (int)(255 * feather.Alpha);
 
-            Color gold = new Color(255, 200, 60, (int)(255 * coin.Alpha));
-            Raylib.DrawModel(coinModel, view.BoxToScene(view.ToLocal(coin.Position)), view.Zoom, gold);
+            Color species = feather.Species.Color;
+            featherModel.Transform = Raymath.MatrixMultiply(Raymath.MatrixScale(Feather.Length, Feather.Thickness, Feather.Width), turn);
+            Raylib.DrawModel(featherModel, at, view.Zoom, new Color(species.R, species.G, species.B, alpha));
+
+            featherModel.Transform = Raymath.MatrixMultiply(Raymath.MatrixScale(Feather.Length * 1.05f, Feather.Thickness * 1.6f, Feather.Thickness * 1.6f), turn);
+            Raylib.DrawModel(featherModel, at, view.Zoom, new Color(235, 235, 225, alpha));
+            DrawStats.CountModel();
             DrawStats.CountModel();
         }
     }

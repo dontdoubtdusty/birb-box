@@ -8,7 +8,7 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Cube 5.10 Alpha";
+    public const string Version = "Birb Cube 5.14 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
@@ -63,7 +63,7 @@ public class GameEngine
     private readonly System.Diagnostics.Stopwatch drawClock = new();
 
     // ECONOMY
-    public int Coins = 0;
+    public FeatherPurse Feathers = new();
 
     // SELECTION. A bird or a feeder can be selected, never both: picking one clears the other.
     // Following is separate from selecting (see FollowedBird), so clicking away keeps the camera on its bird.
@@ -590,7 +590,7 @@ public class GameEngine
         }
     }
 
-    // A click sets down a carried feeder. Otherwise it picks up a coin, selects a bird, or selects a feeder
+    // A click sets down a carried feeder. Otherwise it picks up a feather, selects a bird, or selects a feeder
     // (its card has a Move button). Clicking empty floor deselects.
     private void HandleClick()
     {
@@ -602,10 +602,10 @@ public class GameEngine
 
         Ray ray = Mouse.RayInBox();
 
-        Coin? hitCoin = Mouse.PickCoin(ray);
-        if (hitCoin != null)
+        Feather? hitFeather = Mouse.PickFeather(ray);
+        if (hitFeather != null)
         {
-            hitCoin.Collect();
+            hitFeather.Collect();
             return;
         }
 

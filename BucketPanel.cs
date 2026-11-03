@@ -415,7 +415,7 @@ public class BucketPanel
         if (hoveredSeed != null)
         {
             SeedInfo info = Seeds.Get(hoveredSeed.Value);
-            string price = $"{info.JarPrice} coin{(info.JarPrice == 1 ? "" : "s")} a jar";
+            string price = $"{info.JarPrice} feather{(info.JarPrice == 1 ? "" : "s")} a jar";
             UiText.Draw(price, x + width - UiText.Measure(price, HeaderSize), y, HeaderSize, Palette.DimText);
             UiText.Draw(info.ProductName, x, y + 16, HeaderSize, info.Color);
             DrawWrapped(info.Label, x, y + 30, width, HeaderSize, Palette.Text);

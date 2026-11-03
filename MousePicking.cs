@@ -2,7 +2,7 @@ using System.Numerics;
 using Raylib_cs;
 
 // What the mouse is pointing at: the ray through the cursor (in the room, in the hologram, or in the
-// un-turned box), the spot on the box's floor under it, and the nearest coin, feeder or bird it passes through.
+// un-turned box), the spot on the box's floor under it, and the nearest feather, feeder or bird it passes through.
 // Asks only; nothing in here changes the world.
 public class MousePicking
 {
@@ -53,21 +53,21 @@ public class MousePicking
         return localPoint;
     }
 
-    // The nearest coin in view the box-space ray passes near (a bigger target than the coin, so it's easy to click).
-    public Coin? PickCoin(Ray ray)
+    // The nearest feather in view the box-space ray passes near (a bigger target than the feather, so it's easy to click).
+    public Feather? PickFeather(Ray ray)
     {
-        Coin? best = null;
+        Feather? best = null;
         float bestDist = float.MaxValue;
 
-        foreach (Coin coin in world.GetAllEntities<Coin>())
+        foreach (Feather feather in world.GetAllEntities<Feather>())
         {
-            if (!view.Contains(coin.Position)) continue;
+            if (!view.Contains(feather.Position)) continue;
 
-            Vector3 localCenter = view.ToLocal(coin.Position);
-            RayCollision hit = Raylib.GetRayCollisionSphere(ray, localCenter, Coin.Radius * 3f * view.Zoom);
+            Vector3 localCenter = view.ToLocal(feather.Position);
+            RayCollision hit = Raylib.GetRayCollisionSphere(ray, localCenter, Feather.Radius * 3f * view.Zoom);
             if (hit.Hit && hit.Distance < bestDist)
             {
-                best = coin;
+                best = feather;
                 bestDist = hit.Distance;
             }
         }

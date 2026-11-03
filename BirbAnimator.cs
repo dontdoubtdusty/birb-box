@@ -21,6 +21,7 @@ public struct BirbMotion
     public float Squash;        // + stretches the body taller and thinner, - squashes it flatter and wider
     public float Fluff;         // 0 = sleek, about 0.12 = feathers puffed up
     public float WingStretch;   // degrees the left wing reaches out on its own (an idle stretch)
+    public float LegLift;       // degrees the left leg swings forward and up on its own (a scratch)
     public float EyeClose;      // 0 = open, 1 = shut (a blink)
 
     public static BirbMotion Lerp(BirbMotion a, BirbMotion b, float t)
@@ -43,6 +44,7 @@ public struct BirbMotion
             Squash = float.Lerp(a.Squash, b.Squash, t),
             Fluff = float.Lerp(a.Fluff, b.Fluff, t),
             WingStretch = float.Lerp(a.WingStretch, b.WingStretch, t),
+            LegLift = float.Lerp(a.LegLift, b.LegLift, t),
             EyeClose = float.Lerp(a.EyeClose, b.EyeClose, t),
         };
     }
@@ -65,10 +67,18 @@ public class BirbAnimator
     private const float BlinkTime = 0.15f;
     private const float BlinkGapMin = 2f, BlinkGapMax = 6f;
 
-    // IDLE ACTS: now and then a standing bird fluffs up or stretches a wing
-    private const float IdleGapMin = 8f, IdleGapMax = 20f;
+    // IDLE ACTS: now and then a standing bird fluffs up, stretches a wing, preens or scratches
+    private const float IdleGapMin = 4f, IdleGapMax = 10f;
     private const float FluffTime = 1.2f, FluffAmount = 0.12f;
     private const float StretchTime = 1.4f, StretchAngle = 60f;
+    private const float PreenTime = 2.4f;         // head turned back into the left shoulder, nibbling
+    private const float PreenTurn = 110f;         // degrees the head turns back
+    private const float PreenNibbles = 14f;       // nibble speed (radians per second)
+    private const float ScratchTime = 1.6f;       // left foot up to the head, scratching fast
+    private const float ScratchLift = 70f;        // degrees the left leg swings up
+    private const float ScratchSpeed = 40f;       // scratch speed (radians per second)
+    // How often each act is picked (shares, not chances; they needn't add up to 1)
+    private const float FluffShare = 0.25f, StretchShare = 0.2f, PreenShare = 0.35f, ScratchShare = 0.2f;
 
     // ROOSTING (asleep for the night)
     private const float RoostFluff = 0.1f;        // how puffed up
@@ -100,7 +110,7 @@ public class BirbAnimator
         public bool Seen;
     }
 
-    private enum IdleAct { None, Fluff, Stretch }
+    private enum IdleAct { None, Fluff, Stretch, Preen, Scratch }
 
     private readonly Dictionary<int, BirdAnim> anims = new();
 
@@ -178,8 +188,8 @@ public class BirbAnimator
         a.NextBlink = Rng.Range(BlinkGapMin, BlinkGapMax);
     }
 
-    // While standing about (idle or looking around), a bird now and then fluffs its feathers or stretches a wing.
-    // Any other pose cuts the act short; the pose blend smooths that over.
+    // While standing about (idle or looking around), a bird now and then fluffs its feathers, stretches a wing,
+    // preens or scratches its head. Any other pose cuts the act short; the pose blend smooths that over.
     private static void AddIdleAct(BirdAnim a, ref BirbMotion m, float dt)
     {
         bool standing = a.Pose == BirdPose.Idle || a.Pose == BirdPose.LookAround;
@@ -193,8 +203,8 @@ public class BirbAnimator
         {
             a.NextAct -= dt;
             if (a.NextAct > 0f) return;
-            a.Act = Rng.Chance(0.5f) ? IdleAct.Fluff : IdleAct.Stretch;
-            a.ActTimer = a.Act == IdleAct.Fluff ? FluffTime : StretchTime;
+            a.Act = PickAct();
+            a.ActTimer = ActLength(a.Act);
             a.NextAct = Rng.Range(IdleGapMin, IdleGapMax);
         }
 
@@ -205,21 +215,85 @@ public class BirbAnimator
             return;
         }
 
-        if (a.Act == IdleAct.Fluff)
+        float length = ActLength(a.Act);
+        float done = 1f - a.ActTimer / length;    // 0 at the start of the act, 1 at the end
+        switch (a.Act)
         {
-            // Puff up, give a quick shiver at the fullest, settle back down
-            float bump = MathF.Sin((1f - a.ActTimer / FluffTime) * MathF.PI);
-            m.Fluff += bump * FluffAmount;
-            m.BodyLift += MathF.Sin(a.ActTimer * 60f) * 0.01f * bump;
+            case IdleAct.Fluff:
+            {
+                // Puff up, give a quick shiver at the fullest, settle back down
+                float bump = MathF.Sin(done * MathF.PI);
+                m.Fluff += bump * FluffAmount;
+                m.BodyLift += MathF.Sin(a.ActTimer * 60f) * 0.01f * bump;
+                break;
+            }
+            case IdleAct.Stretch:
+            {
+                // Reach the left wing out, tail lifting and head turning to match, then fold it back
+                float bump = MathF.Sin(done * MathF.PI);
+                m.WingStretch += bump * StretchAngle;
+                m.TailPitch += bump * 10f;
+                m.HeadYaw += bump * 15f;
+                break;
+            }
+            case IdleAct.Preen:
+            {
+                // Turn the head back over the left shoulder and down into the feathers, nibble a few times
+                // (beak dips and small head jabs), the wing held a little away from the body, then turn back
+                float hold = Envelope(done, 0.2f, 0.2f);
+                float nibble = MathF.Abs(MathF.Sin(a.ActTimer * PreenNibbles)) * hold;
+                m.HeadYaw += hold * PreenTurn;
+                m.HeadPitch += hold * 30f;
+                m.HeadTilt -= hold * 10f;
+                m.BeakDip += nibble * 14f;
+                m.HeadForward += nibble * 0.015f;
+                m.WingStretch += hold * 12f;
+                m.Fluff += hold * 0.04f;
+                m.TailPitch -= hold * 4f;
+                break;
+            }
+            case IdleAct.Scratch:
+            {
+                // Lift the left foot up and forward, tip the head down and over to meet it, scratch quickly, put it back
+                float hold = Envelope(done, 0.25f, 0.2f);
+                float scratch = MathF.Sin(a.ActTimer * ScratchSpeed) * hold;
+                m.LegLift += hold * ScratchLift + scratch * 10f;
+                m.HeadTilt -= hold * 25f + scratch * 4f;
+                m.HeadPitch += hold * 15f;
+                m.HeadYaw += hold * 20f;
+                m.BodyPitch += hold * 6f;
+                m.EyeClose = MathF.Max(m.EyeClose, hold * 0.6f);    // eyes half shut, the way birds look mid-scratch
+                break;
+            }
         }
-        else
-        {
-            // Reach the left wing out, tail lifting and head turning to match, then fold it back
-            float bump = MathF.Sin((1f - a.ActTimer / StretchTime) * MathF.PI);
-            m.WingStretch += bump * StretchAngle;
-            m.TailPitch += bump * 10f;
-            m.HeadYaw += bump * 15f;
-        }
+    }
+
+    // A random idle act, by the shares at the top.
+    private static IdleAct PickAct()
+    {
+        float roll = Rng.Range(0f, FluffShare + StretchShare + PreenShare + ScratchShare);
+        if ((roll -= FluffShare) < 0f) return IdleAct.Fluff;
+        if ((roll -= StretchShare) < 0f) return IdleAct.Stretch;
+        if ((roll -= PreenShare) < 0f) return IdleAct.Preen;
+        return IdleAct.Scratch;
+    }
+
+    // How long an idle act plays, in seconds.
+    private static float ActLength(IdleAct act) => act switch
+    {
+        IdleAct.Fluff => FluffTime,
+        IdleAct.Stretch => StretchTime,
+        IdleAct.Preen => PreenTime,
+        IdleAct.Scratch => ScratchTime,
+        _ => 1f,
+    };
+
+    // 0 to 1 over the first `rise` share of t, holds at 1, back to 0 over the last `fall` share. Eased both ways.
+    private static float Envelope(float t, float rise, float fall)
+    {
+        if (t < rise) return Smooth(t / rise);
+        if (t > 1f - fall) return Smooth((1f - t) / fall);
+        return 1f;
     }
 
     // Call once after drawing all birds: forgets birds that weren't drawn (out of view or gone).
@@ -405,7 +479,8 @@ public class BirbAnimator
                 turn = TurnX(m.TailPitch);
                 break;
             case PartRole.Leg:
-                turn = TurnX(m.LegTuck - m.LegSwing * part.Side);    // forward is a negative turn
+                // forward is a negative turn; a scratch lifts only the left leg
+                turn = TurnX(m.LegTuck - m.LegSwing * part.Side - (part.Side > 0f ? m.LegLift : 0f));
                 break;
             default:
                 return Matrix4x4.Identity;

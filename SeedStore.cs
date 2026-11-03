@@ -168,18 +168,18 @@ public class SeedStore
 
     // Pays for the item. Seed goes into that seed's bag on the bucket panel;
     // a feeder waits until the box shows the birds, then follows the mouse to be set down (FeederPlacer).
-    // Returns false (and says why) if there aren't enough coins.
+    // Returns false (and says why) if there aren't enough feathers. Any kind pays, biggest stack first,
+    // until each species has its own shelf and price (Step 13b-2).
     public bool TryBuy(ShelfItem item)
     {
         GameEngine engine = GameEngine.Instance;
 
-        if (engine.Coins < item.Price)
+        if (!engine.Feathers.TrySpend(item.Price))
         {
-            EventLog.Add($"Not enough coins for {item.Title}. It costs {item.Price}.");
+            EventLog.Add($"Not enough feathers for {item.Title}. It costs {item.Price}.");
             return false;
         }
 
-        engine.Coins -= item.Price;
         if (SelectedItem == item) SelectedItem = null;
         Keeper.Celebrate();
 

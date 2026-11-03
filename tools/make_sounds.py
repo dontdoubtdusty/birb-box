@@ -409,4 +409,25 @@ save("splash_1.wav", splash(0.35), 0.5)
 save("splash_2.wav", splash(0.45), 0.5)
 # Rain (4.96): a loop, played as a stream like the hum. A recording can replace it (any length; it should loop cleanly)
 save("rain.wav", rain(), 0.5)
+# Feathers (5.14), which replace the coin sounds. Added last so the files above come out the same as before.
+# A feather settling on the dirt: a faint airy rustle, no thump.
+def feather_land():
+    n = int(RATE * 0.3)
+    t = np.arange(n) / RATE
+    air = bandpass(rng.normal(0, 1, n), 2500, 7000) * np.exp(-t * 14) * np.minimum(1, t / 0.012)
+    return lowpass(air, 6500)
+
+
+# Collecting: a soft rising whoosh and one light tick.
+def feather_pickup():
+    n = int(RATE * 0.35)
+    t = np.arange(n) / RATE
+    swish = bandpass(rng.normal(0, 1, n), 1800, 6500) * np.exp(-((t - 0.07) ** 2) / (2 * 0.04 ** 2)) * 0.6
+    out = swish
+    place(out, plip(1500, 2300, 0.05) * 0.5, 0.06)
+    return lowpass(out, 7000)
+
+
+save("feather_land.wav", feather_land(), 0.3)
+save("feather_pickup.wav", feather_pickup(), 0.45)
 print("done")

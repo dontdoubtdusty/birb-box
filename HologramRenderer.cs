@@ -130,7 +130,7 @@ public class HologramRenderer
         if (sceneTarget.Id != 0) Raylib.UnloadRenderTexture(sceneTarget);
     }
 
-    // While the Birb Designer is open, its birb is drawn in place of the world's food, coins and birds.
+    // While the Birb Designer is open, its birb is drawn in place of the world's food, feathers and birds.
     public void Draw(HoloCamera holoCamera, ViewWindow view, BoxMode mode, SeedStore store, Bird? selected, Bird? hovered,
                      BirbDesigner designer, Radio radio, Projector projector, Hands hands, Rocker rocker)
     {
@@ -160,7 +160,7 @@ public class HologramRenderer
         EnsureTargetSize((int)(width * scale), (int)(height * scale));
 
         // These draw into their own small textures, so they must happen before the scene pass.
-        if (ShowProjector) pedestal.RefreshReadouts(view, GameEngine.Instance.Coins);
+        if (ShowProjector) pedestal.RefreshReadouts(view, GameEngine.Instance.Feathers.Total);
         ChatMessages.PrepareTextures();
         if (mode.InStore && projector.Showing) DrawZooCamera(view, selected);
 

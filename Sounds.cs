@@ -8,11 +8,11 @@ public static class Sounds
     public static float Master = 1f;
     public static float HumLevel = 1f;
     public static float BirdLevel = 1f;
-    public static float EffectsLevel = 1f;    // coins, dial clicks, buttons and the projector
+    public static float EffectsLevel = 1f;    // feathers, dial clicks, buttons and the projector
 
     private static Sound dialClick;
-    private static Sound coinLand;
-    private static Sound coinPickup;
+    private static Sound featherLand;
+    private static Sound featherPickup;
     private static Sound radioButton;
     private static Sound projectorStart;
     private static Sound projectorStop;
@@ -81,8 +81,8 @@ public static class Sounds
     {
         Raylib.InitAudioDevice();
         dialClick = Raylib.LoadSound(Assets.PathTo("sounds/dial_click.wav"));
-        coinLand = Raylib.LoadSound(Assets.PathTo("sounds/coin_land.wav"));
-        coinPickup = Raylib.LoadSound(Assets.PathTo("sounds/coin_pickup.wav"));
+        featherLand = Raylib.LoadSound(Assets.PathTo("sounds/feather_land.wav"));
+        featherPickup = Raylib.LoadSound(Assets.PathTo("sounds/feather_pickup.wav"));
         radioButton = Raylib.LoadSound(Assets.PathTo("sounds/radio_button.wav"));
         projectorStart = Raylib.LoadSound(Assets.PathTo("sounds/projector_start.wav"));
         projectorStop = Raylib.LoadSound(Assets.PathTo("sounds/projector_stop.wav"));
@@ -134,8 +134,8 @@ public static class Sounds
     public static void Unload()
     {
         Raylib.UnloadSound(dialClick);
-        Raylib.UnloadSound(coinLand);
-        Raylib.UnloadSound(coinPickup);
+        Raylib.UnloadSound(featherLand);
+        Raylib.UnloadSound(featherPickup);
         Raylib.UnloadSound(radioButton);
         Raylib.UnloadSound(projectorStart);
         Raylib.UnloadSound(projectorStop);
@@ -235,10 +235,10 @@ public static class Sounds
         else PlayVaried(radioButton, 0.7f);
     }
 
-    // A bird's coin hitting the dirt, and the player collecting one.
-    // A small random pitch shift keeps a run of coins from sounding identical.
-    public static void PlayCoinLand() => PlayVaried(coinLand, 0.5f);
-    public static void PlayCoinPickup() => PlayVaried(coinPickup, 0.6f);
+    // A bird's feather settling on the dirt, and the player collecting one.
+    // A small random pitch shift keeps a run of feathers from sounding identical.
+    public static void PlayFeatherLand() => PlayVaried(featherLand, 0.4f);
+    public static void PlayFeatherPickup() => PlayVaried(featherPickup, 0.6f);
 
     private static void PlayVaried(Sound sound, float volume)
     {

@@ -43,7 +43,8 @@ public class Bird : Entity
     private const float StarveLimit = 25f;         // seconds at zero hunger before leaving
     private float starveTimer = 0f;
     private const float OldSaveLifespan = 3600f;   // saves from before 4.54 had shorter lifespans; those birds get a new one
-    // Lifespan, losing interest, coin chance and call delay are tunable: see SimTuning.
+    // Lifespan, losing interest, feather chance and call delay are tunable: see SimTuning.
+    private const float RegularFeatherBonus = 1.5f;    // regulars and birds you've named drop feathers this many times as often
 
     // NEEDS: thirst and rest, alongside hunger (5.10). Each is 1 when met and runs down. Below its line the bird goes to
     // see to it (water, or a nap); with more than one, the need furthest below its line goes first (SeeToNeeds).
@@ -683,9 +684,9 @@ public class Bird : Entity
                 TargetFood = null;
                 State = BirdState.Wandering;
                 SetHome(Position);
-                if (Rng.Chance(SimTuning.Now.CoinDropChance))
+                if (Rng.Chance(SimTuning.Now.FeatherDropChance * (IsNamed || Visits > 1 ? RegularFeatherBonus : 1f)))
                 {
-                    World.Instance.AddEntity(new Coin(Position + new Vector3(0, 0.3f, 0)));
+                    World.Instance.AddEntity(new Feather(Position + new Vector3(0, 0.3f, 0), Species));
                 }
             }
         }

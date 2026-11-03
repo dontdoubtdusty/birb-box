@@ -302,8 +302,6 @@ public class Hud
         DrawRow("Birds", birdCount.ToString(), x, y);
         y += 22;
         DrawRow("Food", foodCount.ToString(), x, y);
-        y += 22;
-        DrawRow("Coins", engine.Coins.ToString(), x, y);
         y += 24;
 
         // The time of day: the word in the hologram color, then the day and season
@@ -316,6 +314,9 @@ public class Hud
 
         // The weather under it: Fair, Clouding over, Drizzle, Rain, Clearing
         UiText.Draw(engine.Weather.Word, x, y, 16, Palette.DimText);
+        y += 24;
+
+        DrawFeatherGrid(engine, x, y);
 
         Vector2 center = new Vector2(statsRect.X + statsRect.Width - Pad - DialRadius, statsRect.Y + Pad + HeaderSize + 8 + DialRadius + 4);
         DrawDial(clock, center, accent);
@@ -361,6 +362,46 @@ public class Hud
     {
         float radians = DialAngle(hour) * MathF.PI / 180f;
         return new Vector2(MathF.Cos(radians), MathF.Sin(radians));
+    }
+
+    // The feathers you hold: a dot in each collected species' color with its count, four to a row. A species shows once its
+    // first feather has been collected (so rare ones stay hidden until met). Hover a cell for the feather's name.
+    private void DrawFeatherGrid(GameEngine engine, int x, int y)
+    {
+        List<Species> collected = engine.Feathers.Collected();
+        if (collected.Count == 0) return;
+
+        Vector2 mouse = Raylib.GetMousePosition();
+        Species? hovered = null;
+        int shown = Math.Min(collected.Count, SidePanels.FeatherMaxShown);
+        for (int i = 0; i < shown; i++)
+        {
+            Species species = collected[i];
+            int cellX = x + (i % SidePanels.FeatherColumns) * SidePanels.FeatherCellWidth;
+            int cellY = y + (i / SidePanels.FeatherColumns) * SidePanels.FeatherRowHeight;
+
+            Raylib.DrawCircle(cellX + 4, cellY + 9, 4f, species.Color);
+            UiText.Draw(engine.Feathers.CountOf(species).ToString(), cellX + 14, cellY, 16, Palette.Text);
+
+            Rectangle cell = new Rectangle(cellX, cellY, SidePanels.FeatherCellWidth, SidePanels.FeatherRowHeight);
+            if (Raylib.CheckCollisionPointRec(mouse, cell)) hovered = species;
+        }
+
+        if (collected.Count > shown)
+        {
+            int rows = (shown + SidePanels.FeatherColumns - 1) / SidePanels.FeatherColumns;
+            UiText.Draw($"+{collected.Count - shown} more", x, y + rows * SidePanels.FeatherRowHeight, 14, Palette.DimText);
+        }
+
+        if (hovered != null)
+        {
+            string name = hovered.FeatherName;
+            int width = UiText.Measure(name, 16) + 12;
+            Rectangle plate = new Rectangle(mouse.X - width - 12, mouse.Y - 4, width, 24);
+            Raylib.DrawRectangleRec(plate, Palette.PanelDark);
+            Raylib.DrawRectangleLinesEx(plate, 1f, Palette.Brass);
+            UiText.Draw(name, (int)plate.X + 6, (int)plate.Y + 3, 16, hovered.Color);
+        }
     }
 
     private void DrawRow(string label, string value, int x, int y)

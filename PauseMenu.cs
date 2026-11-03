@@ -233,7 +233,7 @@ public class PauseMenu
             case Page.Controls: return UIHandler.ControlLines;
             case Page.Settings: return new[] { "True fullscreen keeps Windows popups,", "like the volume bar, off the game.", "Settings are kept between runs." };
             case Page.ConfirmQuit: return new[] { "Your terrarium is saved and will be here next time." };
-            case Page.ConfirmNewWorld: return new[] { "The birds, seed, feeders, coins and bags here", "will be gone for good." };
+            case Page.ConfirmNewWorld: return new[] { "The birds, seed, feeders, feathers and bags here", "will be gone for good." };
             default: return new[] { GameEngine.Version };
         }
     }

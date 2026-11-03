@@ -10,21 +10,24 @@ public partial class Species
         0.33f, new Color(227, 74, 74, 255), common: true,
         tastes: new() { [SeedType.Corn] = 1.0f, [SeedType.Wild] = 0.4f },
         feeders: new() { [FeederStyle.Tray] = 0.8f, [FeederStyle.Tube] = 0.8f },
-        leans: new() { [Trait.StoutHearted] = 2.5f, [Trait.FaintHearted] = 0.4f, [Trait.TownCrier] = 1.5f, [Trait.EarlyRiser] = 1.5f, [Trait.RainProud] = 1.5f });
+        leans: new() { [Trait.StoutHearted] = 2.5f, [Trait.FaintHearted] = 0.4f, [Trait.TownCrier] = 1.5f, [Trait.EarlyRiser] = 1.5f, [Trait.RainProud] = 1.5f },
+        featherName: "Ember Plume");
 
     public static readonly Species DuskDove = new(
         "DuskDove", "Dusk Dove", new[] { StarterBirbs.DuskDove },
         0.4f, new Color(212, 209, 199, 255), common: true,
         tastes: new() { [SeedType.Millet] = 1.0f, [SeedType.Wild] = 0.4f },
         feeders: new() { [FeederStyle.Tray] = 1.0f },
-        leans: new() { [Trait.FaintHearted] = 2.5f, [Trait.Wary] = 1.5f, [Trait.StoutHearted] = 0.4f, [Trait.Hushed] = 1.5f, [Trait.NightOwl] = 2.5f, [Trait.EarlyRiser] = 0.5f, [Trait.RainProud] = 0.5f });
+        leans: new() { [Trait.FaintHearted] = 2.5f, [Trait.Wary] = 1.5f, [Trait.StoutHearted] = 0.4f, [Trait.Hushed] = 1.5f, [Trait.NightOwl] = 2.5f, [Trait.EarlyRiser] = 0.5f, [Trait.RainProud] = 0.5f },
+        featherName: "Dusk Down");
 
     public static readonly Species Gildfinch = new(
         "Gildfinch", "Gildfinch", new[] { StarterBirbs.Gildfinch },
         0.2f, new Color(240, 158, 38, 255), common: true,
         tastes: new() { [SeedType.Millet] = 0.3f, [SeedType.Thistle] = 1.0f, [SeedType.Wild] = 0.4f },
         feeders: new() { [FeederStyle.Tray] = 0.4f, [FeederStyle.Tube] = 1.0f },
-        leans: new() { [Trait.Dainty] = 2f, [Trait.TownCrier] = 1.5f, [Trait.Wayfarer] = 1.5f, [Trait.EarlyRiser] = 1.5f });
+        leans: new() { [Trait.Dainty] = 2f, [Trait.TownCrier] = 1.5f, [Trait.Wayfarer] = 1.5f, [Trait.EarlyRiser] = 1.5f },
+        featherName: "Gild Quill");
 
     // Rare: only Blue Barley draws it until the first one has been seen (Birds.IsDiscovered).
     public static readonly Species Frostcrest = new(
@@ -33,7 +36,7 @@ public partial class Species
         tastes: new() { [SeedType.Corn] = 0.05f, [SeedType.BlueBarley] = 1.0f },
         feeders: new() { [FeederStyle.Tray] = 0.6f, [FeederStyle.Tube] = 0.6f },
         leans: new() { [Trait.Wayfarer] = 2f, [Trait.Hushed] = 2f, [Trait.Wary] = 1.5f, [Trait.NightOwl] = 1.5f, [Trait.RainProud] = 2f },
-        lure: SeedType.BlueBarley);
+        lure: SeedType.BlueBarley, featherName: "Rime Feather");
 }
 
 // Every species in the game (built-in, then the Designer's from resources/species), finding one by its key,

@@ -6,7 +6,7 @@ using Raylib_cs;
 //  - inside the bezel it's hollow: a deep well, lit by the hologram floating above it
 //  - the projector lens inside the well, right behind the logo, throwing the beams up to the cube (see FieldEdges)
 //  - the Birb Cube logo on a brass plaque at the front. It's the power button, and it glows with the lens.
-//  - two glowing windows on either side of the logo: Birbs in the cube (left) and Coins (right)
+//  - two glowing windows on either side of the logo: Birbs in the cube (left) and Feathers held (right)
 //  - a row of LEDs on the plinth below the logo, one per bird type, lit while that type is in the cube
 //  - in the band under the ring, above the logo, the BIRB / SHOP rocker switch (its own file, Rocker)
 //  - on the bezel ring, turning with the hologram: notches around its side, the compass letters and
@@ -88,9 +88,9 @@ public class Pedestal
     private const int TextureWidth = 256;
     private const int TextureHeight = 160;
     private RenderTexture2D birbTexture;
-    private RenderTexture2D coinTexture;
+    private RenderTexture2D featherTexture;
     private int shownBirbs = -1;
-    private int shownCoins = -1;
+    private int shownFeathers = -1;
 
     // Both strips wrap once around the bezel ring: the notches around its side, the letters and name on its top.
     private const int BezelTextureWidth = 2048, BezelTextureHeight = 64;
@@ -112,9 +112,9 @@ public class Pedestal
         Raylib.SetTextureFilter(logoGlowTexture, TextureFilter.Trilinear);
 
         birbTexture = Raylib.LoadRenderTexture(TextureWidth, TextureHeight);
-        coinTexture = Raylib.LoadRenderTexture(TextureWidth, TextureHeight);
+        featherTexture = Raylib.LoadRenderTexture(TextureWidth, TextureHeight);
         Raylib.SetTextureFilter(birbTexture.Texture, TextureFilter.Bilinear);
-        Raylib.SetTextureFilter(coinTexture.Texture, TextureFilter.Bilinear);
+        Raylib.SetTextureFilter(featherTexture.Texture, TextureFilter.Bilinear);
 
         bezelTexture = Raylib.LoadRenderTexture(BezelTextureWidth, BezelTextureHeight);
         topTexture = Raylib.LoadRenderTexture(TopTextureWidth, TopTextureHeight);
@@ -133,7 +133,7 @@ public class Pedestal
         Raylib.UnloadTexture(logoTexture);
         Raylib.UnloadTexture(logoGlowTexture);
         Raylib.UnloadRenderTexture(birbTexture);
-        Raylib.UnloadRenderTexture(coinTexture);
+        Raylib.UnloadRenderTexture(featherTexture);
         Raylib.UnloadRenderTexture(bezelTexture);
         Raylib.UnloadRenderTexture(topTexture);
         Raylib.UnloadModel(plinthModel);
@@ -242,7 +242,7 @@ public class Pedestal
 
     // Counts what's in the cube and redraws the number textures if anything changed.
     // Must be called outside any other BeginTextureMode, since Raylib can't nest them.
-    public void RefreshReadouts(ViewWindow view, int coins)
+    public void RefreshReadouts(ViewWindow view, int feathers)
     {
         int birbs = 0;
         typeInCube.Clear();
@@ -258,10 +258,10 @@ public class Pedestal
             RenderReadout(birbTexture, "BIRBS", birbs);
             shownBirbs = birbs;
         }
-        if (coins != shownCoins)
+        if (feathers != shownFeathers)
         {
-            RenderReadout(coinTexture, "COINS", coins);
-            shownCoins = coins;
+            RenderReadout(featherTexture, "FEATHERS", feathers);
+            shownFeathers = feathers;
         }
     }
 
@@ -270,7 +270,7 @@ public class Pedestal
     {
         Raylib.BeginTextureMode(target);
             Raylib.ClearBackground(Color.Blank);
-            DrawCenteredText(label, 10, 36);
+            DrawCenteredText(label, 12, label.Length > 6 ? 30 : 36);    // a long word is set smaller to fit the window
             DrawCenteredText(value.ToString(), 64, 80);
         Raylib.EndTextureMode();
     }
@@ -366,7 +366,7 @@ public class Pedestal
             if (power > 0f)
             {
                 DrawReadout(birbTexture, MathF.PI / 2f + WindowAngle, windowRadius, Raylib.Fade(glowColor, power));
-                DrawReadout(coinTexture, MathF.PI / 2f - WindowAngle, windowRadius, Raylib.Fade(glowColor, power));
+                DrawReadout(featherTexture, MathF.PI / 2f - WindowAngle, windowRadius, Raylib.Fade(glowColor, power));
                 DrawLedHalos(r, power);
                 Raylib.DrawSphereEx(lens, LensRadius * 2.4f, 12, 12, Raylib.Fade(glowColor, 0.4f * power));
             }

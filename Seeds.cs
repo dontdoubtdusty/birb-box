@@ -32,7 +32,7 @@ public class SeedInfo
     public string Label;
     public GrainLook Grain;
     public float? SpoilTime;                      // seconds on the dirt before birds won't eat it; null never spoils
-    public int JarPrice;                          // coins for one jar at the store (a sack is a few jars' worth)
+    public int JarPrice;                          // feathers for one jar at the store (a sack is a few jars' worth)
     public float StartingSupply;                  // seed in its bag on the bucket panel at the start of a game
 
     public SeedInfo(string name, string productName, Color color, string label,
