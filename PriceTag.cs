@@ -7,7 +7,7 @@ using Raylib_cs;
 // The item it describes is SeedStore.SelectedItem; this class only places and draws the tag and handles its buttons.
 public class PriceTag
 {
-    private const int Width = 220, Height = 132, Pad = 10;
+    private const int Width = 220, Height = 164, Pad = 10;
     private const int ButtonHeight = 26, ButtonGap = 6;
     private const int SmallText = 12, BigText = 20;
     private static readonly Color Warning = new Color(232, 128, 104, 255);
@@ -57,7 +57,8 @@ public class PriceTag
         ShelfItem? item = store.SelectedItem;
         if (item == null) return;
 
-        int feathers = GameEngine.Instance.Feathers.Total;
+        FeatherPurse purse = GameEngine.Instance.Feathers;
+        int have = item.PaidWith != null ? purse.CountOf(item.PaidWith) : purse.Total;    // feathers of the kind that pays
         int x = (int)rect.X, y = (int)rect.Y;
 
         // The string runs from the item on the shelf to the tag's hole, so it follows the item if the store turns
@@ -76,31 +77,41 @@ public class PriceTag
             FeederInfo feeder = Feeders.Get(item.Feeder);
             UiText.Draw("FEEDER", x + 26, y + Pad, SmallText, accent);
             UiText.Draw(feeder.Name, x + Pad, y + Pad + 18, BigText, Palette.BrassLight);
-            UiText.Draw($"Holds {feeder.Capacity:0} seed", x + Pad, y + Pad + 48, SmallText, Palette.DimText);
+            UiText.Draw($"Holds {feeder.Capacity:0} seed", x + Pad, y + Pad + 44, SmallText, Palette.DimText);
         }
         else
         {
             SeedInfo info = Seeds.Get(item.Seed);
             UiText.Draw($"{item.KindName.ToUpper()} OF {info.Name.ToUpper()}", x + 26, y + Pad, SmallText, accent);
             UiText.Draw(info.ProductName, x + Pad, y + Pad + 18, BigText, info.Color);
-            UiText.Draw($"{item.Amount:0} seed", x + Pad, y + Pad + 48, SmallText, Palette.DimText);
+            UiText.Draw($"{item.Amount:0} seed", x + Pad, y + Pad + 44, SmallText, Palette.DimText);
         }
 
-        string price = $"{item.Price} feather{(item.Price == 1 ? "" : "s")}";
-        UiText.Draw(price, x + Width - Pad - UiText.Measure(price, BigText), y + Pad + 44, BigText, Palette.Text);
+        // The price, in the feathers that pay (the shelf's species, or any kind for the lure seed)
+        string price = item.PriceText;
+        Color priceColor = item.PaidWith != null ? item.PaidWith.Color : Palette.Text;
+        UiText.Draw(price, x + Pad, y + Pad + 62, BigText, priceColor);
 
-        if (feathers < item.Price)
+        if (have < item.Price)
         {
-            UiText.Draw($"You have {feathers}.", x + Pad, y + Pad + 66, SmallText, Warning);
+            UiText.Draw($"You have {have}.", x + Pad, y + Pad + 88, SmallText, Warning);
+            if (purse.Total >= FeatherPurse.ExchangeRate)
+            {
+                UiText.Draw($"The ledger trades {FeatherPurse.ExchangeRate} for 1.", x + Pad, y + Pad + 102, SmallText, Palette.DimText);
+            }
         }
         else if (item.IsFeeder)
         {
-            UiText.Draw(Feeders.Get(item.Feeder).Label, x + Pad, y + Pad + 66, SmallText, Palette.DimText);
+            UiText.Draw(Feeders.Get(item.Feeder).Label, x + Pad, y + Pad + 88, SmallText, Palette.DimText);
+        }
+        else if (item.PaidWith == null)
+        {
+            UiText.Draw("Any kind of feather will do.", x + Pad, y + Pad + 88, SmallText, Palette.DimText);
         }
         else if (item.IsSack)
         {
             string deal = $"{ShelfItem.SackAmount / ShelfItem.JarAmount:0} jars' worth for the price of {ShelfItem.SackPriceInJars}";
-            UiText.Draw(deal, x + Pad, y + Pad + 66, SmallText, Palette.DimText);
+            UiText.Draw(deal, x + Pad, y + Pad + 88, SmallText, Palette.DimText);
         }
 
         UiDraw.Button(buyRect, "Buy", accent);

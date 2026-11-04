@@ -684,7 +684,7 @@ public class Bird : Entity
                 TargetFood = null;
                 State = BirdState.Wandering;
                 SetHome(Position);
-                if (Rng.Chance(SimTuning.Now.FeatherDropChance * (IsNamed || Visits > 1 ? RegularFeatherBonus : 1f)))
+                if (Rng.Chance(SimTuning.Now.FeatherDropChance * Nature.FeatherDrop * (IsNamed || Visits > 1 ? RegularFeatherBonus : 1f)))
                 {
                     World.Instance.AddEntity(new Feather(Position + new Vector3(0, 0.3f, 0), Species));
                 }

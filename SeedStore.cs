@@ -6,7 +6,7 @@ using Raylib_cs;
 // but it's still a ship's store underneath.
 //
 // This class is the store's state: how it's turned, what's on the shelves, which item the mouse is on,
-// the shopkeeper, and buying. StoreRenderer draws it; PriceTag shows the selected item's price.
+// the shopkeeper, and buying. StoreRenderer draws it; PriceTag shows the selected item's price; Ledger swaps feathers.
 //
 // Store space: (0, 0, 0) is the middle of the box's floor, before the store is turned by Yaw.
 // The shop was laid out small, so store space is scaled up by Scale to fill the box.
@@ -14,6 +14,10 @@ using Raylib_cs;
 // The room is round: a horseshoe wall with its opening at the front (+Z), shelves curving along the back,
 // and the counter in the middle facing the opening. Angles around the room are measured from the front (+Z)
 // toward +X, in radians (see OnCircle).
+//
+// SHELVES: each species whose feather you hold gets a section of the shelf (four to a page, the first on the left)
+// stocked with the seeds it eats, priced in its own feathers. A rare species' lure seed has no section until you
+// hold that species' feather, so it sits on the crate by the door and takes feathers of any kind until then.
 public class SeedStore
 {
     public const string Name = "The Gilded Granary";
@@ -30,7 +34,37 @@ public class SeedStore
     public const float ShelfRadius = 1.55f;                // middle of the shelf boards, just inside the wall
     public const float ShelfStart = 95f * MathF.PI / 180f;
     public const float ShelfEnd = 245f * MathF.PI / 180f;
+
+    // SECTIONS: the shelf arc is cut into equal sections, one per species; slot 0 is on the left (the ShelfEnd side).
+    public const int SectionsPerPage = 4;
+    private const float SectionGap = 2f * MathF.PI / 180f;    // empty board either side of a section
+    private const int JarsPerRow = 3;                          // jars on each of the top two boards of a section
+    private const int SacksPerSection = 2;                     // sacks on the bottom board of a section
+    private const float MinShelfTaste = 0.2f;                  // a species' shelf sells seed it likes at least this much (the same cut as a favorite seed)
+
+    public static float SectionWidth => (ShelfEnd - ShelfStart) / SectionsPerPage;
+
+    // The angle at the middle of a section's shelf, for slot 0 (left) to 3 (right).
+    public static float SlotAngle(int slot) => ShelfEnd - SectionWidth * (slot + 0.5f);
+
+    // What's for sale: the jars and sacks on this page, the lure seed on the crate, and the two feeders.
     public List<ShelfItem> Stock { get; } = new();
+
+    // Things you click that aren't for sale: the ledger on the counter and the shelf's page arrows.
+    public List<ShelfItem> Controls { get; } = new();
+    public ShelfItem LedgerBook { get; }
+
+    // The species with a section on this page, left to right.
+    public List<Species> PageSpecies { get; } = new();
+    public int Page { get; private set; }
+    public int PageCount { get; private set; } = 1;
+    private List<Species> shelfSpecies = new();            // every species with a section, over all pages
+
+    // The crate by the door holds lure seed for rare species not yet collected.
+    private const float CrateAngle = 305f * MathF.PI / 180f;
+    private const float CrateRadius = 1.25f;
+    private const float CrateTop = 0.36f;
+    private const int MaxLureJars = 2;
 
     // COUNTER AND KEEPER: the counter faces the opening; the keeper stands behind it on a stool
     public static readonly Vector3 CounterSpot = new Vector3(0f, 0f, 0.2f);
@@ -38,10 +72,19 @@ public class SeedStore
     public static readonly Vector3 KeeperSpot = new Vector3(0f, 0f, -0.3f);
     public Shopkeeper Keeper { get; } = new Shopkeeper();
 
+    // FEEDERS: the two feeders stand on the floor near the shelf ends, drawn this many scene units per model unit
+    // (the bird world draws them at Feeders.WorldScale, the shop's other things at Scale).
+    public const float FeederShopScale = 2.2f;
+
     // SHOPPING
-    public ShelfItem? HoveredItem { get; private set; }    // the jar or sack under the mouse
+    public ShelfItem? HoveredItem { get; private set; }    // the jar, sack or control under the mouse
     public ShelfItem? SelectedItem;                        // the one whose price tag is showing
     public const float RestockTime = 60f;                  // seconds before a bought item is replaced
+
+    // Restock timers of bought items that aren't on a visible shelf (another page, or the species not shown yet), by item key.
+    // They are not saved: a reloaded game finds everything back on the shelf.
+    private readonly Dictionary<string, float> waiting = new();
+    private int seenPurseVersion = -1, seenBirdsVersion = -1;
 
     // The air recycler's blades turn slowly. It's ship machinery, so it keeps going when the birds are paused.
     public float FanAngle { get; private set; }
@@ -63,7 +106,7 @@ public class SeedStore
 
     public SeedStore()
     {
-        StockShelves();
+        LedgerBook = new ShelfItem(SeedType.Wild, CounterSpot + new Vector3(0f, CounterTop, 0.08f), ItemKind.Ledger) { Key = "ledger" };
     }
 
     // showing: the box is showing the store, so a shift change gets a line in the log.
@@ -71,6 +114,10 @@ public class SeedStore
     {
         FanAngle += FanSpeed * dt;
         UpdateLamp(dt, WorldClock.Instance.Light.Darkness);
+
+        // New shelves open when a species is collected for the first time (or a species changes)
+        FeatherPurse purse = GameEngine.Instance.Feathers;
+        if (purse.Version != seenPurseVersion || Birds.Version != seenBirdsVersion) RebuildShelves();
 
         Vector3? lookAt = HoveredItem != null ? HoveredItem.Center - KeeperSpot : null;
         string outgoing = Keeper.Name;
@@ -82,6 +129,11 @@ public class SeedStore
         foreach (ShelfItem item in Stock)
         {
             if (!item.OnShelf) item.RestockTimer -= dt;
+        }
+        foreach (string key in waiting.Keys.ToList())
+        {
+            waiting[key] -= dt;
+            if (waiting[key] <= 0f) waiting.Remove(key);
         }
     }
 
@@ -117,7 +169,7 @@ public class SeedStore
         SelectedItem = null;
         if (!VisitedBefore)
         {
-            EventLog.Add($"Welcome to {Name}, purveyors of fine seed since the year 1312. Click a jar or sack to see its price.");
+            EventLog.Add($"Welcome to {Name}, purveyors of fine seed since the year 1312. Each bird's shelf opens once you hold one of its feathers. Click a jar or sack to see its price.");
             VisitedBefore = true;
         }
         EventLog.Add($"{Keeper.Name} is minding the counter today.");
@@ -129,24 +181,7 @@ public class SeedStore
         HoveredItem = null;
     }
 
-    // From a save: how long until each item is back on the shelf, in shelf order.
-    // Saves from before 4.79 also had the Muck Scraper, just before the two feeders, so its timer is skipped.
-    public void RestoreTimers(List<float> timers)
-    {
-        SelectedItem = null;
-        if (timers.Count == Stock.Count + 1)
-        {
-            timers = new List<float>(timers);
-            timers.RemoveAt(Stock.Count - 2);
-        }
-        for (int i = 0; i < Stock.Count; i++)
-        {
-            float timer = i < timers.Count ? timers[i] : 0f;
-            Stock[i].RestockTimer = float.IsFinite(timer) ? timer : 0f;
-        }
-    }
-
-    // Finds the jar or sack under the mouse, only items still on the shelf.
+    // Finds the item under the mouse, only things still on the shelf and arrows that lead somewhere.
     // active: the store is showing and the mouse isn't over something else.
     public void UpdateHover(Ray sceneRay, bool active)
     {
@@ -154,9 +189,9 @@ public class SeedStore
         if (!active) return;
 
         float bestDistance = float.MaxValue;
-        foreach (ShelfItem item in Stock)
+        foreach (ShelfItem item in Stock.Concat(Controls))
         {
-            if (!item.OnShelf) continue;
+            if (!item.OnShelf || !IsEnabled(item)) continue;
             RayCollision hit = Raylib.GetRayCollisionSphere(sceneRay, ToScene(item.Center), item.PickRadius * Scale);
             if (hit.Hit && hit.Distance < bestDistance)
             {
@@ -166,17 +201,38 @@ public class SeedStore
         }
     }
 
+    // A page arrow does nothing past the first or last page; everything else always works.
+    public bool IsEnabled(ShelfItem item) => item.Kind switch
+    {
+        ItemKind.PageBack => Page > 0,
+        ItemKind.PageNext => Page < PageCount - 1,
+        _ => true,
+    };
+
+    // Turns the shelf one page (-1 back toward the first species, +1 on to later ones).
+    public void TurnPage(int direction)
+    {
+        int page = Math.Clamp(Page + direction, 0, PageCount - 1);
+        if (page == Page) return;
+        Page = page;
+        SelectedItem = null;
+        RebuildShelves();
+    }
+
     // Pays for the item. Seed goes into that seed's bag on the bucket panel;
     // a feeder waits until the box shows the birds, then follows the mouse to be set down (FeederPlacer).
-    // Returns false (and says why) if there aren't enough feathers. Any kind pays, biggest stack first,
-    // until each species has its own shelf and price (Step 13b-2).
+    // Returns false (and says why) if there aren't enough feathers. The shelf's species pays; the lure seed on the crate takes any kind.
     public bool TryBuy(ShelfItem item)
     {
         GameEngine engine = GameEngine.Instance;
+        if (item.IsControl) return false;
 
-        if (!engine.Feathers.TrySpend(item.Price))
+        bool paid = item.PaidWith != null
+            ? engine.Feathers.TrySpend(item.PaidWith, item.Price)
+            : engine.Feathers.TrySpendAny(item.Price);
+        if (!paid)
         {
-            EventLog.Add($"Not enough feathers for {item.Title}. It costs {item.Price}.");
+            EventLog.Add($"Not enough feathers for {item.Title}. It costs {item.PriceText}.");
             return false;
         }
 
@@ -210,35 +266,124 @@ public class SeedStore
         return new Vector3(MathF.Sin(angle) * radius, y, MathF.Cos(angle) * radius);
     }
 
-    // Jars on the top two shelves, sacks on the bottom one, spaced evenly along the curve,
-    // cycling through the bagged seeds. The Almoner's Tray stands between the corn barrel and the shelves, and the Turret Feeder past the other end of the shelves.
-    private void StockShelves()
+    // ---------------- STOCKING THE SHELVES ----------------
+
+    // The seeds a species' section sells, best liked first. Wild seed is never sold.
+    public static List<SeedType> SellableSeeds(Species species)
     {
-        SeedType[] seeds = Seeds.Bags;
-        float arcLength = (ShelfEnd - ShelfStart) * ShelfRadius;
+        return Seeds.Bags
+            .Where(seed => species.TasteFor(seed) >= MinShelfTaste)
+            .OrderByDescending(seed => species.TasteFor(seed))
+            .ToList();
+    }
+
+    // Works out who has a section and puts the right things on the shelves for the current page. Bought items keep their
+    // restock timers across the change. Called when a species is first collected, a species changes, or the page turns.
+    private void RebuildShelves()
+    {
+        FeatherPurse purse = GameEngine.Instance.Feathers;
+        seenPurseVersion = purse.Version;
+        seenBirdsVersion = Birds.Version;
+
+        // Remember which item was selected and how long bought ones have left
+        string? selectedKey = SelectedItem?.Key;
+        foreach (ShelfItem old in Stock)
+        {
+            if (old.RestockTimer > 0f) waiting[old.Key] = old.RestockTimer;
+        }
+        Stock.Clear();
+
+        shelfSpecies = purse.Collected().Where(species => SellableSeeds(species).Count > 0).ToList();
+        PageCount = Math.Max(1, (shelfSpecies.Count + SectionsPerPage - 1) / SectionsPerPage);
+        Page = Math.Clamp(Page, 0, PageCount - 1);
+
+        PageSpecies.Clear();
+        PageSpecies.AddRange(shelfSpecies.Skip(Page * SectionsPerPage).Take(SectionsPerPage));
+        for (int slot = 0; slot < PageSpecies.Count; slot++) StockSection(slot, PageSpecies[slot]);
+
+        StockLureCrate(purse);
+        StockFeeders();
+
+        foreach (ShelfItem item in Stock)
+        {
+            if (waiting.Remove(item.Key, out float left)) item.RestockTimer = left;
+        }
+        SelectedItem = selectedKey == null ? null : Stock.Find(item => item.Key == selectedKey);
+
+        Controls.Clear();
+        Controls.Add(LedgerBook);
+        if (PageCount > 1)
+        {
+            float rightEnd = ShelfStart - 4f * MathF.PI / 180f, leftEnd = ShelfEnd + 4f * MathF.PI / 180f;
+            Controls.Add(new ShelfItem(SeedType.Wild, OnCircle(leftEnd, PageArrowRadius, ShelfHeights[1]), ItemKind.PageBack) { Key = "back", Angle = leftEnd });
+            Controls.Add(new ShelfItem(SeedType.Wild, OnCircle(rightEnd, PageArrowRadius, ShelfHeights[1]), ItemKind.PageNext) { Key = "next", Angle = rightEnd });
+        }
+    }
+
+    public const float PageArrowRadius = 1.64f;    // the arrows sit on the wall just past the ends of the shelf
+
+    // One species' section: jars on the top two boards and sacks on the bottom, cycling through the seeds it eats.
+    private void StockSection(int slot, Species species)
+    {
+        List<SeedType> seeds = SellableSeeds(species);
         int n = 0;
         for (int row = 1; row < ShelfHeights.Length; row++)
         {
-            AddRow(ShelfHeights[row], (int)(arcLength / 0.32f), ItemKind.Jar, seeds, ref n);
+            AddRow(slot, species, seeds, row, JarsPerRow, ItemKind.Jar, ref n);
         }
-        AddRow(ShelfHeights[0], (int)(arcLength / 0.45f), ItemKind.Sack, seeds, ref n);
-        Stock.Add(new ShelfItem(SeedType.Wild, OnCircle(88f * MathF.PI / 180f, 1.15f, 0f), ItemKind.Feeder, FeederStyle.Tray));
-        Stock.Add(new ShelfItem(SeedType.Wild, OnCircle(262f * MathF.PI / 180f, 1.28f, 0f), ItemKind.Feeder, FeederStyle.Tube));
+        AddRow(slot, species, seeds, 0, SacksPerSection, ItemKind.Sack, ref n);
     }
 
-    private void AddRow(float height, int count, ItemKind kind, SeedType[] seeds, ref int n)
+    private void AddRow(int slot, Species species, List<SeedType> seeds, int row, int count, ItemKind kind, ref int n)
     {
+        float usable = SectionWidth - 2f * SectionGap;
         for (int i = 0; i < count; i++)
         {
-            float angle = ShelfStart + (ShelfEnd - ShelfStart) * (i + 0.5f) / count;
-            Stock.Add(new ShelfItem(seeds[n++ % seeds.Length], OnCircle(angle, ShelfRadius, height), kind));
+            float angle = SlotAngle(slot) + usable * (0.5f - (i + 0.5f) / count);
+            Vector3 position = OnCircle(angle, ShelfRadius, ShelfHeights[row]);
+            Stock.Add(new ShelfItem(seeds[n++ % seeds.Count], position, kind) { PaidWith = species, Key = $"{species.Key}|{row}|{i}" });
         }
+    }
+
+    // A jar of each lure seed no shelf sells yet, standing on the crate. Any feather pays for it, so a rare bird
+    // can be called in before it has left a feather of its own.
+    private void StockLureCrate(FeatherPurse purse)
+    {
+        HashSet<SeedType> onShelves = shelfSpecies.SelectMany(SellableSeeds).ToHashSet();
+        List<SeedType> lures = Birds.All
+            .Where(species => !species.Common && species.Lure != null && !purse.Has(species))
+            .Select(species => species.Lure!.Value)
+            .Where(seed => seed != SeedType.Wild && !onShelves.Contains(seed))
+            .Distinct()
+            .Take(MaxLureJars)
+            .ToList();
+
+        Vector3 along = new Vector3(MathF.Cos(CrateAngle), 0f, -MathF.Sin(CrateAngle));    // the crate's long side
+        for (int i = 0; i < lures.Count; i++)
+        {
+            float offset = lures.Count == 1 ? 0f : (i == 0 ? -0.085f : 0.085f);
+            Vector3 position = OnCircle(CrateAngle, CrateRadius, CrateTop) + along * offset;
+            Stock.Add(new ShelfItem(lures[i], position, ItemKind.Jar) { Key = $"lure|{lures[i]}" });
+        }
+    }
+
+    // The two feeders stand on the floor at the ends of the shelf, paid in the feathers of the species that likes each best.
+    private void StockFeeders()
+    {
+        Stock.Add(MakeFeeder(FeederStyle.Tray, OnCircle(94f * MathF.PI / 180f, 1.08f, 0f)));
+        Stock.Add(MakeFeeder(FeederStyle.Tube, OnCircle(262f * MathF.PI / 180f, 1.28f, 0f)));
+    }
+
+    private static ShelfItem MakeFeeder(FeederStyle style, Vector3 position)
+    {
+        FeederInfo info = Feeders.Get(style);
+        return new ShelfItem(SeedType.Wild, position, ItemKind.Feeder, style) { PaidWith = Birds.Find(info.PaidIn), Key = $"feeder|{style}" };
     }
 }
 
-public enum ItemKind { Jar, Sack, Feeder }
+public enum ItemKind { Jar, Sack, Feeder, Ledger, PageBack, PageNext }
 
-// One thing for sale: a jar or sack of seed, or a feeder.
+// One thing in the store you can click: a jar or sack of seed, a feeder, or a control (the ledger, a page arrow).
 // A sack holds five jars' worth of seed for the price of four.
 public class ShelfItem
 {
@@ -251,6 +396,9 @@ public class ShelfItem
     public Vector3 Position;    // bottom middle of the item, in store space
     public ItemKind Kind;
     public float RestockTimer;  // counts down after it's bought; back on the shelf at 0
+    public Species? PaidWith;   // the species whose feathers pay for it; null means feathers of any kind
+    public string Key = "";     // the same item gets the same key whenever the shelves are rebuilt
+    public float Angle;         // for page arrows: where they sit around the wall
 
     public ShelfItem(SeedType seed, Vector3 position, ItemKind kind, FeederStyle feeder = FeederStyle.Tray)
     {
@@ -262,6 +410,7 @@ public class ShelfItem
 
     public bool IsSack => Kind == ItemKind.Sack;
     public bool IsFeeder => Kind == ItemKind.Feeder;
+    public bool IsControl => Kind >= ItemKind.Ledger;
     public bool OnShelf => RestockTimer <= 0f;
     public float Amount => IsSack ? SackAmount : JarAmount;
     public string KindName => Kind.ToString();
@@ -269,13 +418,21 @@ public class ShelfItem
     public int Price => Kind switch
     {
         ItemKind.Feeder => Feeders.Get(Feeder).Price,
-        _ => Seeds.Get(Seed).JarPrice * (IsSack ? SackPriceInJars : 1),
+        ItemKind.Jar or ItemKind.Sack => Seeds.Get(Seed).JarPrice * (IsSack ? SackPriceInJars : 1),
+        _ => 0,
     };
+
+    // "2 Dusk Down", or "5 feathers (any kind)" for the lure seed.
+    public string PriceText => PaidWith != null
+        ? $"{Price} {PaidWith.FeatherName}"
+        : $"{Price} feather{(Price == 1 ? "" : "s")} (any kind)";
 
     // For the event log, e.g. "a jar of Millet" or "the Turret Feeder"
     public string Title => Kind switch
     {
         ItemKind.Feeder => $"the {Feeders.Get(Feeder).Name}",
+        ItemKind.Ledger => "the ledger",
+        ItemKind.PageBack or ItemKind.PageNext => "the page arrow",
         _ => $"a {KindName.ToLower()} of {Seeds.Get(Seed).Name}",
     };
 
@@ -284,13 +441,20 @@ public class ShelfItem
     private float CenterHeight => Kind switch
     {
         ItemKind.Sack => 0.17f,
-        ItemKind.Feeder => Feeder == FeederStyle.Tube ? 0.22f : 0.05f,
+        ItemKind.Feeder => (Feeder == FeederStyle.Tube ? 0.5f : 0.2f) * ModelToStore,
+        ItemKind.Ledger => 0.03f,
+        ItemKind.PageBack or ItemKind.PageNext => 0f,
         _ => 0.12f,
     };
     public float PickRadius => Kind switch
     {
         ItemKind.Sack => 0.18f,
-        ItemKind.Feeder => Feeder == FeederStyle.Tube ? 0.22f : 0.17f,
+        ItemKind.Feeder => (Feeder == FeederStyle.Tube ? 0.26f : 0.4f) * ModelToStore,
+        ItemKind.Ledger => 0.16f,
+        ItemKind.PageBack or ItemKind.PageNext => 0.1f,
         _ => 0.13f,
     };
+
+    // A feeder's model is in world units; this turns its sizes into store units (see SeedStore.FeederShopScale).
+    private static float ModelToStore => SeedStore.FeederShopScale / SeedStore.Scale;
 }

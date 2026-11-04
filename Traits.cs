@@ -1,6 +1,6 @@
 // A bird's personality: 2 or 3 traits, fixed for its whole life (Step 12a).
 //
-// Each trait is one degree on a scale (Nerve, Appetite, Roaming, Voice, Hours, Weather, Bathing). A bird holds at most one degree of
+// Each trait is one degree on a scale (Nerve, Appetite, Roaming, Voice, Hours, Weather, Bathing, Perching, Taste, Loyalty, Giving). A bird holds at most one degree of
 // each scale, so opposite traits never roll together. A scale the bird has no trait on is average.
 // Traits only nudge numbers the simulation already has (personal space, hunger, home radius, call delay...).
 // The numbers live in TraitEffects; each trait in the table below says which ones it changes.
@@ -14,7 +14,11 @@ public enum TraitScale
     Voice,
     Hours,       // when it keeps to its roost (added at 4.92 with day and night)
     Weather,     // how it takes the rain (added at 4.96 with rain; one trait only, so it's rolled less often, see ScaleWeight)
-    Bathing      // how it takes to the water (added at 5.10 with thirst; one trait only, like Weather)
+    Bathing,     // how it takes to the water (added at 5.10 with thirst; one trait only, like Weather)
+    Perching,    // how it takes to the rocks (added at 5.16; one trait only)
+    Taste,       // how set it is on its favorite seed (added at 5.16; one trait only)
+    Loyalty,     // how it feels about coming back (added at 5.16; one trait only)
+    Giving       // how freely it leaves feathers (added at 5.16; one trait only)
 }
 
 public enum Trait
@@ -25,7 +29,11 @@ public enum Trait
     Hushed, TownCrier,                   // Voice
     EarlyRiser, NightOwl,                // Hours
     RainProud,                           // Weather
-    Dabbler                              // Bathing
+    Dabbler,                             // Bathing
+    Watchman,                            // Perching
+    Particular,                          // Taste
+    OathKeeper,                          // Loyalty
+    OpenHanded                           // Giving
 }
 
 // Which birds a bird is easy around: on a rock it hops up to, and at a pile or feeder it picks to eat from.
@@ -43,6 +51,7 @@ public class TraitEffects
     // NERVE
     public float PersonalSpace = 1f;      // times: how far it keeps from other birds on the ground
     public float PerchChance = 1f;        // times: how often a pause near a rock becomes a sit on top
+    public float PerchStay = 1f;          // times: how long it sits on a rock before hopping down
     public Company Company = Company.Anyone;    // who it minds: it won't share a rock with them, and food they're at counts as farther
 
     // APPETITE
@@ -76,6 +85,12 @@ public class TraitEffects
     // BATHING
     public float BathShare = 1f;          // times: how likely a trip to the pool is a bath rather than a sip
     public float BathLength = 1f;         // times: how long a bath lasts
+
+    // TASTE
+    public bool Particular = false;       // goes for a pile with its favorite seed before any other, however far in reach, unless it is starving
+
+    // GIVING
+    public float FeatherDrop = 1f;        // times: how often a full meal leaves a feather
 }
 
 // One trait: its name, the line shown when hovering it, its scale, how common it is, and what it changes.
@@ -106,13 +121,23 @@ public static class Traits
 
     private const float ThreeTraitChance = 0.5f;    // the rest get 2
 
-    // How likely each scale is to be one of a bird's 2 or 3 (missing means 1). Weather has only one trait,
-    // so it gets a low weight: about 1 bird in 9 is Rain-proud (Frostcrests 1 in 5, Dusk Doves 1 in 18), plus some of
+    // How likely each scale is to be one of a bird's 2 or 3 (missing means 1). A scale with only one trait
+    // gets a low weight: about 1 bird in 9 is Rain-proud (Frostcrests 1 in 5, Dusk Doves 1 in 18), plus some of
     // the birds that arrive in the rain (BirdSpawner).
     private static readonly Dictionary<TraitScale, float> ScaleWeight = new()
     {
         [TraitScale.Weather] = 0.2f,
         [TraitScale.Bathing] = 0.2f,
+        [TraitScale.Perching] = 0.2f,
+        [TraitScale.Taste] = 0.2f,
+        [TraitScale.Loyalty] = 0.2f,
+        [TraitScale.Giving] = 0.2f,
+    };
+
+    // Traits that can't be held together: the second is swapped for another degree of its scale when the pair rolls.
+    private static readonly (Trait Kept, Trait Swapped)[] Clashes =
+    {
+        (Trait.OathKeeper, Trait.Wayfarer),    // a bird that always comes back is not one that never does
     };
 
     // Each scale from one end to the other, as the bird card's sliders show it. null is the average spot.
@@ -125,6 +150,10 @@ public static class Traits
         [TraitScale.Hours] = new Trait?[] { Trait.EarlyRiser, null, Trait.NightOwl },
         [TraitScale.Weather] = new Trait?[] { null, Trait.RainProud },
         [TraitScale.Bathing] = new Trait?[] { null, Trait.Dabbler },
+        [TraitScale.Perching] = new Trait?[] { null, Trait.Watchman },
+        [TraitScale.Taste] = new Trait?[] { null, Trait.Particular },
+        [TraitScale.Loyalty] = new Trait?[] { null, Trait.OathKeeper },
+        [TraitScale.Giving] = new Trait?[] { null, Trait.OpenHanded },
     };
 
     public static IReadOnlyList<Trait?> Stops(TraitScale scale) => stops[scale];
@@ -189,6 +218,26 @@ public static class Traits
         [Trait.Dabbler] = new TraitInfo("Dabbler", TraitScale.Bathing, 1f,
             "Never passes water without wading in. Bathes long and often, and comes out looking pleased with itself.",
             e => { e.BathShare = 3f; e.BathLength = 1.8f; }),
+
+        // PERCHING
+        [Trait.Watchman] = new TraitInfo("Watchman", TraitScale.Perching, 1f,
+            "Climbs to the high rock and keeps watch from it, long after the others have gone back to the grass.",
+            e => { e.PerchChance = 2.5f; e.PerchStay = 1.8f; }),
+
+        // TASTE
+        [Trait.Particular] = new TraitInfo("Particular", TraitScale.Taste, 1f,
+            "Knows exactly what it likes. Passes over every other pile while its favorite is about, and settles for less only when truly hungry.",
+            e => { e.Particular = true; }),
+
+        // LOYALTY
+        [Trait.OathKeeper] = new TraitInfo("Oath-keeper", TraitScale.Loyalty, 1f,
+            "Gave the garden its word, and keeps it. Whenever it flies off, it is the first to come back.",
+            e => { e.ReturnWeight = 4f; }),
+
+        // GIVING
+        [Trait.OpenHanded] = new TraitInfo("Open-handed", TraitScale.Giving, 1f,
+            "Never leaves a table without leaving something behind. Drops its feathers more freely than most.",
+            e => { e.FeatherDrop = 1.6f; }),
     };
 
     // How each species leans is in its entry in Birds.cs (Species.Leans).
@@ -215,7 +264,23 @@ public static class Traits
             picked.Add(chosen);
             left.Remove(chosen);
         }
-        return picked.OrderBy(scale => scale).Select(scale => RollDegree(type, scale)).ToList();
+        return Unclash(picked.OrderBy(scale => scale).Select(scale => RollDegree(type, scale)).ToList());
+    }
+
+    // Takes out any pair that can't be held together (Clashes): the second trait is swapped for another degree
+    // of its own scale, or, with no other degree to give, the first is dropped.
+    private static List<Trait> Unclash(List<Trait> traits)
+    {
+        foreach ((Trait kept, Trait swapped) in Clashes)
+        {
+            if (!traits.Contains(kept) || !traits.Contains(swapped)) continue;
+
+            List<Trait> others = All.Where(trait => info[trait].Scale == info[swapped].Scale && trait != swapped).ToList();
+            traits.Remove(swapped);
+            if (others.Count > 0) traits.Add(others[Rng.Next(others.Count)]);
+            else traits.Remove(kept);
+        }
+        return traits;
     }
 
     // How likely a scale is to be picked. A scale with only one trait (Weather) has no other degree to lean between,
@@ -274,7 +339,7 @@ public static class Traits
             if (roll <= 0f) { chosen = scale; break; }
         }
         kept.Add(RollDegree(type, chosen));
-        return Clean(kept);
+        return Clean(Unclash(kept));
     }
 
     // The same personality made Rain-proud (some birds that arrive in the rain are): a Weather trait added, dropping one

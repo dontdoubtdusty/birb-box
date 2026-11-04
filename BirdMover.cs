@@ -446,7 +446,7 @@ public class BirdMover
         perchRock = rock;
         perchSpot = spot;
         perchSeated = seated;
-        perchTimer = Rng.Range(5f, 14f);
+        perchTimer = Rng.Range(5f, 14f) * ParentBird.Nature.PerchStay;
         perchLookTimer = 0f;
     }
 
@@ -972,11 +972,14 @@ public class BirdMover
     // A feeder the bird likes counts as closer still (divided by the feeder's appeal too),
     // and so does food holding the bird's own favorite seed (divided by favoritePull).
     // A shy bird (Nature.Company) counts food with a bird it minds at it as farther, so it eats elsewhere when it can.
+    // A Particular bird goes for the best pile that has its favorite seed over any other, unless it is starving.
     public Food? FindNearestFood(float range, SeedType favoriteSeed, float favoritePull)
     {
         bool shy = ParentBird.Nature.Company != Company.Anyone;
         Food? best = null;
         float bestScore = float.MaxValue;
+        Food? bestWithFavorite = null;
+        float bestFavoriteScore = float.MaxValue;
         Species type = ParentBird.Species;
 
         foreach (Food food in World.Instance.GetAllEntities<Food>())
@@ -991,14 +994,22 @@ public class BirdMover
             if (dist > range) continue;
 
             float score = dist / (type.TasteFor(favorite.Value) * food.AppealFor(type));
-            if (food.HasFresh(favoriteSeed)) score /= favoritePull;
+            bool hasFavorite = food.HasFresh(favoriteSeed);
+            if (hasFavorite) score /= favoritePull;
             if (shy && score < bestScore && IsBusy(food)) score *= BusyFoodPenalty;
             if (score < bestScore)
             {
                 best = food;
                 bestScore = score;
             }
+            if (hasFavorite && score < bestFavoriteScore)
+            {
+                bestWithFavorite = food;
+                bestFavoriteScore = score;
+            }
         }
+
+        if (ParentBird.Nature.Particular && bestWithFavorite != null && !ParentBird.IsStarving()) return bestWithFavorite;
         return best;
     }
 

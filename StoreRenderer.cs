@@ -20,6 +20,9 @@ public class StoreRenderer
     private static readonly Color Steel = new Color(84, 90, 98, 255);
     private static readonly Color SteelLight = new Color(150, 156, 166, 255);
     private static readonly Color Burlap = new Color(176, 150, 108, 255);
+    private static readonly Color LedgerCover = new Color(104, 38, 34, 255);
+    private static readonly Color Paper = new Color(226, 214, 182, 255);
+    private static readonly Color Quill = new Color(236, 228, 208, 255);
     private static readonly Color OpenSpace = new Color(8, 12, 28, 255);
     private static readonly Color Star = new Color(240, 240, 255, 255);
     private static readonly Color BulbOff = new Color(196, 198, 194, 255);    // frosted glass, unlit
@@ -81,7 +84,9 @@ public class StoreRenderer
         DrawWall();
         DrawWindow();
         DrawShelves();
+        DrawPlaques();
         DrawStock();
+        DrawControls();
         DrawCounter();
         DrawShopkeeper();
         DrawOddsAndEnds();
@@ -206,8 +211,8 @@ public class StoreRenderer
             bool lit = item == store.HoveredItem || item == store.SelectedItem;
             if (item.IsFeeder)
             {
-                // Feeders are shown at their real size, the same as in the bird world
-                FeederModel.Draw(shapes, store.ToScene(item.Position), 1f, yawDegrees, item.Feeder,
+                // Feeders are drawn big enough to read next to the jars (see SeedStore.FeederShopScale)
+                FeederModel.Draw(shapes, store.ToScene(item.Position), SeedStore.FeederShopScale, yawDegrees, item.Feeder,
                                  0f, Color.Blank, Color.White, lighten: lit ? 0.4f : 0f);
                 continue;
             }
@@ -222,6 +227,52 @@ public class StoreRenderer
             {
                 Cylinder(item.Position, 0.08f, 0.2f, seedColor);
                 Cylinder(item.Position + new Vector3(0, 0.2f, 0), 0.085f, 0.04f, Lighten(Palette.BrassLight, lit));
+            }
+        }
+    }
+
+    // A feather hangs on the wall above each section of the shelf, in its species' color, so you can tell whose shelf it is.
+    private void DrawPlaques()
+    {
+        for (int slot = 0; slot < store.PageSpecies.Count; slot++)
+        {
+            float angle = SeedStore.SlotAngle(slot);
+            AlongWall(angle, SeedStore.WallRadius - 0.07f, PlaqueHeight, new Vector3(0.2f, 0.34f, 0.02f), WoodTrim);
+            TurnedBall(SeedStore.OnCircle(angle, SeedStore.WallRadius - 0.088f, PlaqueHeight + 0.04f), new Vector3(0.05f, 0.11f, 0.012f), store.PageSpecies[slot].Color, angle);
+            AlongWall(angle, SeedStore.WallRadius - 0.092f, PlaqueHeight - 0.1f, new Vector3(0.012f, 0.1f, 0.012f), Quill);
+        }
+    }
+
+    private const float PlaqueHeight = 1.98f;    // middle of the feather boards above the top shelf
+
+    // The ledger book on the counter and, when there is more than one page of shelves, the arrows at the shelf's ends.
+    // The hovered one is drawn lighter; an arrow with nowhere to go is dark.
+    private void DrawControls()
+    {
+        foreach (ShelfItem control in store.Controls)
+        {
+            bool lit = control == store.HoveredItem;
+            if (control.Kind == ItemKind.Ledger)
+            {
+                Vector3 p = control.Position;
+                Box(p + new Vector3(0, 0.015f, 0), new Vector3(0.26f, 0.03f, 0.18f), Lighten(LedgerCover, lit));
+                Box(p + new Vector3(0, 0.04f, 0), new Vector3(0.23f, 0.03f, 0.155f), Lighten(Paper, lit));
+                Box(p + new Vector3(-0.115f, 0.03f, 0), new Vector3(0.03f, 0.055f, 0.18f), Lighten(LedgerCover, lit));
+                Box(p + new Vector3(0.1f, 0.036f, 0.09f), new Vector3(0.025f, 0.012f, 0.03f), Lighten(Palette.BrassLight, lit));
+                continue;
+            }
+
+            // A page arrow: a brass plate with a stepped arrowhead pointing the way the shelf will turn
+            bool enabled = store.IsEnabled(control);
+            Color plate = enabled ? Lighten(Palette.Brass, lit) : Palette.BrassDark;
+            Color head = enabled ? Lighten(Palette.BrassLight, lit) : Palette.BrassPlinth;
+            AlongWall(control.Angle, SeedStore.PageArrowRadius, control.Position.Y, new Vector3(0.16f, 0.16f, 0.03f), plate);
+            float way = control.Kind == ItemKind.PageNext ? -1f : 1f;    // next points toward the right end, which is lower angles
+            float step = 0.032f / SeedStore.PageArrowRadius;
+            for (int i = 0; i < 3; i++)
+            {
+                float a = control.Angle + way * (i - 1) * step;
+                AlongWall(a, SeedStore.PageArrowRadius - 0.02f, control.Position.Y, new Vector3(0.03f, 0.1f - i * 0.035f, 0.02f), head);
             }
         }
     }
@@ -361,6 +412,12 @@ public class StoreRenderer
     }
 
     private void Box(Vector3 center, Vector3 size, Color color) => TurnedBox(center, size, color, 0f);
+
+    // A squashed sphere turned with the store plus an extra 'turn' in radians (to lie against the wall like AlongWall).
+    private void TurnedBall(Vector3 center, Vector3 radii, Color color, float turn)
+    {
+        shapes.Ball(store.ToScene(center), radii * SeedStore.Scale, color, yawDegrees + turn * Raylib.RAD2DEG);
+    }
 
     // A box lying along the curve of the room at this angle and distance from the middle:
     // size X runs along the curve, Y is up, Z points in toward the middle.

@@ -27,9 +27,11 @@ public class FeederInfo
     public float PortRadius;                      // the tube's outside: a perched bird's beak just reaches this
     public float RodReach;                        // how far each end of the rod sticks out from the middle
 
+    public string? PaidIn;                        // the key of the species whose feathers pay for it at the store (the one that likes it best)
+
     public FeederInfo(FeederStyle style, string name, string label, int price, float capacity,
                       float catchRadius, float catchHeight, float seedHeight, float perchHeight, float perchRadius, float footRadius,
-                      int perches = 0, float portRadius = 0f, float rodReach = 0f)
+                      int perches = 0, float portRadius = 0f, float rodReach = 0f, string? paidIn = null)
     {
         Style = style;
         Name = name;
@@ -46,6 +48,7 @@ public class FeederInfo
         Perches = perches;
         PortRadius = portRadius * k;
         RodReach = rodReach * k;
+        PaidIn = paidIn;
     }
 
     // How much this kind of bird likes eating here, 0 to 1 (0 = can't use it). Each species lists its feeders in Birds.cs.
@@ -69,12 +72,13 @@ public static class Feeders
     {
         [FeederStyle.Tray] = new FeederInfo(FeederStyle.Tray,
             "Almoner's Tray", "Doves eat right out of it.", price: 4, capacity: 10f,
-            catchRadius: 0.4f, catchHeight: 0.22f, seedHeight: 0.21f, perchHeight: 0.21f, perchRadius: 0.22f, footRadius: 0.4f),
+            catchRadius: 0.4f, catchHeight: 0.22f, seedHeight: 0.21f, perchHeight: 0.21f, perchRadius: 0.22f, footRadius: 0.4f,
+            paidIn: "DuskDove"),
 
         [FeederStyle.Tube] = new FeederInfo(FeederStyle.Tube,
             "Turret Feeder", "Finches perch. Doves can't.", price: 6, capacity: 8f,
             catchRadius: 0.25f, catchHeight: 1.0f, seedHeight: 0.56f, perchHeight: 0.608f, perchRadius: 0.25f, footRadius: 0.3f,
-            perches: 2, portRadius: 0.085f, rodReach: 0.3f),
+            perches: 2, portRadius: 0.085f, rodReach: 0.3f, paidIn: "Gildfinch"),
     };
 
     public static FeederInfo Get(FeederStyle style) => info[style];

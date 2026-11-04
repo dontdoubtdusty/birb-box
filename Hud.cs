@@ -16,7 +16,7 @@ public class Hud
     private const int Pad = 10;
     private const int HeaderSize = 12;
     private const int NameSize = 20;
-    private const int CardWidth = 300, CardHeight = 346;
+    private const int CardWidth = 300, CardHeight = 434;    // a trait slider row per scale: add SliderRowHeight when a scale is added
     private const int TraitSize = 16;                                         // the "Fond of" line
     private const int FlavorSize = 14, FlavorLineHeight = 17;
 

@@ -8,7 +8,7 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Cube 5.14 Alpha";
+    public const string Version = "Birb Cube 5.16 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
@@ -28,6 +28,7 @@ public class GameEngine
     public BoxMode Mode { get; private set; }
     public SeedStore Store { get; private set; }
     public PriceTag Tag { get; private set; }
+    public Ledger Ledger { get; private set; }
     public BirbDesigner Designer { get; private set; }
     public FeederPlacer Placer { get; private set; }
     public Radio Radio { get; private set; }
@@ -136,6 +137,7 @@ public class GameEngine
         Mode = new BoxMode();
         Store = new SeedStore();
         Tag = new PriceTag();
+        Ledger = new Ledger();
         Designer = new BirbDesigner();
         Placer = new FeederPlacer();
         Radio = new Radio();
@@ -322,7 +324,7 @@ public class GameEngine
         input.TypingName = Hud.IsEditingName;
         Hud.UpdateTyping(this);
         input.MouseOverImGui = ImGui.GetIO().WantCaptureMouse;
-        input.MouseBlocked = input.MouseOverImGui || Hud.IsMouseOver(this) || Sides.IsMouseOver() || Tag.IsMouseOver(Store);
+        input.MouseBlocked = input.MouseOverImGui || Hud.IsMouseOver(this) || Sides.IsMouseOver() || Tag.IsMouseOver(Store) || Ledger.IsMouseOver();
         input.KeyboardBlocked = input.TypingName || ImGui.GetIO().WantCaptureKeyboard;
 
         if (!input.KeyboardBlocked && Raylib.IsKeyPressed(KeyboardKey.F))
@@ -375,12 +377,17 @@ public class GameEngine
         Rocker.Update(dt, Mode.Heading, input.RockerHalf, holding: Camera.IsHolding && input.BoxReady && !Mode.IsSwitching);
         input.InStore = Mode.InStore;
         input.BirdsShowing = Mode.Showing == BoxScene.Birds && !Mode.IsSwitching && input.BoxReady;
-        if (!Projector.IsOn) Store.SelectedItem = null;    // no price tag hanging off a switched-off box
+        if (!Projector.IsOn)    // no price tag or ledger hanging off a switched-off box
+        {
+            Store.SelectedItem = null;
+            Ledger.Close();
+        }
 
         Store.Update(dt, showing: input.InStore);
         bool storeActive = input.InStore && input.BoxReady && !Mode.IsSwitching && !input.MouseBlocked && !input.MouseOverRocker;
         Store.UpdateHover(Mouse.RayInHologram(), active: storeActive);
         Tag.Update(Store);
+        Ledger.Update(Store);
     }
 
     // The camera, the wheel, double-clicks, the ring and panning.
@@ -573,20 +580,36 @@ public class GameEngine
     {
         if (Mode.InStore) Store.OnEnter();
         else Store.OnLeave();
+        Ledger.Close();
     }
 
-    // In the store, clicking a jar or sack hangs its price tag where you clicked.
-    // Clicking anything else just closes an open tag; only the rocker leaves the store.
+    // In the store, clicking a jar, sack or feeder hangs its price tag where you clicked; the ledger on the counter opens
+    // the feather swap, and the arrows at the ends of the shelf turn its page.
+    // Clicking anything else just closes an open tag or ledger; only the rocker leaves the store.
     private void ClickInStore()
     {
-        if (Store.HoveredItem != null)
+        ShelfItem? hit = Store.HoveredItem;
+        switch (hit?.Kind)
         {
-            Store.SelectedItem = Store.HoveredItem;
-            Tag.HangAt(Raylib.GetMousePosition());
-        }
-        else
-        {
-            Store.SelectedItem = null;
+            case null:
+                Store.SelectedItem = null;
+                Ledger.Close();
+                break;
+            case ItemKind.Ledger:
+                Store.SelectedItem = null;
+                Ledger.Open(Raylib.GetMousePosition());
+                break;
+            case ItemKind.PageBack:
+                Store.TurnPage(-1);
+                break;
+            case ItemKind.PageNext:
+                Store.TurnPage(1);
+                break;
+            default:
+                Ledger.Close();
+                Store.SelectedItem = hit;
+                Tag.HangAt(Raylib.GetMousePosition());
+                break;
         }
     }
 
@@ -641,6 +664,7 @@ public class GameEngine
             Map.Draw(this, accent);
             Bucket.Draw(accent);
             Tag.Draw(Store, Camera.HologramCamera, accent);    // the tag's string runs to an item in the hologram
+            Ledger.Draw(Store, Camera.HologramCamera, accent);    // and the ledger's to the book
             Radio.DrawLabel(Camera.Camera, accent);
 
             rlImGui.Begin();

@@ -118,7 +118,6 @@ public class SaveGame
             Bucket = engine.Bucket.Bucket.ToSave(),
             NameCounters = engine.BirdSpawner.SaveNameCounters(),
             Regulars = engine.BirdSpawner.SaveRegulars(),
-            RestockTimers = engine.Store.Stock.Select(item => item.RestockTimer).ToList(),
             BoughtFeeders = engine.Placer.Bought.ToList(),
             CarriedFeeder = engine.Placer.Carried?.ToSave(),
             Log = EventLog.Entries.ToList(),
@@ -177,7 +176,6 @@ public class SaveGame
         }
         engine.Bucket.Bucket.Restore(data.Bucket);
         engine.BirdSpawner.RestoreNameCounters(data.NameCounters);
-        engine.Store.RestoreTimers(data.RestockTimers);
         engine.Placer.Restore(data.BoughtFeeders, data.CarriedFeeder != null ? Feeder.FromSave(data.CarriedFeeder) : null);
         EventLog.Restore(data.Log);
         engine.BirdSpawner.RestoreRegulars(KeepKnownSpecies(data.Regulars, away: true));    // after the log, which it may add to
@@ -295,7 +293,7 @@ public class SaveData
 
     // THE STORE AND THE LOG
     public Dictionary<string, int> NameCounters { get; set; } = new();    // by species key; kept for species that are gone, too
-    public List<float> RestockTimers { get; set; } = new();          // one per shelf item, in shelf order
+    public List<float> RestockTimers { get; set; } = new();          // no longer written (5.15: shelves change with the feathers held); older saves still have it
     public List<string> Log { get; set; } = new();
 
     // THE WORLD

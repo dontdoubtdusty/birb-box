@@ -32,11 +32,11 @@ public class SeedInfo
     public string Label;
     public GrainLook Grain;
     public float? SpoilTime;                      // seconds on the dirt before birds won't eat it; null never spoils
-    public int JarPrice;                          // feathers for one jar at the store (a sack is a few jars' worth)
+    public int JarPrice;                          // feathers for one jar at the store, of the shelf's species (a sack is a few jars' worth)
     public float StartingSupply;                  // seed in its bag on the bucket panel at the start of a game
 
     public SeedInfo(string name, string productName, Color color, string label,
-                    GrainLook grain, float? spoilTime, int jarPrice = 1, float startingSupply = 50f)
+                    GrainLook grain, float? spoilTime, int jarPrice = 2, float startingSupply = 50f)
     {
         Name = name;
         ProductName = productName;
@@ -81,7 +81,7 @@ public static class Seeds
             "Blue Barley", "Royal Reserve Pellets", new Color(70, 110, 230, 255),
             "Rare. Something pale and blue has been seen nearby.",
             new GrainLook(GrainMesh.Round, new Vector3(0.06f, 0.05f, 0.10f), Spread: 0.18f),
-            spoilTime: 240f, jarPrice: 3, startingSupply: 0f),
+            spoilTime: 240f, jarPrice: 5, startingSupply: 0f),
 
         [SeedType.Wild] = new SeedInfo(
             "Wild Seed", "Hedgerow Gleanings", new Color(214, 178, 112, 255),
