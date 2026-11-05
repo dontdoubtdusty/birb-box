@@ -8,7 +8,7 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Cube 5.16 Alpha";
+    public const string Version = "Birb Cube 5.19 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
@@ -305,8 +305,10 @@ public class GameEngine
     // Bird sounds fade out while the store is showing or the box is off.
     private void UpdateBackground(float dt)
     {
+        var radio = Radio.Player;
+        float radioHeard = radio.On ? radio.Volume * radio.Volume * radio.Warmth : 0f;    // how loud the radio is now
         Sounds.Update(dt, Menu.IsOpen || Designer.IsOpen, Mode.Showing == BoxScene.Birds && Projector.IsOn, Projector.Lens, Weather.Rain,
-                      Camera.Immersion);
+                      Camera.Immersion, 1f - Clock.Light.Darkness, radioHeard);
         Radio.Update(dt, ducked: Menu.IsOpen, Camera.Immersion);    // keeps playing, quieter, behind the Esc menu and in the Hologram View
         Projector.Update(dt);                     // keeps starting up or shutting down behind the menu too
         Saves.Update(dt, this);                   // autosave, on real time

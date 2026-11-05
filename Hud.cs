@@ -6,8 +6,8 @@ using Raylib_cs;
 // the day and the season; and the weather's word), and the selected bird or feeder card
 // floating at the top of the middle area. The world map is its own class (MiniMap).
 // Clickable parts of the bird card: the name (click to rename), and the Follow and Center buttons.
-// The bird card also shows its personality as six sliders, one per trait scale (hover one for its trait's flavor line),
-// and its favorite seed.
+// The bird card also shows the traits that make the bird stand out as slider rows, one per trait scale (hold Left Alt for
+// every scale; hover a row for its tooltip: flavor line and what the trait changes), and its favorite seed.
 // The feeder card shows the seed inside and has Move and Center buttons.
 public class Hud
 {
@@ -16,9 +16,9 @@ public class Hud
     private const int Pad = 10;
     private const int HeaderSize = 12;
     private const int NameSize = 20;
-    private const int CardWidth = 300, CardHeight = 434;    // a trait slider row per scale: add SliderRowHeight when a scale is added
+    private const int CardWidth = 300, CardBaseHeight = 192;    // the bird card without its trait rows; each shown row adds SliderRowHeight
     private const int TraitSize = 16;                                         // the "Fond of" line
-    private const int FlavorSize = 14, FlavorLineHeight = 17;
+    private const int FlavorSize = 14, FlavorLineHeight = 17, TipGap = 6;    // the trait tooltip's text; the gap sets the effect lines apart
 
     // TRAIT SLIDERS: one row per scale (name, brass track, the trait's word), a glowing pip on the bird's spot.
     private const int SliderRowHeight = 22;
@@ -47,7 +47,8 @@ public class Hud
     private Rectangle statsRect;
     private Rectangle cardRect, nameRect, followButton, centerButton;
     private bool cardVisible;
-    private Feeder? feeder;          // the selected feeder this frame, when its card is showing instead of a bird's
+    private bool showAllTraits;      // Left Alt held: a row for every scale, not just the ones the bird stands out on
+    private Feeder? feeder;         // the selected feeder this frame, when its card is showing instead of a bird's
 
     // NAME EDITING: while this is on, the keyboard types into the name instead of steering the game.
     public bool IsEditingName { get; private set; }
@@ -126,6 +127,20 @@ public class Hud
         }
     }
 
+    // The scales that get a row: all of them while Alt is held, otherwise only those where the bird holds a trait.
+    private List<TraitScale> ShownScales(Bird bird)
+    {
+        if (showAllTraits) return Traits.Scales.ToList();
+        return Traits.Scales.Where(scale => TraitOn(bird, scale) != null).ToList();
+    }
+
+    // The bird card grows and shrinks with its rows (at least one, for the "nothing stands out" line).
+    private int BirdCardHeight(Bird? bird)
+    {
+        int rows = bird == null ? 1 : Math.Max(1, ShownScales(bird).Count);
+        return CardBaseHeight + rows * SliderRowHeight;
+    }
+
     // The trait a bird holds on a scale, or null when it's average there.
     private static Trait? TraitOn(Bird bird, TraitScale scale)
     {
@@ -163,8 +178,10 @@ public class Hud
 
         feeder = engine.SelectedFeeder;
         cardVisible = engine.SelectedBird != null || feeder != null;
+        showAllTraits = Raylib.IsKeyDown(KeyboardKey.LeftAlt);
         Rectangle left = engine.Sides.LeftColumn;
-        cardRect = new Rectangle(left.X + left.Width + Margin, Margin, CardWidth, feeder != null ? FeederCardHeight(feeder) : CardHeight);
+        int height = feeder != null ? FeederCardHeight(feeder) : BirdCardHeight(engine.SelectedBird);
+        cardRect = new Rectangle(left.X + left.Width + Margin, Margin, CardWidth, height);
 
         float x = cardRect.X + Pad;
         float innerWidth = CardWidth - Pad * 2;
@@ -444,18 +461,21 @@ public class Hud
         UiText.Draw($"Age {bird.FormatAge()}", x, y, 20, Palette.DimText);
         y += 26;
 
-        Trait? hoveredTrait = DrawTraitSliders(bird, x, y, innerWidth);
-        y += Traits.Scales.Length * SliderRowHeight + 4;
+        List<TraitScale> shown = ShownScales(bird);
+        (TraitScale Scale, Trait? Trait)? hoveredRow = DrawTraitSliders(bird, shown, x, y, innerWidth);
+        y += Math.Max(1, shown.Count) * SliderRowHeight + 4;
 
         SeedInfo favorite = Seeds.Get(bird.FavoriteSeed);
         Raylib.DrawRectangle(x, y + 3, 4, 12, favorite.Color);
         UiText.Draw($"Fond of {favorite.Name}", x + 10, y, TraitSize, Palette.DimText);
+        string altHint = showAllTraits ? "ALL TRAITS" : "HOLD ALT: ALL TRAITS";
+        UiText.Draw(altHint, x + innerWidth - UiText.Measure(altHint, HeaderSize), y + 3, HeaderSize, Palette.DimText);
 
         bool following = engine.FollowedBird == bird;
         UiDraw.Button(followButton, following ? "Following" : "Follow", accent, lit: following);
         UiDraw.Button(centerButton, "Center", accent);
 
-        if (hoveredTrait is Trait trait) DrawFlavor(trait, accent);
+        if (hoveredRow != null) DrawTraitTip(hoveredRow.Value.Scale, hoveredRow.Value.Trait, accent);
     }
 
     // One need's bar: hologram color normally, orange once the bird goes to see to it.
@@ -468,8 +488,9 @@ public class Hud
     }
 
     // One row per scale: its name, a brass track with a tick per stop (a small ring marks average),
-    // the bird's glowing pip, and its trait's word (or "average"). Returns the trait under the mouse, if any.
-    private Trait? DrawTraitSliders(Bird bird, int x, int y, int innerWidth)
+    // the bird's glowing pip, and its trait's word (or "average"). Draws a row for each scale in `shown`.
+    // Returns the scale and trait of the row under the mouse (trait is null on an average row), if any.
+    private (TraitScale Scale, Trait? Trait)? DrawTraitSliders(Bird bird, List<TraitScale> shown, int x, int y, int innerWidth)
     {
         int nameColumn = Traits.Scales.Max(scale => UiText.Measure(scale.ToString().ToUpper(), HeaderSize));
         int wordColumn = Traits.All.Max(trait => UiText.Measure(Traits.Get(trait).Name, SliderWordSize));
@@ -477,20 +498,23 @@ public class Hud
         float trackRight = x + innerWidth - wordColumn - SliderGap - PipGlow / 2f;
         Vector2 mouse = Raylib.GetMousePosition();
         float time = (float)Raylib.GetTime();
-        Trait? hovered = null;
+        (TraitScale Scale, Trait? Trait)? hovered = null;
 
-        for (int i = 0; i < Traits.Scales.Length; i++)
+        if (shown.Count == 0) UiText.Draw("Nothing stands out", x, y + 3, SliderWordSize, Raylib.Fade(Palette.DimText, 0.7f));
+
+        for (int r = 0; r < shown.Count; r++)
         {
-            TraitScale scale = Traits.Scales[i];
+            TraitScale scale = shown[r];
+            int i = Array.IndexOf(Traits.Scales, scale);
             Trait? trait = TraitOn(bird, scale);
-            int rowY = y + i * SliderRowHeight;
+            int rowY = y + r * SliderRowHeight;
             float midY = rowY + SliderRowHeight / 2f - 1f;
 
             Rectangle row = new Rectangle(x - 3, rowY, innerWidth + 6, SliderRowHeight);
-            bool over = trait != null && Raylib.CheckCollisionPointRec(mouse, row);
+            bool over = Raylib.CheckCollisionPointRec(mouse, row);
             if (over)
             {
-                hovered = trait;
+                hovered = (scale, trait);
                 Raylib.DrawRectangleRec(row, Palette.PanelDark);
             }
 
@@ -539,18 +563,35 @@ public class Hud
         Raylib.DrawCircleV(at + new Vector2(-1.2f, -1.2f), 1.3f, Palette.Lighten(color, 0.6f));
     }
 
-    // A small panel just under the card with the hovered trait's flavor line, wrapped to the card's width.
-    private void DrawFlavor(Trait trait, Color accent)
+    // A small panel just under the card for the hovered row: the trait's name (or "<Scale>: average"), its flavor line
+    // (or what average means on that scale), then what the trait changes, one line each with its number.
+    private void DrawTraitTip(TraitScale scale, Trait? trait, Color accent)
     {
         int innerWidth = CardWidth - Pad * 2;
-        List<string> lines = Wrap(Traits.Get(trait).Flavor, FlavorSize, innerWidth);
-        Rectangle panel = new Rectangle(cardRect.X, cardRect.Y + cardRect.Height + 4, CardWidth, Pad * 2 + lines.Count * FlavorLineHeight);
+        TraitInfo? held = trait is Trait t ? Traits.Get(t) : null;
+        string title = held?.Name ?? $"{scale}: average";
+        List<string> body = Wrap(held?.Flavor ?? Traits.AverageNote(scale), FlavorSize, innerWidth);
+        List<EffectLine> effects = trait is Trait t2 ? Traits.EffectLines(t2) : new List<EffectLine>();
+
+        int height = Pad * 2 + FlavorLineHeight + 3 + body.Count * FlavorLineHeight + (effects.Count > 0 ? TipGap + effects.Count * FlavorLineHeight : 0);
+        Rectangle panel = new Rectangle(cardRect.X, cardRect.Y + cardRect.Height + 4, CardWidth, height);
         UiDraw.Panel(panel, accent);
 
+        int x = (int)panel.X + Pad;
         int y = (int)panel.Y + Pad;
-        foreach (string line in lines)
+        UiText.Draw(title, x, y, FlavorSize, Palette.BrassLight);
+        y += FlavorLineHeight + 3;
+        foreach (string line in body)
         {
-            UiText.Draw(line, (int)panel.X + Pad, y, FlavorSize, Palette.Text);
+            UiText.Draw(line, x, y, FlavorSize, Palette.Text);
+            y += FlavorLineHeight;
+        }
+
+        y += effects.Count > 0 ? TipGap : 0;
+        foreach (EffectLine effect in effects)
+        {
+            UiText.Draw(effect.Label, x, y, FlavorSize, Palette.DimText);
+            UiText.Draw(effect.Value, x + innerWidth - UiText.Measure(effect.Value, FlavorSize), y, FlavorSize, Palette.BrassLight);
             y += FlavorLineHeight;
         }
     }

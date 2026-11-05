@@ -1,0 +1,13 @@
+Birb Cube radio
+
+Put music files in this folder: mp3, wav, flac, m4a, aac, wma or ogg.
+Each sub-folder becomes its own station on the dial. Loose files here make one more, called "Radio".
+Folder stations keep broadcasting while you listen to something else, so you tune in mid-song.
+
+To name a station and pick its frequency, put a station.txt in its folder:
+    name: Emberwing FM
+    frequency: 92.3
+
+Live web stations come from Radio Browser: click the radio's dial to find stations and pick genres.
+They're kept in my-stations.json here.
+The radio looks at this folder again every time you switch it on.

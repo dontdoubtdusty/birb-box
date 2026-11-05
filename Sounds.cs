@@ -105,6 +105,7 @@ public static class Sounds
             Raylib.SetMusicVolume(rainLoop, 0f);
             Raylib.PlayMusicStream(rainLoop);
         }
+        Ambience.Load();
 
         // Calls are found by species key: call_emberwing_1.wav, call_emberwing_2.wav, and so on.
         foreach (Species type in Birds.All.Where(species => species.BuiltIn))
@@ -143,6 +144,7 @@ public static class Sounds
         if (hasPowerClick) Raylib.UnloadSound(powerClick);
         Raylib.UnloadMusicStream(holoHum);
         if (hasRain) Raylib.UnloadMusicStream(rainLoop);
+        Ambience.Unload();
 
         foreach (SoundPool[] pools in calls.Values)
         {
@@ -161,7 +163,10 @@ public static class Sounds
     // birdsShowing: false while the store is up or the box is off, which fades the birds out.
     // power: how far the projector is on (0 to 1); the hum follows it. rain: how hard it's raining in the garden (0 to 1).
     // observer: how far into the Hologram View the player is (0 to 1).
-    public static void Update(float dt, bool quiet, bool birdsShowing, float power, float rain, float observer)
+    // daylight: 1 by day, fading to 0 through dusk (the forest's ambience is only heard by day).
+    // radioHeard: how loud the radio is right now (0 to 1); the forest steps back behind it.
+    public static void Update(float dt, bool quiet, bool birdsShowing, float power, float rain, float observer,
+                              float daylight, float radioHeard)
     {
         Raylib.SetMasterVolume(Master);
 
@@ -172,6 +177,8 @@ public static class Sounds
 
         float birdTarget = birdsShowing ? 1f + (ObserverBirdBoost - 1f) * observer : 0f;
         birdVolume += (birdTarget - birdVolume) * MathF.Min(1f, HumFadeRate * dt);
+
+        Ambience.Update(dt, observer, daylight, rain, quiet, birdVolume * BirdLevel, radioHeard);
 
         if (hasRain)
         {

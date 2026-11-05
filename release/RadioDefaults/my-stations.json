@@ -1,0 +1,102 @@
+{
+  "Stations": [
+    {
+      "Uuid": "961249b2-0601-11e8-ae97-52543be04c81",
+      "Name": "SomaFM Sonic Universe (128k MP3)",
+      "Url": "https://ice5.somafm.com/sonicuniverse-128-mp3",
+      "Genre": "avant-garde",
+      "Country": "US",
+      "Frequency": 104.1
+    },
+    {
+      "Uuid": "f0df6e39-68b5-4026-9d83-51af63ddfdc6",
+      "Name": "UZIC.CH :: TECHNO - MINIMAL :: b",
+      "Url": "https://uzic.ice.infomaniak.ch/uzic-128.aac",
+      "Genre": "electro",
+      "Country": "CH",
+      "Frequency": 106.7
+    },
+    {
+      "Uuid": "d1a54d2e-623e-4970-ab11-35f7b56c5ec3",
+      "Name": "Classic Vinyl HD",
+      "Url": "https://icecast.walmradio.com:8443/classic",
+      "Genre": "1930",
+      "Country": "US",
+      "Frequency": 95.3
+    },
+    {
+      "Uuid": "f86c489e-7e21-11e9-aa30-52543be04c81",
+      "Name": "4Drive Jazz",
+      "Url": "http://radio.streemlion.com:1150/stream",
+      "Genre": "jazz fusion",
+      "Country": "PT",
+      "Frequency": 91.9
+    },
+    {
+      "Uuid": "a36cb1a5-f9b5-4739-a86a-987d256b7d0e",
+      "Name": "J-Club Club Bandstand",
+      "Url": "https://cast1.torontocast.com:2060/;.mp3",
+      "Genre": "1930s",
+      "Country": "JP",
+      "Frequency": 105.3
+    },
+    {
+      "Uuid": "1eaa705b-38f7-40f4-9417-3a9e7d760c9b",
+      "Name": "Estonian Party Radio",
+      "Url": "http://maggie.torontocast.com:8110/stream",
+      "Genre": "dance",
+      "Country": "EE",
+      "Frequency": 92.9
+    },
+    {
+      "Uuid": "e1ed8978-1bb0-4070-8db0-9bac6136cb6c",
+      "Name": "21 RADIO DIJON",
+      "Url": "http://82.64.123.204:8001/21radio",
+      "Genre": "goldies",
+      "Country": "FR",
+      "Frequency": 90.9
+    },
+    {
+      "Uuid": "fb6f79e4-d5ac-481b-90f5-b6f4828235de",
+      "Name": "Ambient Space",
+      "Url": "http://immortalharmony.out.airtime.pro:8000/immortalharmony_a",
+      "Genre": "classical",
+      "Country": "AF",
+      "Frequency": 96.5
+    },
+    {
+      "Uuid": "377d391b-c128-4e50-a50f-63ab2a242be5",
+      "Name": "Mmuock Community Radio",
+      "Url": "https://a7.asurahosting.com/listen/mmuock_community_radio_/radio.mp3",
+      "Genre": "web station",
+      "Country": "CM",
+      "Frequency": 99.1
+    },
+    {
+      "Uuid": "30b09043-9b67-43d7-b9c6-b4401e5cb636",
+      "Name": "BOX : Japan City Pop - \u65E5\u672C\u306E\u30B7\u30C6\u30A3\u30DD\u30C3\u30D7",
+      "Url": "https://play.streamafrica.net/japancitypop",
+      "Genre": "city pop",
+      "Country": "JP",
+      "Frequency": 103.1
+    },
+    {
+      "Uuid": "9766d47a-68a3-4a30-8aec-c026f1ec6020",
+      "Name": "Jazz Sakura (asia dream radio)",
+      "Url": "http://kathy.torontocast.com:3330/stream/1/?esPlayer\u0026cb=82181.mp3",
+      "Genre": "japanese",
+      "Country": "JP",
+      "Frequency": 89.5
+    }
+  ],
+  "Tags": [
+    {
+      "Tag": "medieval",
+      "Count": 1
+    },
+    {
+      "Tag": "space",
+      "Count": 1
+    }
+  ]
+}

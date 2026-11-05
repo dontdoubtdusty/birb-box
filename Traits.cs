@@ -93,6 +93,9 @@ public class TraitEffects
     public float FeatherDrop = 1f;        // times: how often a full meal leaves a feather
 }
 
+// One line of a trait's tooltip: what it changes and by how much ("Hunger speed", "x1.4"). Switch effects have no value.
+public readonly record struct EffectLine(string Label, string Value);
+
 // One trait: its name, the line shown when hovering it, its scale, how common it is, and what it changes.
 public class TraitInfo
 {
@@ -362,6 +365,88 @@ public static class Traits
         TraitEffects effects = new();
         if (traits != null) foreach (Trait trait in traits) info[trait].Apply(effects);
         return effects;
+    }
+
+    // ---------------- TOOLTIP TEXT ----------------
+
+    // What a scale says about a bird that holds no trait on it.
+    private static readonly Dictionary<TraitScale, string> averageNotes = new()
+    {
+        [TraitScale.Nerve] = "Neither skittish nor bold. Keeps the usual distance from other birds.",
+        [TraitScale.Appetite] = "Eats, drinks and tires at the usual pace.",
+        [TraitScale.Roaming] = "Roams the usual distance from home, and comes back as often as most.",
+        [TraitScale.Voice] = "Calls at the usual pace, and waits its turn.",
+        [TraitScale.Hours] = "Keeps the usual daytime hours.",
+        [TraitScale.Weather] = "Huddles up in the rain, like most birds.",
+        [TraitScale.Bathing] = "Sips or bathes at the water as often as most.",
+        [TraitScale.Perching] = "Sits on a rock now and then.",
+        [TraitScale.Taste] = "Likes its favorite seed, but eats whatever pile is near.",
+        [TraitScale.Loyalty] = "Comes back as often as most birds do.",
+        [TraitScale.Giving] = "Leaves feathers as often as most birds do.",
+    };
+
+    // The tooltip line for a scale where the bird is average.
+    public static string AverageNote(TraitScale scale) => averageNotes[scale];
+
+    // Every number in TraitEffects that is a "times" or plain value, with its words and how its value reads.
+    // Add a line here when TraitEffects gets a new number; the tooltip shows it only for traits that change it.
+    private static readonly (string Label, Func<TraitEffects, float> Get, Func<float, string> Show)[] numberLines =
+    {
+        ("Space kept from others", e => e.PersonalSpace, Times),
+        ("How often it perches", e => e.PerchChance, Times),
+        ("How long it perches", e => e.PerchStay, Times),
+        ("Hunger speed", e => e.HungerSpeed, Times),
+        ("Looks for food below", e => e.HungryAt, Fed),
+        ("Stops eating at", e => e.FullAt, Fed),
+        ("Food per bite", e => e.Nourish, Times),
+        ("Time between bites", e => e.BiteTime, Times),
+        ("Food search range", e => e.FoodRange, Times),
+        ("Body size", e => e.BuildLean, Times),
+        ("Thirst speed", e => e.ThirstSpeed, Times),
+        ("Tiring speed", e => e.RestSpeed, Times),
+        ("Roaming distance", e => e.HomeRadius, Times),
+        ("How soon it gets bored", e => e.LoseInterest, Times),
+        ("Chance to return as a regular", e => e.ReturnWeight, Times),
+        ("Chance to stay the night", e => e.RoostChance, Times),
+        ("Time between calls", e => e.CallDelay, Times),
+        ("Calls over other birds", e => e.IgnoreHush, Percent),
+        ("Wakes and roosts", e => e.HourShift, Hours),
+        ("Water trips that are baths", e => e.BathShare, Times),
+        ("Bath length", e => e.BathLength, Times),
+        ("Feather drops", e => e.FeatherDrop, Times),
+    };
+
+    // The on/off effects, in words.
+    private static readonly (string Label, Func<TraitEffects, bool> Get)[] switchLines =
+    {
+        ("Sleeps by day, awake at night", e => e.NightOwl),
+        ("Not bothered by rain", e => e.RainProud),
+        ("Holds out for its favorite seed", e => e.Particular),
+    };
+
+    private static string Times(float value) => $"x{value:0.##}";
+    private static string Fed(float value) => $"{value * 100:0}% fed";
+    private static string Percent(float value) => $"{value * 100:0}%";
+    private static string Hours(float value) => $"{value:+0.##;-0.##} h";
+
+    // What a trait changes, one line each, worked out from its numbers so it always matches the table above.
+    public static List<EffectLine> EffectLines(Trait trait)
+    {
+        TraitEffects average = new();
+        TraitEffects effects = EffectsOf(new[] { trait });
+        List<EffectLine> lines = new();
+
+        foreach ((string label, Func<TraitEffects, float> get, Func<float, string> show) in numberLines)
+        {
+            if (MathF.Abs(get(effects) - get(average)) > 0.001f) lines.Add(new EffectLine(label, show(get(effects))));
+        }
+        foreach ((string label, Func<TraitEffects, bool> get) in switchLines)
+        {
+            if (get(effects) && !get(average)) lines.Add(new EffectLine(label, ""));
+        }
+        if (effects.Company == Company.KinOnly) lines.Add(new EffectLine("Minds birds of other kinds", ""));
+        if (effects.Company == Company.Alone) lines.Add(new EffectLine("Minds every other bird", ""));
+        return lines;
     }
 
     // Keeps a saved list sane: one trait per scale (the first one wins), in scale order.

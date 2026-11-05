@@ -1,0 +1,26 @@
+# Live web stations for the Birb Box radio, found through Radio Browser (radio-browser.info),
+# a free directory run by volunteers. Lines starting with # are skipped.
+# Changes are read the next time Birb Box starts. Write "off" on its own line to switch web stations off.
+#
+# GENRES: one per line. For each genre the radio picks the most-listened stations that are working.
+#
+# YOUR OWN PICKS: if any of these lines are here, the genres are ignored.
+#   station: Radio Paradise              (looked up on Radio Browser by name)
+#   url: Night Owl FM https://...        (a stream address, played as it is; the name in front is optional)
+# Streams must be MP3 or AAC, not .m3u8 playlists.
+#
+stations per genre: 0
+ambient
+lofi
+jazz
+classical
+medieval
+
+# Your picks (remove the # to use them):
+station: Radio Paradise
+station: SomaFM Groove Salad
+station: 	UZIC.CH :: TECHNO - MINIMAL :: best of electronic with techno minimal electro house and progressive
+station: WDR4
+station: Deep Radio
+station: 	0R - LO-FI || LoFi, Chill, Study, Hip Hop, Relax, Background, Calm, Instrumental, Smooth, Beats, Coffee, Work, Focus, Soft, Chillhop
+station: 	DEEP IN SPACE

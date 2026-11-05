@@ -1,0 +1,29 @@
+Birb Cube - read me first
+
+TO PLAY
+1. Unzip the whole folder somewhere you can write to (Desktop or Documents, not Program Files).
+2. Open the folder and double-click BirbCube.exe.
+Nothing needs installing. Windows 10 or 11, 64-bit only.
+
+IF WINDOWS WARNS YOU
+The game is not code-signed, so Windows SmartScreen may say it "protected your PC".
+Click "More info", then "Run anyway". If it says VCRUNTIME140.dll is missing, install the
+Microsoft Visual C++ Redistributable (x64) from Microsoft, then try again.
+
+YOUR WORLD
+Your terrarium is saved next to the game (birbcube-save.json) every couple of minutes and when you quit.
+To move to a newer version, copy birbcube-save.json and birbcube-settings.json into the new folder.
+
+THE RADIO
+Click the dial on the radio to find web stations (a few are already on the dial).
+To play your own music, put files or folders of files in the Radio folder (see "Put music here.txt").
+
+CONTROLS
+Click the Birb Cube logo: power on/off      Esc: menu (has a Controls page)
+Drag sideways: turn the cube                Drag up/down: tilt
+Wheel: zoom                                 Double-click the cube: Hologram View (again: leave)
+Hold right mouse: pour seed                 Click a bird: select it     WASD: pan
+P or Space: pause                           1 / 2 / 3: speed            F: fullscreen
+B: Birb Designer                            F9: screenshot              Tab: tools panel
+
+If it crashes, a crash.txt appears next to the game with the details.
