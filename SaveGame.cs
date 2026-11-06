@@ -208,7 +208,7 @@ public class SaveGame
         // Sprouts, kept off the rocks and out of the water (their heads come in with them)
         foreach (SproutSave sprout in data.Sprouts)
         {
-            sprout.Position = Pool.PushOut(Rock.PushOut(world.PullInside(sprout.Position), Sprout.Reach), Sprout.Reach);
+            sprout.Position = Obstacles.PushOut(world.PullInside(sprout.Position), Sprout.Reach, Sprout.Reach);
             Sprout.FromSave(sprout).AddToWorld(world);
         }
 
@@ -216,14 +216,14 @@ public class SaveGame
         foreach (FoodSave food in data.Seed)
         {
             food.Position = world.PullInside(food.Position);
-            if (food.Position.Y <= Terrain.HeightAt(food.Position)) food.Position = Terrain.OnGround(Pool.PushOut(Rock.PushOut(food.Position)));
+            if (food.Position.Y <= Terrain.HeightAt(food.Position)) food.Position = Terrain.OnGround(Obstacles.PushOut(food.Position));
             world.AddEntity(Food.FromSave(food));
         }
         foreach (FeatherSave feather in data.LooseFeathers)
         {
             Species? species = Birds.Find(feather.Species);
             if (species == null) continue;    // its species' file is gone
-            feather.Position = Pool.PushOut(Rock.PushOut(world.PullInside(feather.Position), Feather.Radius), Feather.Radius);
+            feather.Position = Obstacles.PushOut(world.PullInside(feather.Position), Feather.Radius, Feather.Radius);
             if (feather.Landed) feather.Position = Terrain.OnGround(feather.Position, Feather.RestHeight);
             world.AddEntity(Feather.FromSave(feather, species));
         }

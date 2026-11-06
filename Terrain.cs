@@ -66,7 +66,7 @@ public static class Terrain
                 float unit = Math.Clamp(n / 1.33f * 0.5f + 0.5f, 0f, 1f);    // 0..1, mostly mid-range
 
                 float edge = MathF.Min(worldHalfSize - MathF.Abs(x), worldHalfSize - MathF.Abs(z));
-                float fade = SmoothStep(Math.Clamp(edge / EdgeFade, 0f, 1f));
+                float fade = MathEx.Smooth(Math.Clamp(edge / EdgeFade, 0f, 1f));
                 grid[ix, iz] = unit * unit * amplitude * fade;    // squared: wide low ground with a few higher swells
             }
         }
@@ -83,7 +83,7 @@ public static class Terrain
             {
                 float d = pool.DistanceAt(new Vector2(ix * Spacing - half, iz * Spacing - half));
                 if (d >= BankWidth) continue;
-                grid[ix, iz] *= SmoothStep(Math.Clamp(d / BankWidth, 0f, 1f));
+                grid[ix, iz] *= MathEx.Smooth(Math.Clamp(d / BankWidth, 0f, 1f));
             }
         }
         Version++;
@@ -181,7 +181,7 @@ public static class Terrain
     private static float ValueNoise(int seed, float x, float z)
     {
         int x0 = (int)MathF.Floor(x), z0 = (int)MathF.Floor(z);
-        float tx = SmoothStep(x - x0), tz = SmoothStep(z - z0);
+        float tx = MathEx.Smooth(x - x0), tz = MathEx.Smooth(z - z0);
         float a = Lattice(seed, x0, z0), b = Lattice(seed, x0 + 1, z0);
         float c = Lattice(seed, x0, z0 + 1), d = Lattice(seed, x0 + 1, z0 + 1);
         float top = a + (b - a) * tx;
@@ -190,8 +190,6 @@ public static class Terrain
     }
 
     private static float Lattice(int seed, int x, int z) => Rng.Fixed(seed, x, z, 31) * 2f - 1f;
-
-    private static float SmoothStep(float t) => t * t * (3f - 2f * t);
 }
 
 // What is saved of the ground: just the seed and the height; the grid is rebuilt from them.

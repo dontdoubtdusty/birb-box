@@ -121,9 +121,9 @@ public class HorizonSky
         // the moon shows faintly by day, and not at all at new moon
         sunDir = toSun;
         moonDir = toMoon;
-        stars = Smooth(-4f, -12f, sunElevation) * (1f - cloud * 0.9f);
-        sunShows = Smooth(-2f, 1f, sunElevation) * (1f - cloud);
-        moonShows = float.Lerp(DayMoon, 1f, Smooth(1f, -5f, sunElevation)) * (1f - cloud) * Smooth(0f, 0.08f, moonLit);
+        stars = MathEx.Smooth(-4f, -12f, sunElevation) * (1f - cloud * 0.9f);
+        sunShows = MathEx.Smooth(-2f, 1f, sunElevation) * (1f - cloud);
+        moonShows = float.Lerp(DayMoon, 1f, MathEx.Smooth(1f, -5f, sunElevation)) * (1f - cloud) * MathEx.Smooth(0f, 0.08f, moonLit);
     }
 
     // The drifting clouds this frame: how much of the sky they cover, how far they've drifted, and where the garden's
@@ -208,10 +208,4 @@ public class HorizonSky
     }
 
     private static float Luminance(Vector3 c) => Vector3.Dot(c, new Vector3(0.299f, 0.587f, 0.114f));
-
-    private static float Smooth(float from, float to, float value)
-    {
-        float t = Math.Clamp((value - from) / (to - from), 0f, 1f);
-        return t * t * (3f - 2f * t);
-    }
 }

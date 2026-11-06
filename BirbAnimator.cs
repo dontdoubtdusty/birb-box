@@ -142,7 +142,7 @@ public class BirbAnimator
 
         MotionStyle style = bird.Shape.Style;
         BirbMotion target = PoseMotion(a.Pose, a.Clock, bird.HopPhase, style);
-        a.Shown = BirbMotion.Lerp(a.From, target, Smooth(a.Blend));
+        a.Shown = BirbMotion.Lerp(a.From, target, MathEx.Smooth(a.Blend));
 
         BirbMotion shown = a.Shown;
         if (a.FlickTimer > 0f)
@@ -291,8 +291,8 @@ public class BirbAnimator
     // 0 to 1 over the first `rise` share of t, holds at 1, back to 0 over the last `fall` share. Eased both ways.
     private static float Envelope(float t, float rise, float fall)
     {
-        if (t < rise) return Smooth(t / rise);
-        if (t > 1f - fall) return Smooth((1f - t) / fall);
+        if (t < rise) return MathEx.Smooth(t / rise);
+        if (t > 1f - fall) return MathEx.Smooth((1f - t) / fall);
         return 1f;
     }
 
@@ -424,7 +424,7 @@ public class BirbAnimator
     {
         const float SnapShare = 0.25f;    // share of each step spent snapping forward
         float t = BirdMover.HopProgress(phase);
-        if (t < SnapShare) return float.Lerp(-1f, 1f, Smooth(t / SnapShare));
+        if (t < SnapShare) return float.Lerp(-1f, 1f, MathEx.Smooth(t / SnapShare));
         return float.Lerp(1f, -1f, (t - SnapShare) / (1f - SnapShare));
     }
 
@@ -435,7 +435,7 @@ public class BirbAnimator
         float steps = time / lookStep;
         float n = MathF.Floor(steps);
         float secondsIn = (steps - n) * lookStep;
-        float t = Smooth(MathF.Min(1f, secondsIn / 0.15f));
+        float t = MathEx.Smooth(MathF.Min(1f, secondsIn / 0.15f));
         return float.Lerp(Random01(n - 1f + seed), Random01(n + seed), t) * 2f - 1f;
     }
 
@@ -496,9 +496,6 @@ public class BirbAnimator
     private static Matrix4x4 TurnY(float degrees) => Raymath.MatrixRotateY(degrees * Raylib.DEG2RAD);
     private static Matrix4x4 TurnZ(float degrees) => Raymath.MatrixRotateZ(degrees * Raylib.DEG2RAD);
     private static Matrix4x4 Then(Matrix4x4 first, Matrix4x4 second) => Raymath.MatrixMultiply(first, second);
-
-    // Eases 0..1 so motion starts and stops gently.
-    private static float Smooth(float t) => t * t * (3f - 2f * t);
 
     // The same "random" 0..1 number every time for the same n, so a look direction holds still.
     private static float Random01(float n)

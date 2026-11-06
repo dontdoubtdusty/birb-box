@@ -71,7 +71,7 @@ public class Feather : Entity
         if (Position.Y > Terrain.HeightAt(Position) + RestHeight || velocity.Y > 0f) return;
 
         // A feather over the water or a rock ends up on the shore or beside it
-        Vector3 rested = Pool.PushOut(Rock.PushOut(new Vector3(Position.X, 0f, Position.Z), Radius), Radius);
+        Vector3 rested = Obstacles.PushOut(new Vector3(Position.X, 0f, Position.Z), Radius, Radius);
         Position = Terrain.OnGround(rested, RestHeight);
         velocity = Vector3.Zero;
         Tilt = 0f;

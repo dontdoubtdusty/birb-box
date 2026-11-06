@@ -73,16 +73,13 @@ public class ViewWindow
     public float FogFade(Vector3 boxPos)
     {
         float side = Math.Clamp((EdgeAmount(boxPos.X, boxPos.Z, HalfWidth) - FogStart) / (1f - FogStart), 0f, 1f);
-        float roomFade = 1f - Smooth(side);
+        float roomFade = 1f - MathEx.Smooth(side);
 
         float pastX = MathF.Max(MathF.Abs(boxPos.X) - HalfWidth, 0f), pastZ = MathF.Max(MathF.Abs(boxPos.Z) - HalfWidth, 0f);
         float outside = Math.Clamp(MathF.Sqrt(pastX * pastX + pastZ * pastZ) / (HalfWidth * ObserverMargin), 0f, 1f);
-        float observerFade = 1f - Smooth(outside);
+        float observerFade = 1f - MathEx.Smooth(outside);
         return roomFade + (observerFade - roomFade) * Immersion;
     }
-
-    // Eases 0..1 in and out (smoothstep, as in the shader).
-    private static float Smooth(float t) => t * t * (3f - 2f * t);
 
     // Is this world position inside the cube (plus an optional margin, in world units)?
     public bool Contains(Vector3 worldPos, float margin = 0f)

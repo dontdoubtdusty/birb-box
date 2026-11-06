@@ -83,7 +83,7 @@ public partial class BirdMover
         if (bird.IsFlying)
         {
             Vector2 back = -HeadingVector(bird.Heading) * 0.5f;
-            landingSpot ??= GroundedAt(Pool.PushOut(Rock.PushOut(new Vector3(bird.Position.X + back.X, 0f, bird.Position.Z + back.Y), RockRoom), PoolRoom));
+            landingSpot ??= GroundedAt(Obstacles.PushOut(new Vector3(bird.Position.X + back.X, 0f, bird.Position.Z + back.Y), RockRoom, PoolRoom));
             if (FlyToward(landingSpot.Value, dt)) landingSpot = null;
             return;
         }
@@ -565,7 +565,7 @@ public partial class BirdMover
 
         Vector2 dir = HeadingVector(bird.Heading);
         Vector2 flat = rock.Flat + dir * (rock.Radius + 0.35f);
-        landingSpot = GroundedAt(Pool.PushOut(Rock.PushOut(new Vector3(flat.X, 0f, flat.Y), RockRoom), PoolRoom));
+        landingSpot = GroundedAt(Obstacles.PushOut(new Vector3(flat.X, 0f, flat.Y), RockRoom, PoolRoom));
         if (!bird.IsFlying) landingSpot = null;    // never got off the ground
     }
 

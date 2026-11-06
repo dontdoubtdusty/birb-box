@@ -86,20 +86,18 @@ public class Puddles
         }
         foreach (Feeder feeder in world.GetAllEntities<Feeder>())
         {
-            if (Flat(feeder.Position - spot) < size + 0.8f) return false;
+            if (MathEx.FlatLength(feeder.Position - spot) < size + 0.8f) return false;
         }
         foreach (Sprout sprout in world.GetAllEntities<Sprout>())
         {
-            if (Flat(sprout.Position - spot) < size + 0.4f) return false;
+            if (MathEx.FlatLength(sprout.Position - spot) < size + 0.4f) return false;
         }
         foreach (Food food in world.GetAllEntities<Food>())
         {
-            if (food.Feeder == null && food.Plant == null && Flat(food.Position - spot) < size + food.HeapRadius + 0.1f) return false;
+            if (food.Feeder == null && food.Plant == null && MathEx.FlatLength(food.Position - spot) < size + food.HeapRadius + 0.1f) return false;
         }
         return true;
     }
-
-    private static float Flat(Vector3 v) => MathF.Sqrt(v.X * v.X + v.Z * v.Z);
 
     // The puddle nearest a spot within reach whose water is at least this full, or null.
     public Puddle? Nearest(Vector3 pos, float reach, float minFill)

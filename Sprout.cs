@@ -54,17 +54,11 @@ public class Sprout : Entity
     // ---------------- STAGES ----------------
 
     public float Life => Math.Clamp(Age / Lifespan, 0f, 1f);       // 0 just sprouted, 1 gone
-    public float Growth => Smooth(Life / GrowShare);                // 0 a nub, 1 fully grown
-    public float Ripeness => Smooth((Life - GrowShare) / RipenShare);    // 0 no heads yet, 1 heads full-sized and colored
-    public float Withering => Smooth((Life - (1f - DieShare)) / DieShare);    // 0 green, 1 brown and sunk away
+    public float Growth => MathEx.Smooth(0f, 1f, Life / GrowShare);                // 0 a nub, 1 fully grown
+    public float Ripeness => MathEx.Smooth(0f, 1f, (Life - GrowShare) / RipenShare);    // 0 no heads yet, 1 heads full-sized and colored
+    public float Withering => MathEx.Smooth(0f, 1f, (Life - (1f - DieShare)) / DieShare);    // 0 green, 1 brown and sunk away
     public float HeadFill => Math.Clamp(Heads.Total / HeadCapacity, 0f, 1f);  // how much seed is left on the heads
     public bool IsRipe => Life >= GrowShare && Life < 1f - DieShare;
-
-    private static float Smooth(float t)
-    {
-        t = Math.Clamp(t, 0f, 1f);
-        return t * t * (3f - 2f * t);
-    }
 
     // Grows older; while ripe it fills its heads and sheds now and then; it drops what's left as it starts to
     // die back, and is gone at the end of its life.
@@ -126,7 +120,7 @@ public class Sprout : Entity
 
         float angle = Rng.Range(0f, MathF.Tau);
         float distance = Rng.Range(0.15f, ShedReach);
-        Vector3 spot = Pool.PushOut(Rock.PushOut(Position + new Vector3(MathF.Cos(angle) * distance, 0f, MathF.Sin(angle) * distance)));
+        Vector3 spot = Obstacles.PushOut(Position + new Vector3(MathF.Cos(angle) * distance, 0f, MathF.Sin(angle) * distance));
         spot.Y = Terrain.HeightAt(spot) + ShedHeight;
         World.Instance.AddEntity(new Food(spot, new() { [Seed] = taken }) { LandOn = FoodSpawner.FeederBelow(spot) });
         return true;

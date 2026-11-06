@@ -34,7 +34,7 @@ public class Windfall : StoryEvent
         for (int i = 0; i < piles; i++)
         {
             Vector3 spot = ctx.Focus + new Vector3(Rng.Range(-Spread, Spread), 0f, Rng.Range(-Spread, Spread));
-            spot = Pool.PushOut(Rock.PushOut(World.Instance.PullInside(spot, 2f)));
+            spot = Obstacles.PushOut(World.Instance.PullInside(spot, 2f));
             toDrop.Add((spot, kinds[i % kinds.Count]));
         }
         dropTimer = 0f;

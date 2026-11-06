@@ -163,7 +163,7 @@ public class HawkShadow : StoryEvent
 
         if (alarmName == null)
         {
-            Bird? watchman = birds.FirstOrDefault(bird => bird.Personality.Contains(Trait.Watchman) && Flat(bird.Position, shadow) <= WatchmanReach);
+            Bird? watchman = birds.FirstOrDefault(bird => bird.Personality.Contains(Trait.Watchman) && MathEx.FlatDistance(bird.Position, shadow) <= WatchmanReach);
             if (watchman != null) RaiseAlarm(watchman);
         }
 
@@ -171,8 +171,8 @@ public class HawkShadow : StoryEvent
         foreach (Bird bird in birds)
         {
             if (reacted.Contains(bird.EntityID)) continue;
-            bool near = Flat(bird.Position, shadow) <= reach;
-            bool heardAlarm = alarmName != null && Flat(bird.Position, alarmSpot) <= Reach;
+            bool near = MathEx.FlatDistance(bird.Position, shadow) <= reach;
+            bool heardAlarm = alarmName != null && MathEx.FlatDistance(bird.Position, alarmSpot) <= Reach;
             if (near || heardAlarm) ReactOne(bird);
         }
     }
@@ -259,6 +259,4 @@ public class HawkShadow : StoryEvent
         float outside = MathF.Max(MathF.Abs(at.X), MathF.Abs(at.Y)) - World.Instance.HalfSize;
         return Math.Clamp(1f - outside / FadeReach, 0f, 1f);
     }
-
-    private static float Flat(Vector3 a, Vector3 b) => Vector2.Distance(new Vector2(a.X, a.Z), new Vector2(b.X, b.Z));
 }

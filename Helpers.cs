@@ -73,6 +73,26 @@ public static class Rng
     }
 }
 
+// Small math pieces used across the game.
+public static class MathEx
+{
+    // Eases 0..1 so motion starts and stops gently (smoothstep). Not clamped: pass 0..1.
+    public static float Smooth(float t) => t * t * (3f - 2f * t);
+
+    // 0 below from, 1 above to, eased in between (like smoothstep in the shaders).
+    public static float Smooth(float from, float to, float value)
+    {
+        float t = Math.Clamp((value - from) / (to - from), 0f, 1f);
+        return t * t * (3f - 2f * t);
+    }
+
+    // Distance between two points along the ground, ignoring height.
+    public static float FlatDistance(Vector3 a, Vector3 b) => Vector2.Distance(new Vector2(a.X, a.Z), new Vector2(b.X, b.Z));
+
+    // Length of a vector along the ground, ignoring height.
+    public static float FlatLength(Vector3 v) => MathF.Sqrt(v.X * v.X + v.Z * v.Z);
+}
+
 // Files in the resources folder, found next to the .exe so the game starts from any folder or shortcut.
 public static class Assets
 {

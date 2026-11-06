@@ -467,7 +467,7 @@ public class ChatMessages
             {
                 float life = (sleepClock / SleepCycle + offset + (float)i / SleepZs) % 1f;    // 0 as a z appears, 1 as it's gone
                 Vector3 local = start + new Vector3(0, life * SleepRise * grow, 0);
-                float alpha = SleepAlpha * fade * Smooth(0f, 0.15f, life) * (1f - Smooth(0.5f, 0.95f, life)) * view.FogFade(local);
+                float alpha = SleepAlpha * fade * MathEx.Smooth(0f, 0.15f, life) * (1f - MathEx.Smooth(0.5f, 0.95f, life)) * view.FogFade(local);
                 if (alpha <= 0.01f) continue;
 
                 float sideways = (life * SleepDrift + MathF.Sin(life * MathF.Tau) * SleepWobble) * grow;
@@ -476,13 +476,6 @@ public class ChatMessages
                 DrawFacingQuad(zTexture.Texture, center, right * half, up * half, alpha, tint);
             }
         }
-    }
-
-    // 0 below a, 1 above b, eased in between (like smoothstep in the shaders).
-    private static float Smooth(float a, float b, float x)
-    {
-        float t = Math.Clamp((x - a) / (b - a), 0f, 1f);
-        return t * t * (3f - 2f * t);
     }
 
     // How much bigger a label is drawn at this distance from the camera: 1 up close, growing as the

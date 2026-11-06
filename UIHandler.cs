@@ -409,22 +409,19 @@ public class UIHandler
         if (bird.TargetFood is Food food)
         {
             string where = food.Feeder != null ? $"the {food.Feeder.Info.Name}" : food.Plant != null ? "a sprout" : "a pile";
-            ImGui.Text($"Food: {where} of {Seeds.Get(food.MainSeed).Name}, {Flat(here, food.Position):0.0} away, {food.Total:0.0} seed left");
+            ImGui.Text($"Food: {where} of {Seeds.Get(food.MainSeed).Name}, {MathEx.FlatDistance(here, food.Position):0.0} away, {food.Total:0.0} seed left");
         }
         else ImGui.TextDisabled("Food: none picked");
 
         if (bird.IsFlying || bird.State is BirdState.Arriving or BirdState.Leaving)
         {
             Vector3 to = bird.FlightTarget;
-            ImGui.Text($"Flying to {to.X:0.0}, {to.Z:0.0} ({Flat(here, to):0.0} away)");
+            ImGui.Text($"Flying to {to.X:0.0}, {to.Z:0.0} ({MathEx.FlatDistance(here, to):0.0} away)");
         }
         if (bird.Mover.WaterActivity is string water) ImGui.Text($"Water: {water}{(bird.Mover.IsBathTrip ? " (bath trip)" : "")}");
         if (bird.Mover.PerchRock != null) ImGui.Text("Perched on a rock");
-        ImGui.Text(bird.HasHome ? $"Home {Flat(here, bird.Home):0.0} away" : "No home patch yet");
+        ImGui.Text(bird.HasHome ? $"Home {MathEx.FlatDistance(here, bird.Home):0.0} away" : "No home patch yet");
     }
-
-    // Distance across the ground, ignoring height.
-    private static float Flat(Vector3 a, Vector3 b) => Vector2.Distance(new Vector2(a.X, a.Z), new Vector2(b.X, b.Z));
 
     // The raw numbers a bird's traits set (dev): personal space, perching, appetite, roaming, voice.
     private static string NatureNumbers(TraitEffects n)
@@ -463,7 +460,7 @@ public class UIHandler
 
     // ---------------- STYLE ----------------
 
-    // The panels use Chakra Petch, a squared-off sci-fi font. The in-box text stays Quicksand (see UiText).
+    // The panels use Chakra Petch, a squared-off sci-fi font. All other in-game text is Arkhane (see UiText).
     public static void LoadFont()
     {
         ImGui.GetIO().Fonts.AddFontFromFileTTF(Assets.PathTo("fonts/ChakraPetch-Medium.ttf"), 16f);

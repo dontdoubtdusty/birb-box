@@ -180,7 +180,7 @@ public class BirdSpawner
     // fromAngle: which side it comes in from (radians around the spot); random if not given. A flock shares one.
     public static void FlyDownTo(Bird bird, Vector3 landing, float? fromAngle = null)
     {
-        landing = Pool.PushOut(Rock.PushOut(landing, 0.3f), 0.4f);
+        landing = Obstacles.PushOut(landing, 0.3f, 0.4f);
         landing.Y = bird.StandY(landing.X, landing.Z);
 
         float angle = fromAngle ?? Rng.Range(0f, MathF.PI * 2f);

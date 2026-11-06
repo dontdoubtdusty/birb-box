@@ -21,7 +21,7 @@ Line counts are rough (refreshed Nov 1 for the larger files; store files Nov 3; 
 | `SaveGame.cs` * | 445 | The save file (`birbcube-save.json`): autosave every 2 min and on quit, load on start, New world. On load: pulls things inside the world, off rocks and out of the pool; places a pool and rocks for saves that lack them; rolls missing needs; drops birds of species whose file is gone (`KeepKnownSpecies`). A bird at the water steps onto the shore. Holds the plain `...Save` classes, each with `ToSave` / `FromSave`. Species are saved by key as text; `SeenSpecies` (plus the old `FrostcrestSeen`, still written). Feather counts (by species key, zeros included) and loose feathers (`FeatherSave`) are saved; an old save's coins are not read. The store's restock timers are not saved (old saves' `RestockTimers` are ignored). The Storyteller's timers (`StorySave`, not a running event; `Storyteller.AfterLoad` sends a saved flock off); each bird's `Records` and `Flock` flag. |
 | `Settings.cs` | 134 | The settings file (`birbcube-settings.json`, separate so New world keeps it): volumes, fullscreen, name tags, hand color, hologram quality, and the tools panel's numbers (`SimTuning`, the hologram look, the radio dial). Saved when the Esc menu closes and on quit. Sim speed isn't saved. |
 | `SimTuning.cs` | 97 | Every simulation number the tools panel can change: hunger, thirst and tiring, arrivals, max birds, lifespans, losing interest, regulars, calls, perching, home radius, feather drops and life, natural drops, max food, spoil, wear and regrow, day and night, weather, the pool, sprouts, the Storyteller's pace (`StoryPace`, quiet and rest minutes, cooldowns). `Now` is live (saved), `Defaults` as written, `Clamp` keeps them sane. Traits multiply some per bird. |
-| `Helpers.cs` | 99 | `Palette` (colors), `Rng`, `Assets` (finds files in resources and the project folder). |
+| `Helpers.cs` | 119 | `Palette` (colors), `Rng`, `MathEx` (`Smooth`: smoothstep, plain or between two edges; `FlatDistance`, `FlatLength`: along the ground, ignoring height), `Assets` (finds files in resources and the project folder). |
 | `Enums.cs` | 31 | Bird states and poses (incl. `Roost`, used for naps too, and `Sip`, `Bathe`, `ShakeOff`). |
 | `EventLog.cs` | 33 | The Bird Log's lines (saved with the world), stamped "[Day 3 18:42]", up to 120. Start-up lines survive the save's log loading. |
 | `DrawStats.cs` | 16 | Counts model draws per frame for the tools panel. |
@@ -40,6 +40,7 @@ Line counts are rough (refreshed Nov 1 for the larger files; store files Nov 3; 
 | `Terrain.cs` | 200 | The ground's shape: a height grid (0.5 spacing) rolled per new world from a seed, saved as seed and height (`TerrainSave`), levelled around the pool (`FlattenAround`). `HeightAt`, `NormalAt`, `SlopeAt`, `DownhillAt`, `OnGround`, `RayHit` (mouse clicks on slopes), `Version` (the floor mesh rebuilds when it changes). Flat (height 0) for old saves. Every ground thing stands on `HeightAt`; birds use `Bird.StandY`. |
 | `World.cs` | 94 | Holds every entity; world size (`HalfSize` 28, so 56x56); queued adds and removes; cached per-type lists; `Clear`; random ground points; `PullInside`. |
 | `Entity.cs` | 18 | Base class: an ID and a world position. |
+| `Obstacles.cs` | 13 | `PushOut`: moves a ground spot off rocks, then out of the pool, each with its own margin. Every "keep it clear" caller goes through it; the stream joins here. |
 | `Rock.cs` | 143 | A rock: footprint, low dome (`HeightAt`). `PlaceNew` per new world (2 big, 3-5 small, clear of feeders and the pool), saved. `At` and `PushOut` keep things off rocks. Drawn in `WorldDrawer`. |
 | `Pool.cs` | 259 | One pond per world: up to 3 circles blended by a smooth minimum, placed before the rocks, saved. `DistanceAt` (below 0 in the water; `waterDistance` in `hologram.fs` is the same math), `OutwardAt`, `MoveTo`, static `Current`, `Distance`, `IsWater`, `PushOut`. Ripple rings and splash droplets for drawing. |
 | `Puddles.cs` | 133 | Rain puddles (owned by `Weather`): up to 6 form on worn dirt (`GroundWear.At`) while it rains, clear of everything else; fill and dry with the ground. `Nearest` for sipping birds. Saved. Drawn by the floor shader. |
@@ -149,7 +150,7 @@ Line counts are rough (refreshed Nov 1 for the larger files; store files Nov 3; 
 | `PauseMenu.cs` | 371 | The Esc menu: Resume, Designer, Fullscreen, Settings (volumes, hand color, Groening yellow, fullscreen type, name tags, quality), Controls, New world, Quit. Saves settings on close. |
 | `UIHandler.cs` * | 433 | The ImGui tools panel (Tab): speed numbers, `SimTuning` sliders by section (Birds, Food, Feathers, lifetimes, behavior, World, Water), Day and night, Weather, Storyteller (`DrawStoryTools`: running event, next beat, cooldowns, a fire button per event, pace sliders), trait re-roll, Cheats (incl. "+10 of each feather"), Hologram look, the bird tracker (hover for needs and trait numbers; double-click to follow), log, controls list (`ControlLines`). Off-default sliders tinted, reset on right-click. |
 | `UiDraw.cs` | 38 | Shared panel and button drawing. |
-| `UiText.cs` | 50 | Non-ImGui text in Quicksand, one font load per size. |
+| `UiText.cs` | 140 | Non-ImGui text. Sizes above `SmallMaxSize` (18) are Arkhane, drawn from a glyph atlas (`resources/fonts/arkhane.png` + `arkhane.txt`) scaled to any size, with mipmaps (`CapRatio`, `CapTop`, `LetterGap`, `SpaceWidth` tune it; unknown characters show as "?"). Sizes at or below it are Chakra Petch (one font load per size; `SmallSizeScale`, `SmallLift`). |
 
 ## Sound
 
@@ -173,6 +174,13 @@ Run only in Claude's Linux workspace; `BirdsApp.csproj` leaves `tools\` out of t
 | `tools/ShotDriver/MemberPath.cs` | 130 | `set`, `call`, `print` by dotted path, public or private. |
 | `tools/ShotDriver/README.md` | - | Staging list, steps, commands, fixes. Keep its command table in step with `ShotCommands.cs`. |
 | `tools/ShotDriver/scripts/tour.txt` | - | A look at most of the game; also the driver's smoke test (about 30 s). |
+
+## Font tools (run on your PC, not part of the game)
+
+| File | What it does |
+|---|---|
+| `tools/Vectorize/` | Turns a two-tone raster (the Arkhane specimen jpg) into a smooth SVG. `dotnet run --project tools/Vectorize -- <in> <out.svg>`. |
+| `tools/FontAtlas/` | Cuts the specimen SVG into glyphs (rows, then glyphs by overlapping width) and writes the atlas and glyph list. `dotnet run --project tools/FontAtlas -- claude/arkhane.svg resources/fonts`; it also writes `arkhane-preview.png` (dark background; delete it). |
 
 ## The Jello board (task board, not part of the game)
 
@@ -208,13 +216,15 @@ Runs on your PC: `Jello Board.bat` starts the server and opens http://localhost:
 | `resources/birbbox_logo_black.png` / `_white.png` | The logo glyph (old names kept on purpose). |
 | `resources/sounds/` | Sound effects; most from `tools/make_sounds.py`, `rocker_click.wav` and `power_click.wav` yours. Numbered files (`sip_N`, `splash_N`, `call_<key>_N`) are all loaded, so recordings can replace or add to them. `feather_land.wav` and `feather_pickup.wav` are placeholders. `coin_land.wav` and `coin_pickup.wav` are unused but kept on purpose, for a later use. |
 | `resources/sounds/ambience/` | The forest ambience, cut from your recording: `forest_day_bed.ogg` (2:25 stereo loop) and `forest_day_1.wav` ... `_9.wav` (the one-shots; any count, numbered without gaps). A night set would sit beside them (`forest_night_*`). |
-| `resources/fonts/` | Quicksand and Chakra Petch, with OFL licenses. |
+| `resources/fonts/` | `arkhane.png` / `arkhane.txt`: the Arkhane glyph atlas (ASCII 33-126; made by `tools/FontAtlas` from `claude/arkhane.svg`; lowercase n-z reuse the capitals' shapes, as in the specimen). Chakra Petch (ImGui panels and small in-game text) with its OFL license. Quicksand is no longer used (kept; delete when you like). |
+| `claude/arkhane.svg` / `.jpg` | The Arkhane specimen and its vectorization (`tools/Vectorize`), the source of the atlas. |
 | `resources/birbs/` | Designer saves, each naming its species by key. Give eye parts the Eye role so they blink. |
 | `resources/species/` | Designer species, one `<Key>.json` each. Deleting one removes the species (its birds leave on next load). A Release copy has its own. |
 | `BirdsApp.csproj` | Raylib-cs 8.0.0 (raylib 6.0), ImGui, NAudio.Wasapi 2.2.1 and NAudio.Vorbis 1.5.0 (kept on 2.x on purpose). Builds `BirbCube.exe`; copies `resources/`; leaves `tools\` out. |
 | `Build Birb Cube.bat` | Release copy in a "Birb Cube" folder next to the project, with Desktop and Start menu shortcuts. |
 | `Make Release Zip.bat` | Self-contained win-x64 release zip in "Birb Cube Release" next to the project; reads the version from `GameEngine.cs`; never touches your play folder or save. |
-| `README.md` | How to run it. |
+| `README.md` | For players: what it is and how to install it. Kept short on purpose. |
+| `AGENTS.md` | For AI agents only: stack, build commands, folder notes; points to `CLAUDE.md`. |
 | `CLAUDE.md` | Working rules and a short architecture guide for Claude Code. |
 | `claude/instructions-for-claude.md` | Your notes and requests for Claude (currently notes on RimWorld's storyteller). Read when you write "Instructions:". |
 | `screenshots/` | Four Oct 19 screenshots (tracked). New ones are `birbcube_<date>.png`. |

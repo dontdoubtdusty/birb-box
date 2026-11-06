@@ -224,13 +224,13 @@ public class WorldClock
     {
         Blend(elevation, out Vector3 ambient, out Vector3 direct, out Vector3 shade, out float golden);
 
-        float day = Smooth(FirstGlowAngle, -2f, elevation);
+        float day = MathEx.Smooth(FirstGlowAngle, -2f, elevation);
         Vector3 moonlight = Vector3.Lerp(NewMoonTint * NewMoonLight, new Vector3(FullMoonLight), moonLit);
         Vector3 nightScale = Vector3.Lerp(moonlight * SimTuning.Now.NightBrightness, Vector3.One, day);
 
         // Toward the sun, but never lower than LowSunLift; north is -Z, east is +X
         Vector3 toSun = Toward(MathF.Max(elevation, LowSunLift), azimuth);
-        float sunShare = Smooth(FirstGlowAngle, 0f, elevation);    // the light swings slowly from the moon's side to the sun's
+        float sunShare = MathEx.Smooth(FirstGlowAngle, 0f, elevation);    // the light swings slowly from the moon's side to the sun's
         Vector3 direction = Vector3.Normalize(Vector3.Lerp(MoonDirection, toSun, sunShare));
 
         return new DayLight
@@ -238,7 +238,7 @@ public class WorldClock
             Ambient = ambient * nightScale,
             Direct = direct * nightScale,
             Direction = direction,
-            Darkness = 1f - Smooth(FirstGlowAngle, 2f, elevation),
+            Darkness = 1f - MathEx.Smooth(FirstGlowAngle, 2f, elevation),
             Shade = shade,
             Golden = golden,
         };
@@ -276,12 +276,6 @@ public class WorldClock
         golden = float.Lerp(below.Golden, above.Golden, t);
     }
 
-    private static float Smooth(float from, float to, float value)
-    {
-        float t = Math.Clamp((value - from) / (to - from), 0f, 1f);
-        return t * t * (3f - 2f * t);
-    }
-
     // ---------------- WHEN BIRDS ARE ABOUT ----------------
 
     // Whether a bird whose hours are moved by this much (Early Risers earlier) should be roosting now.
@@ -305,8 +299,8 @@ public class WorldClock
     {
         get
         {
-            float morning = Smooth(Sunrise - WakeBeforeSunrise, Sunrise, Hour);
-            float evening = 1f - Smooth(Sunset - QuietBeforeSunset, Sunset + RoostAfterSunset, Hour);
+            float morning = MathEx.Smooth(Sunrise - WakeBeforeSunrise, Sunrise, Hour);
+            float evening = 1f - MathEx.Smooth(Sunset - QuietBeforeSunset, Sunset + RoostAfterSunset, Hour);
             return MathF.Min(morning, evening);
         }
     }

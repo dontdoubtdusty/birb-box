@@ -206,8 +206,8 @@ public class HoloCamera
         InsidePose(out Vector3 holoPosition, out Vector3 holoTarget);
 
         float dive = MathF.Pow(viewBlend, DiveCurve);
-        Growth = Smooth(dive);
-        Immersion = Smooth(Math.Clamp((Growth - ImmerseFrom) / (1f - ImmerseFrom), 0f, 1f));
+        Growth = MathEx.Smooth(dive);
+        Immersion = MathEx.Smooth(Math.Clamp((Growth - ImmerseFrom) / (1f - ImmerseFrom), 0f, 1f));
         Camera.Position = Vector3.Lerp(roomPosition, holoPosition, Growth);
         Camera.Target = Vector3.Lerp(roomTarget, holoTarget, Growth);
         Camera.FovY = BaseFov + FovPush * MathF.Sin(MathF.PI * Growth);
@@ -245,7 +245,4 @@ public class HoloCamera
         position = aim + offset;
         target = aim;
     }
-
-    // Eases 0..1 in and out (smoothstep).
-    private static float Smooth(float t) => t * t * (3f - 2f * t);
 }

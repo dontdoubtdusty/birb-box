@@ -83,7 +83,7 @@ public class SkyOrbs
 
         // The sun: warmer near the walls (low in the sky)
         sunSpot = OnWheel(sunAngle, view);
-        float low = 1f - Smooth(MathF.Sin(CrossAngle), MathF.Sin(CrossAngle) + 0.3f, MathF.Sin(sunAngle));
+        float low = 1f - MathEx.Smooth(MathF.Sin(CrossAngle), MathF.Sin(CrossAngle) + 0.3f, MathF.Sin(sunAngle));
         sunColor = TowardHolo(Vector3.Lerp(SunHigh, SunLow, low), holoColor);
         sunHaloColor = sunColor * SunHalo;
         sunShows = InsideShare(sunSpot, sunAngle, view) * clear;
@@ -92,9 +92,9 @@ public class SkyOrbs
         moonSpot = OnWheel(moonAngle, view);
         moonLit = clock.MoonLit;
         waxing = clock.MoonPhase < 0.5f;
-        earthshine = float.Lerp(NewMoonGlow, Earthshine, Smooth(0f, 0.3f, moonLit));
+        earthshine = float.Lerp(NewMoonGlow, Earthshine, MathEx.Smooth(0f, 0.3f, moonLit));
         moonColor = TowardHolo(MoonColor, holoColor);
-        moonHaloColor = moonColor * MoonHalo * Smooth(0f, 0.3f, moonLit);
+        moonHaloColor = moonColor * MoonHalo * MathEx.Smooth(0f, 0.3f, moonLit);
         moonShows = InsideShare(moonSpot, moonAngle, view) * clear;
     }
 
@@ -109,8 +109,8 @@ public class SkyOrbs
     // (where it passes under the floor, in case that ever comes inside the walls).
     private static float InsideShare(Vector3 spot, float angle, ViewWindow view)
     {
-        float wall = 1f - Smooth(view.HalfWidth * (1f - WallFade * 0.5f), view.HalfWidth * (1f + WallFade * 0.5f), MathF.Abs(spot.X));
-        return wall * Smooth(0f, 0.05f, MathF.Sin(angle));
+        float wall = 1f - MathEx.Smooth(view.HalfWidth * (1f - WallFade * 0.5f), view.HalfWidth * (1f + WallFade * 0.5f), MathF.Abs(spot.X));
+        return wall * MathEx.Smooth(0f, 0.05f, MathF.Sin(angle));
     }
 
     // Draws both through the hologram camera (call inside its BeginMode3D). level: how much of them shows overall
@@ -204,10 +204,4 @@ public class SkyOrbs
     }
 
     private static float Luminance(Vector3 c) => Vector3.Dot(c, new Vector3(0.299f, 0.587f, 0.114f));
-
-    private static float Smooth(float from, float to, float value)
-    {
-        float t = Math.Clamp((value - from) / (to - from), 0f, 1f);
-        return t * t * (3f - 2f * t);
-    }
 }
