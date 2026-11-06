@@ -1,0 +1,14 @@
+{
+  "archived": false,
+  "checklist": [],
+  "columnId": "done",
+  "createdAt": 1793549370513,
+  "description": "Home patches, lifespans, regulars who come back, name tags.",
+  "order": 6000,
+  "priority": "Medium",
+  "tags": [
+    "4.53-4.57"
+  ],
+  "title": "Birds that stay",
+  "updatedAt": 1793549370513
+}

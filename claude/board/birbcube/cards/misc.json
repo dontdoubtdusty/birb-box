@@ -1,0 +1,14 @@
+{
+  "archived": false,
+  "checklist": [],
+  "columnId": "done",
+  "createdAt": 1793549370513,
+  "description": "The shop's bulb at night, P / 1 / 2 / 3 / - / + time keys, and tools/ShotDriver for compile checks and screenshots.",
+  "order": 18000,
+  "priority": "Medium",
+  "tags": [
+    "5.00-5.03"
+  ],
+  "title": "Store lamp, time keys, screenshot driver",
+  "updatedAt": 1793549370513
+}

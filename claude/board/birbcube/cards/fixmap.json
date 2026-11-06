@@ -1,0 +1,20 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "fixmap-0",
+      "text": "Reword the Traits row"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793741000000,
+  "description": "In `claude/file-map.md`, the `Traits.cs` row says \"seven-in-one-trait scales rolled rarely\". It should say there are six scales with a single trait each, rolled rarely: Weather, Bathing, Perching, Taste, Loyalty, Giving. Batch it with the next doc rewrite (a doc can only be rewritten whole).",
+  "order": 100,
+  "priority": "Low",
+  "tags": [
+    "Docs"
+  ],
+  "title": "Fix one phrase in the file map's Traits row",
+  "updatedAt": 1793908800000
+}

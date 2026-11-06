@@ -1,0 +1,82 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "v510-0",
+      "text": "Smoke test (qa-plan.md section 3)"
+    },
+    {
+      "completed": true,
+      "id": "v510-1",
+      "text": "The three bars run down on a selected bird"
+    },
+    {
+      "completed": true,
+      "id": "v510-2",
+      "text": "Birds nap in the afternoon (Roost pose, z's) and get up again"
+    },
+    {
+      "completed": true,
+      "id": "v510-3",
+      "text": "A thirsty bird far from the pool flies over and drinks until full; one nearby walks"
+    },
+    {
+      "completed": true,
+      "id": "v510-4",
+      "text": "Thirsty birds sometimes bathe instead"
+    },
+    {
+      "completed": true,
+      "id": "v510-5",
+      "text": "After rain, thirsty birds use a nearer puddle"
+    },
+    {
+      "completed": true,
+      "id": "v510-6",
+      "text": "Night Owls settle or leave in the morning and come back toward dusk"
+    },
+    {
+      "completed": true,
+      "id": "v510-7",
+      "text": "No Night Owl arrives at midday"
+    },
+    {
+      "completed": true,
+      "id": "v510-8",
+      "text": "A Dabbler shows up and bathes far more than it sips"
+    },
+    {
+      "completed": true,
+      "id": "v510-9",
+      "text": "Quit with birds napping and reload: still napping"
+    },
+    {
+      "completed": true,
+      "id": "v510-10",
+      "text": "An old save loads with every bird's needs rolled"
+    },
+    {
+      "completed": true,
+      "id": "v510-11",
+      "text": "The bird card fits on your screen"
+    },
+    {
+      "completed": true,
+      "id": "v510-12",
+      "text": "Commit"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793549370513,
+  "description": "Food, Water and Rest bars on the bird card, afternoon naps, thirsty birds fly or walk to the water, Night Owls sleep by day, and a new Dabbler trait. Session 34. This reverses the Oct 26 and Oct 29 decisions not to have these needs.",
+  "order": 22000,
+  "priority": "High",
+  "tags": [
+    "Simulation",
+    "Needs",
+    "5.10"
+  ],
+  "title": "5.10 Thirst and rest needs",
+  "updatedAt": 1793549866489
+}

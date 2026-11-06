@@ -177,12 +177,13 @@ public class BirdSpawner
     }
 
     // Starts the bird high up and a way off, flying down to land at this spot (moved off any rock and out of the water).
-    private static void FlyDownTo(Bird bird, Vector3 landing)
+    // fromAngle: which side it comes in from (radians around the spot); random if not given. A flock shares one.
+    public static void FlyDownTo(Bird bird, Vector3 landing, float? fromAngle = null)
     {
         landing = Pool.PushOut(Rock.PushOut(landing, 0.3f), 0.4f);
         landing.Y = bird.GroundY;
 
-        float angle = Rng.Range(0f, MathF.PI * 2f);
+        float angle = fromAngle ?? Rng.Range(0f, MathF.PI * 2f);
         Vector3 start = landing + new Vector3(MathF.Sin(angle) * 15f, 0, MathF.Cos(angle) * 15f);
         start.Y = Rng.Range(10f, 13f);
 
@@ -248,6 +249,24 @@ public class BirdSpawner
         regulars.Remove(pick);
         Bird bird = Bird.FromSave(pick);
         bird.StartNewVisit();
+        return bird;
+    }
+
+    // A bird the Hawk's Shadow scared off flies back down near its home, quietly, as part of the same visit.
+    // Nothing happens if it's no longer among the regulars (forgotten, or already back).
+    public Bird? CallBack(string name, string speciesKey)
+    {
+        BirdSave? save = regulars.LastOrDefault(s => s.Name == name && Birds.SameKey(s.Type, speciesKey));
+        if (save == null || Birds.Find(save.Type) is not { CanAppear: true }) return null;
+
+        regulars.Remove(save);
+        Bird bird = Bird.FromSave(save);
+        bird.StartNewVisit(countVisit: false);
+        bird.Quiet = true;
+        bird.State = BirdState.Arriving;
+        Vector3 home = bird.HasHome ? bird.Home : World.Instance.RandomGroundPointNearMiddle();
+        FlyDownTo(bird, World.Instance.PullInside(home + new Vector3(Rng.Range(-2f, 2f), 0f, Rng.Range(-2f, 2f)), 2f));
+        World.Instance.AddEntity(bird);
         return bird;
     }
 

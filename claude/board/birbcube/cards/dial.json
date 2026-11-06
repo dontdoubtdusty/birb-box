@@ -1,0 +1,26 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": false,
+      "id": "dial-0",
+      "text": "The day dial: the FEATHERS window becomes a drum dial (night blue, dawn rose, day gold, dusk amber, sun and moon) past a fixed pointer"
+    },
+    {
+      "completed": false,
+      "id": "dial-1",
+      "text": "Smaller pedestal under the same-size cube"
+    }
+  ],
+  "columnId": "ideas",
+  "createdAt": 1793549370513,
+  "description": "Two jobs on the same band of the pedestal, done in this order: the day dial first, then the smaller pedestal. Design: `vision.md` (The hologram volume). Questions, what each touches, and checks: `next-session-plan.md`, The day dial and Smaller pedestal.",
+  "order": 1000,
+  "priority": "Medium",
+  "tags": [
+    "Pedestal",
+    "UI"
+  ],
+  "title": "Pedestal front: day dial, then a smaller pedestal",
+  "updatedAt": 1794050000000
+}

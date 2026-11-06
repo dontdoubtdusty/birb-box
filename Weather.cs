@@ -13,8 +13,12 @@ public class Weather
 
     // SPELLS (world hours; a world hour is SimTuning.DayMinutes / 24 of sim time)
     private const float RainMinHours = 2f, RainMaxHours = 6f;
-    private const float DrizzleShare = 0.45f;          // share of rain spells that are only drizzle
-    public const float DrizzleStrength = 0.35f;        // how hard drizzle falls (steady rain is 1)
+    // The three rain levels: how hard each falls (Rain eases up to this) and how often a new rain spell rolls it
+    public const float DrizzleStrength = 0.35f;        // Light: Mizzling
+    public const float ShowersStrength = 0.65f;        // Showers
+    public const float DownpourStrength = 1f;          // Downpour
+    private const float DrizzleShare = 0.40f, ShowersShare = 0.35f;    // the rest are downpours
+    private const float DrizzleLongerBy = 1.3f;        // light rain lingers a little longer
     private const float FirstDryMin = 3f, FirstDryMax = 10f;    // a new world's first dry spell, so rain comes on the first day
     // Average dry hours between rains by season (spring showers, dry summers); each spell is 0.5 to 1.5 times this,
     // then divided by SimTuning.RainOften
@@ -51,7 +55,7 @@ public class Weather
 
     // STATE (saved)
     public bool Raining { get; private set; }           // in a rain spell (the rain itself may still be building up)
-    public float Strength { get; private set; } = 1f;   // this spell's rain: DrizzleStrength or 1
+    public float Strength { get; private set; } = 1f;   // this spell's rain: DrizzleStrength, ShowersStrength or DownpourStrength
     public float HoursLeft { get; private set; }        // world hours left of this rain or dry spell
     public float Cloud { get; private set; }            // 0 clear sky, 1 full cloud
     public float Rain { get; private set; }             // how hard it's raining right now: 0 none, 1 steady rain
@@ -98,7 +102,7 @@ public class Weather
             if (HoursLeft <= 0f)
             {
                 if (Raining) StartDrySpell(clock.Season);
-                else StartRainSpell(Rng.Chance(DrizzleShare) ? DrizzleStrength : 1f);
+                else StartRainSpell(RollStrength());
             }
         }
 
@@ -123,8 +127,16 @@ public class Weather
     {
         Raining = true;
         Strength = strength;
-        HoursLeft = Rng.Range(RainMinHours, RainMaxHours) * (strength < 1f ? 1.3f : 1f);    // drizzle lingers a little longer
+        HoursLeft = Rng.Range(RainMinHours, RainMaxHours) * (strength <= DrizzleStrength ? DrizzleLongerBy : 1f);
         windAngle += Rng.Range(-WindTurn, WindTurn);
+    }
+
+    // Picks how hard a new rain spell falls: light, showers or downpour.
+    private static float RollStrength()
+    {
+        float roll = Rng.Range(0f, 1f);
+        if (roll < DrizzleShare) return DrizzleStrength;
+        return roll < DrizzleShare + ShowersShare ? ShowersStrength : DownpourStrength;
     }
 
     private void StartDrySpell(Season season)
@@ -157,14 +169,17 @@ public class Weather
     // How many times as fast seed on the ground spoils right now (SimTuning.RainSpoil in steady rain).
     public float SpoilFactor => 1f + (SimTuning.Now.RainSpoil - 1f) * Rain;
 
-    // The word for the HUD: Fair, Clouding over, Drizzle, Rain, Clearing.
+    // This spell's rain level: 1 light, 2 showers, 3 downpour (0 in a dry spell). It stays put as the rain builds or eases.
+    public int Level => !Raining ? 0 : Strength <= DrizzleStrength + 0.1f ? 1 : Strength <= ShowersStrength + 0.1f ? 2 : 3;
+
+    // The word for the HUD, in the house style: Fair skies, Gathering, Mizzling, Showers, Downpour, Mending.
     public string Word
     {
         get
         {
-            if (Rain > 0.05f) return Raining ? (Strength < 1f ? "Drizzle" : "Rain") : "Clearing";
-            if (Raining) return "Clouding over";
-            return Cloud > 0.1f ? "Clearing" : "Fair";
+            if (Rain > 0.05f) return Raining ? (Level == 1 ? "Mizzling" : Level == 2 ? "Showers" : "Downpour") : "Mending";
+            if (Raining) return "Gathering";
+            return Cloud > 0.1f ? "Mending" : "Fair skies";
         }
     }
 

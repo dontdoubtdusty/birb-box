@@ -8,8 +8,11 @@ using System.Numerics;
 // It also keeps the ripples and splash droplets, which only the drawing reads.
 public class Pool : Entity
 {
+    // The pool's house-style name, as shown on the bird card and in the log ("the Wellspring" mid-sentence).
+    public const string HouseName = "Wellspring";
+
     // TUNING
-    public const int MaxLobes = 3;                 // the shader has room for this many circles
+    public const int MaxLobes = 3;                // the shader has room for this many circles
     private const float Blend = 0.9f;              // how softly the lobes melt into each other (world units)
     private const float EdgeMargin = 7f;           // the pool stays this far in from the world edge
     private const float FeederGap = 1f;            // space kept between the water and a feeder

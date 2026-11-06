@@ -1,0 +1,56 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "v509-0",
+      "text": "The whole patch from the room view is there, clear to the walls"
+    },
+    {
+      "completed": true,
+      "id": "v509-1",
+      "text": "Turn the ring all the way round: no hard edge, no corner line"
+    },
+    {
+      "completed": true,
+      "id": "v509-2",
+      "text": "Pan to the world's edge and look out: grass fades, nothing beyond"
+    },
+    {
+      "completed": true,
+      "id": "v509-3",
+      "text": "Zoom out (Wide) inside: still smooth"
+    },
+    {
+      "completed": true,
+      "id": "v509-4",
+      "text": "Rain inside reaches the mist and isn't thinner"
+    },
+    {
+      "completed": true,
+      "id": "v509-5",
+      "text": "Name tags fade with their birds in the mist"
+    },
+    {
+      "completed": true,
+      "id": "v509-6",
+      "text": "Draw ms inside with a full garden and with rain"
+    },
+    {
+      "completed": true,
+      "id": "v509-7",
+      "text": "Commit"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793549370513,
+  "description": "Standing in the garden, the whole cube is clear and the ground carries on past the walls into a misty margin (`ObserverMargin` 1.0, in `ViewWindow.cs` and `hologram.fs`). Session 33. Known: birds out in the mist can't be clicked.",
+  "order": 21000,
+  "priority": "High",
+  "tags": [
+    "Hologram View",
+    "5.09"
+  ],
+  "title": "5.09 Hologram View shows the same patch",
+  "updatedAt": 1793549866489
+}

@@ -1,0 +1,14 @@
+{
+  "archived": false,
+  "checklist": [],
+  "columnId": "done",
+  "createdAt": 1793549370513,
+  "description": "Cathedral radio on the table: your music folder as stations, an FM dial, signal drift, live web stations.",
+  "order": 1000,
+  "priority": "Medium",
+  "tags": [
+    "4.43-4.44"
+  ],
+  "title": "Radio",
+  "updatedAt": 1793549370513
+}

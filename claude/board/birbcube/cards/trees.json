@@ -1,0 +1,41 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": false,
+      "id": "trees-0",
+      "text": "Answer the questions: how many, growth time, dying, self-seeding, berries, fog near walls"
+    },
+    {
+      "completed": false,
+      "id": "trees-1",
+      "text": "Tree entity with growth, placed per world, saved"
+    },
+    {
+      "completed": false,
+      "id": "trees-2",
+      "text": "Drawn from simple shapes in the hologram"
+    },
+    {
+      "completed": false,
+      "id": "trees-3",
+      "text": "Branch perches, tree roosting, storm shelter"
+    },
+    {
+      "completed": false,
+      "id": "trees-4",
+      "text": "Checks: height cap, perches free cleanly, nothing on water or rocks, draw ms full-grown"
+    }
+  ],
+  "columnId": "ideas",
+  "createdAt": 1793575200003,
+  "description": "Saplings that grow into small trees birds perch, roost and shelter in. After World Beautification. Design: `vision.md` (The garden). Build sketch, questions and checks: `next-session-plan.md`, Trees.",
+  "order": 14000,
+  "priority": "Medium",
+  "tags": [
+    "Garden",
+    "Simulation"
+  ],
+  "title": "Trees that grow",
+  "updatedAt": 1794040000000
+}

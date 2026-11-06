@@ -1,35 +1,8 @@
 # Birb Cube QA Action Plan
 
-The goal: every change is small, tested, and saved, so you can always step back to the last version that worked. What's waiting to be tested is on the Jello board ("Built, needs testing").
+The goal: every change is small, tested, and saved, so you can always step back to the last version that worked. What's waiting to be tested is on the Jello board ("Built, needs testing"; `Jello Board.bat`, files in `claude/board/`).
 
----
-
-## 1. The safety net: git
-
-- The repo is `dontdoubtdusty/birb-box` on GitHub, cloned to `D:\My Documents\rpret\GitHub\birb-box`. Work only in that folder. (The repo and folder keep the old name unless you rename them.)
-- You commit and push with **GitHub Desktop**. Claude never commits.
-- Git-ignored: `bin/`, `obj/`, the save and settings files (`birbcube-*.json`, old `birbbox-*.json`), the `Radio/` folder.
-
-**Words you need:**
-- **Commit** = a save point with a note. You can return to any commit.
-- **Push** = upload your commits to GitHub (an off-computer backup).
-- **Discard changes** = throw away everything since the last commit: the "undo the whole mess" button.
-- **Tag** = a label on a commit, for version numbers (e.g. `v5.10-alpha`).
-
-Later, once commits feel normal: **branches** let you try a risky idea off to the side and keep it only if it works.
-
-**Habits worth keeping:** commit after each version bump, not after several. Log every version made outside a session in one line of `session-log.md` or a board card.
-
----
-
-## 2. The change loop (every feature, every time)
-
-1. **Start clean.** GitHub Desktop shows no uncommitted changes.
-2. **One thing at a time.** "Birds hop when idle," not "rework birds."
-3. **Build and run** after each small step, not at the end.
-4. **Smoke test** (section 3). About 2 minutes.
-5. **Commit** with a message saying what works now.
-6. **Stuck rule:** if it's broken and you can't fix it in about 20 minutes, **discard changes** and try a smaller step.
+Section numbers stay fixed because other docs and cards point at them (section 3 is the smoke test, section 7 the de-tangling pass). The git basics, the change loop and the code reading order (old sections 1, 2 and 8) are in `claude/archive/docs-cut-2026-11-05.md`.
 
 ---
 
@@ -37,7 +10,7 @@ Later, once commits feel normal: **branches** let you try a risky idea off to th
 
 Run the game and check:
 
-- [ ] Launches without errors in the console; the last save and settings come back
+- [ ] Launches without a crash message box (no new `crash.txt`); the last save and settings come back
 - [ ] Click the logo: it presses in with a click, then the box powers up (lens, beams, cube rises)
 - [ ] Drag sideways on the box: the contents turn with the ring, a hand rests on the ring. Drag up/down: the camera tilts
 - [ ] Mouse wheel zooms in and out, including leaning in to the glass and back out
@@ -48,7 +21,7 @@ Run the game and check:
 - [ ] Birds notice food and eat it; the bucket's ATTRACTS list names the birds its seed calls
 - [ ] The pool is there (and on the minimap); birds walk around it, and now and then one sips or bathes
 - [ ] Tab panel, Weather, Rain: clouds gather and the light dims, rain falls, the HUD says Rain; Clear up brings the light back
-- [ ] Clicking a bird selects it: its card shows the Food, Water and Rest bars and seven trait rows, all fitting; double-clicking a bird follows it; name tags are readable
+- [ ] Clicking a bird selects it: its card shows the Food, Water and Rest bars and its 2-3 standout traits (hold Left Alt for all eleven), all fitting; double-clicking a bird follows it; name tags are readable
 - [ ] Clicking a feeder selects it; Move on its card lets you set it down somewhere else
 - [ ] A fed bird drops a feather (or use the Tab panel's "+10 of each feather"); clicking a feather picks it up: the HUD grid and the pedestal's FEATHERS total go up
 - [ ] Double-click empty box: the camera dives in to stand in the garden (columns slide away and peek back near an edge); double-click again: back to the room view as it was
@@ -61,7 +34,7 @@ Run the game and check:
 - [ ] Birb Designer opens, edits, saves, and loads a birb (its preview stays clear and bright, even in rain); its Species dropdown lists every species
 - [ ] Game closes cleanly
 
-Anything that fails goes in the bug log (section 6) before you fix it.
+Anything that fails goes in the bug log (section 6) before you fix it. If it's broken and you can't fix it in about 20 minutes, discard changes and try a smaller step.
 
 ---
 
@@ -87,27 +60,15 @@ Everything in the smoke test, plus the edge cases where bugs like to hide:
 - [ ] In rain: most birds hunch and none start a bath; a Rain-proud bird stands tall; the rain sound follows the Birds volume and goes quiet in the store and with the power off
 - [ ] Needs: in the afternoon birds nap and get up; a thirsty bird far from the pool flies over and drinks until full; Night Owls sleep by day; no bird leaves "parched" or "worn out" in normal play
 - [ ] Every species: Blue Barley brings a Frostcrest, a tube feeder turns doves away, each species' call plays, its pedestal LED lights while one is in view, and its feathers have their own name and HUD dot
+- [ ] Storyteller: each Tab panel fire button runs its event, birds go back to normal after, and an event running at save time is dropped cleanly on load
 - [ ] Resize the window, minimize it, Alt-Tab away and back, toggle fullscreen (both types)
 - [ ] Leave it running 10+ minutes. Still smooth? Do birds bunch up or vanish? Do sprouts come up, get pecked and die back? Does anyone get stuck at the pool's edge or a puddle?
-- [ ] Quit and relaunch: birds (traits, names, looks, needs, naps), rocks, the pool, feeders, seed heaps, sprouts, feather counts, loose feathers, the view and the weather come back the same; a bird that was bathing is on the shore; the next new bird of a kind gets the next number
+- [ ] Quit and relaunch: birds (traits, names, looks, needs, naps, records), rocks, the pool, feeders, seed heaps, sprouts, feather counts, loose feathers, the view and the weather come back the same; a bird that was bathing is on the shore; the next new bird of a kind gets the next number
 - [ ] Designer: save with a long name, an odd name, overwrite an existing birb
 - [ ] Spend all your feathers and try to buy something (a refusal in the log, nothing goes negative)
 - [ ] Release copy ("Build Birb Cube.bat"): starts from the Desktop shortcut, saves next to `BirbCube.exe`, the radio finds its music, the rain sound plays
 
-Then: commit, add a **tag** with the new version number, push.
-
----
-
-## 5. In-game debug panel (proposed, not built yet)
-
-A hidden ImGui window, toggled with a key like F1, to set up situations directly instead of waiting for them:
-
-- FPS, total bird count, birds in view
-- Selected bird's current state and target (wandering, seeking food, at the water, napping)
-- Buttons: spawn a bird here, remove all birds
-- Toggle outlines for the world boundary and view window
-
-Much of this already lives in the Tab tools panel (speed numbers, cheats incl. "+10 of each feather", the bird tracker, trait re-roll, Day and night, Water, Weather). This is a code change, so it goes through the usual questions first.
+Then: commit, add a tag with the new version number, push.
 
 ---
 
@@ -129,7 +90,7 @@ None.
 
 ## 7. Code-health check (the de-tangling pass, Thursday afternoons)
 
-Once a week, Thursday afternoon after the token reset. Full passes so far: session 2 (4.42) and session 21 (Oct 29). Session 44 (Nov 5) did only the `BirdMover.cs` split. **Next: Thursday, Nov 12.** This section is the only watch list; keep it current.
+Once a week, Thursday afternoon after the token reset. Full passes so far: session 2 (4.42) and session 21 (Oct 29). Session 44 (Nov 5) did only the `BirdMover.cs` split. **Next: Thursday, Nov 12, `Bird.cs` first.** This section is the only watch list and the one home for the next date; keep it current.
 
 **Warning signs:**
 - A file you can't describe in one sentence
@@ -154,26 +115,4 @@ Once a week, Thursday afternoon after the token reset. Full passes so far: sessi
 
 Always commit before a de-tangling pass. Restructuring should change zero behavior, so the smoke test should pass the same afterward.
 
-**Proving a split changed nothing (done for `BirdMover`, Nov 5):** compare every line of the old file against the new files (only the class line, `using`, header comments and braces should differ), compile with the screenshot driver, run `tools/ShotDriver/scripts/tour.txt`, and for behavior code run a short script that raises the relevant chances and samples the private state.
-
----
-
-## 8. Exploring the code
-
-Suggested reading order, following how one frame runs:
-
-1. `Program.cs`: the entry point, a few lines
-2. `GameEngine.cs`: `Run` calls `Update`, then `Draw`; `UpdateSystems` lists the frame's phases in order, so read it like a table of contents
-3. `MousePicking.cs`: how a click on the screen becomes a click on a bird, feeder or feather
-4. `World.cs`, `Bird.cs`, `BirdMover.cs` (and `BirdMover.Water.cs`): what a bird is and how it decides where to go
-5. `Species.cs` and `Birds.cs`: what a kind of bird is, and the four built-in ones
-6. `WorldClock.cs` and `Weather.cs`: the time of day, the sun, when birds are about, and the rain
-7. `ViewWindow.cs`, `HoloCamera.cs`: what you're looking at
-8. `HologramRenderer.cs`, then `WorldDrawer.cs` and its other parts (`SeedDrawing.cs`, `SproutDrawing.cs`, `RainDrawing.cs`): how it all gets drawn
-9. `Pool.cs` with the pool part of `hologram.fs`: one shape written twice, in C# for the birds and in GLSL for the picture
-10. `RainDrawing.AddRain`: particles with no stored state, each drop's place worked out from a clock and its number
-
-**Tools in your editor (Visual Studio / VS Code / Rider):**
-- **Go to Definition** (F12): jump to where something is defined
-- **Find All References** (Shift+F12): see everywhere something is used
-- **Breakpoints** (F9): pause the running game on a line and inspect values. The best way to learn what the code does, and to hunt bugs.
+**Proving a split changed nothing (done for `BirdMover`, Nov 5):** compare every line of the old file against the new files (only the class line, `using`, header comments and braces should differ), compile with `dotnet build`, run the smoke test (or `tools/ShotDriver/scripts/tour.txt` where a Linux workspace is available), and for behavior code run a short script that raises the relevant chances and samples the private state.

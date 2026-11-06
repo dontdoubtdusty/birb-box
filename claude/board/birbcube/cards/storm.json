@@ -1,0 +1,51 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": false,
+      "id": "storm-0",
+      "text": "Answer the questions: how often, seasons, build-up, scatter on close thunder, storm word"
+    },
+    {
+      "completed": false,
+      "id": "storm-1",
+      "text": "Storm spells and a Flash value on Weather"
+    },
+    {
+      "completed": false,
+      "id": "storm-2",
+      "text": "Cloud and fog glow (HologramRenderer, HorizonSky), distant bolts in horizon.fs"
+    },
+    {
+      "completed": false,
+      "id": "storm-3",
+      "text": "Thunder sounds (placeholders in make_sounds.py)"
+    },
+    {
+      "completed": false,
+      "id": "storm-4",
+      "text": "Bird reactions and fewer arrivals"
+    },
+    {
+      "completed": false,
+      "id": "storm-5",
+      "text": "Settings switch for the glow, saved"
+    },
+    {
+      "completed": false,
+      "id": "storm-6",
+      "text": "Checks: no flash at 1x and 4x, thunder lags glow, save and load, draw ms"
+    }
+  ],
+  "columnId": "next",
+  "createdAt": 1793575200000,
+  "description": "A heavier rain spell with thunder and a soft lightning glow. Design: `vision.md` (Time, weather and events). Build sketch, questions and checks: `next-session-plan.md`, Thunderstorms.",
+  "order": 7000,
+  "priority": "Medium",
+  "tags": [
+    "Weather",
+    "Step 10"
+  ],
+  "title": "Thunderstorms",
+  "updatedAt": 1793575200000
+}

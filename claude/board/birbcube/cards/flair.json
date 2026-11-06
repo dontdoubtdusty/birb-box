@@ -1,0 +1,40 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": false,
+      "id": "flair-0",
+      "text": "Draft the weather words with you (Claude drafts, you edit)"
+    },
+    {
+      "completed": false,
+      "id": "flair-1",
+      "text": "Pick names for the pool and the stream and where they show"
+    },
+    {
+      "completed": false,
+      "id": "flair-2",
+      "text": "Smoke test (qa-plan.md section 3)"
+    },
+    {
+      "completed": false,
+      "id": "flair-3",
+      "text": "The HUD word fits its slot and reads in order through a rain spell"
+    },
+    {
+      "completed": false,
+      "id": "flair-4",
+      "text": "Commit"
+    }
+  ],
+  "columnId": "next",
+  "createdAt": 1793741000000,
+  "description": "Strings only: the weather words in `Weather.Word` in the house style, and names for the pool and the stream. Later passes, questions and checks: `next-session-plan.md`, Medieval flair pass. Style rule: `vision.md`, Flavor.",
+  "order": 3000,
+  "priority": "Medium",
+  "tags": [
+    "Flavor"
+  ],
+  "title": "Medieval flair, pass 1: weather words and pool/stream names",
+  "updatedAt": 1793741000000
+}

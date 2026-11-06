@@ -4,6 +4,8 @@ using Raylib_cs;
 // calls and rustles dropped in at random. Silent in the room view, heard only standing in the Hologram View,
 // and only by day (night gets its own sounds later). Files: resources/sounds/ambience/forest_day_bed.ogg and
 // forest_day_1.wav, forest_day_2.wav, ... Played from Sounds.Update; none of the files are required.
+// Each one-shot is levelled when loaded (its loudest sample is measured and a gain evens them all out),
+// so a loud recording never jumps out over the bed.
 public static class Ambience
 {
     // LOUDNESS. The files are already quiet (the bed sits at about -31 dBFS), so these stay near 1 at most.
@@ -20,11 +22,15 @@ public static class Ambience
     private const float GapMax = 30f;
     private const float FirstGapMin = 4f;          // the first one after you step in comes sooner
     private const float PitchSpread = 0.05f;       // up to this far above or below the recorded pitch
-    private const float ShotVolumeMin = 0.5f;      // each plays at this share of full to full
+    private const float ShotVolumeMin = 0.7f;      // each plays at this share of full to full
+    private const float ShotPeakTarget = 0.063f;   // every one-shot's loudest sample is brought to this (about -24 dBFS)
     private const float PanSpread = 0.35f;         // how far from the centre (0.5) it can sit
 
     private static Music bed;
     private static Sound[] shots = Array.Empty<Sound>();
+    private static float[] shotGain = Array.Empty<float>();    // per one-shot: the gain that evens out its loudness
+    private static float lastShotAge;                          // seconds since the last one-shot played (for the readout)
+    private static float lastTarget;                           // the level the forest wanted last frame (for the readout)
     private static bool hasBed;
     private static bool playing;                   // the bed stream is running
     private static float level;                    // how much of full it is right now, 0 to 1
@@ -42,12 +48,52 @@ public static class Ambience
         Raylib.SetMusicVolume(bed, 0f);
 
         var found = new List<Sound>();
+        var gains = new List<float>();
         for (int i = 1; File.Exists(Assets.PathTo($"sounds/ambience/forest_day_{i}.wav")); i++)
         {
-            found.Add(Raylib.LoadSound(Assets.PathTo($"sounds/ambience/forest_day_{i}.wav")));
+            string file = Assets.PathTo($"sounds/ambience/forest_day_{i}.wav");
+            found.Add(Raylib.LoadSound(file));
+            gains.Add(LevelingGain(file));
         }
         shots = found.ToArray();
+        shotGain = gains.ToArray();
     }
+
+    // The gain that brings a 16-bit PCM wav's loudest sample to ShotPeakTarget. Any other file gives 1 (left as it is).
+    private static float LevelingGain(string file)
+    {
+        try
+        {
+            byte[] b = File.ReadAllBytes(file);
+            int bits = 0, dataStart = 0, dataLength = 0;
+            for (int pos = 12; pos + 8 <= b.Length;)
+            {
+                string id = System.Text.Encoding.ASCII.GetString(b, pos, 4);
+                int length = BitConverter.ToInt32(b, pos + 4);
+                if (id == "fmt " && pos + 24 <= b.Length) bits = BitConverter.ToInt16(b, pos + 22);
+                if (id == "data") { dataStart = pos + 8; dataLength = Math.Min(length, b.Length - dataStart); break; }
+                pos += 8 + length + (length & 1);
+            }
+            if (bits != 16 || dataLength < 2) return 1f;
+
+            int peak = 0;
+            for (int i = dataStart; i + 1 < dataStart + dataLength; i += 2)
+            {
+                peak = Math.Max(peak, Math.Abs((int)BitConverter.ToInt16(b, i)));
+            }
+            if (peak < 64) return 1f;    // near silence: leave it, a huge boost would only raise noise
+            return ShotPeakTarget * 32768f / peak;
+        }
+        catch (Exception)
+        {
+            return 1f;
+        }
+    }
+
+    // One line for the Tab panel: what the forest wants and has, the last one-shot, and where the bed is. For tracking down loud swells.
+    public static string DebugLine => !hasBed ? "No ambience files loaded"
+        : $"wants {lastTarget:0.00}  has {level:0.00}  bed {(playing ? Raylib.GetMusicTimePlayed(bed) : 0f):0}s of {(playing ? Raylib.GetMusicTimeLength(bed) : 0f):0}s\n"
+          + (lastShot < 0 ? "no one-shot yet" : $"last one-shot: #{lastShot + 1} ({lastShotAge:0}s ago, gain {shotGain[lastShot]:0.00})");
 
     // Frees everything Load made.
     public static void Unload()
@@ -66,6 +112,8 @@ public static class Ambience
         if (!hasBed) return;
 
         float target = TargetLevel(observer, daylight, rain, quiet, soundShare, radioHeard);
+        lastTarget = target;
+        lastShotAge += dt;
         level += (target - level) * MathF.Min(1f, FadeRate * dt);
 
         if (!playing && target > AudibleBelow) StartBed();
@@ -121,7 +169,8 @@ public static class Ambience
 
         Sound shot = shots[pick];
         Raylib.SetSoundPitch(shot, 1f + Rng.Range(-PitchSpread, PitchSpread));
-        Raylib.SetSoundVolume(shot, ShotVolume * level * Rng.Range(ShotVolumeMin, 1f));
+        Raylib.SetSoundVolume(shot, ShotVolume * shotGain[pick] * level * Rng.Range(ShotVolumeMin, 1f));
+        lastShotAge = 0f;
         Raylib.SetSoundPan(shot, 0.5f + Rng.Range(-PanSpread, PanSpread));
         Raylib.PlaySound(shot);
     }

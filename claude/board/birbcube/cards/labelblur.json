@@ -1,0 +1,15 @@
+{
+  "archived": false,
+  "checklist": [],
+  "columnId": "next",
+  "createdAt": 1793830000000,
+  "description": "The 'entered the chat' lines blur inside the hologram and when close to the camera. Suspected cause: labels drawn into the low-resolution hologram texture then glowed by post.fs; fix may be drawing them after the post pass. Needs a screenshot to confirm. Estimate 40-90k tokens.",
+  "order": 170,
+  "priority": "Medium",
+  "tags": [
+    "Labels",
+    "Bug"
+  ],
+  "title": "Chat labels blurry in hologram / up close",
+  "updatedAt": 1793830000000
+}

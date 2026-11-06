@@ -52,6 +52,7 @@ public class HologramRenderer
     private const float TwilightSkyShare = 0.85f;   // how far toward it the haze goes at the peak of golden hour or the blue hour
     private const float CloudShadowDepth = 0.75f;    // how much of the sun a drifting cloud's shadow takes away (5.05)
     private const float NightShadowFade = 0.85f;    // at full night the shadows fade by this share (moonlight casts faint ones)
+    private const float HawkWingspan = 3.5f;        // the Hawk's Shadow's size on the ground, world units (its shape: hawkShape in hologram.fs)
 
     public Shader HoloShader { get; private set; }
     private Shader grainShader;    // seed grains, many in one draw (grain.vs with hologram.fs); gets the same uniforms as HoloShader
@@ -282,6 +283,7 @@ public class HologramRenderer
     // observer: how far the camera has stepped into the garden (the Hologram View). The edge look fades away with it
     // (no wall should show), the fog moves out past the walls (see hologram.fs), and its haze becomes the sky's horizon color.
     // clouds: whether the drifting clouds' shadows fall here (not in the store, which has a roof, nor in the Designer).
+    // The Hawk's Shadow falls in the same places.
     private void SetHologramUniforms(Camera3D camera, ViewWindow view, float swallow, float reveal, bool edges = true, float observer = 0f,
                                      bool clouds = true)
     {
@@ -307,14 +309,22 @@ public class HologramRenderer
             drift = weather.CloudDrift;
             shadow = CloudShadowDepth * (1f - weather.Cloud) * (1f - NightShadowFade * light.Darkness);
         }
-        var shared = new SharedValues(light, lightDir, haze, edgeStrength, observer, cover, drift, shadow);
+        // The Hawk's Shadow, while one is overhead (only in the bird world, where the clouds' shadows fall too)
+        Vector4 hawk = Vector4.Zero;
+        Vector2 hawkDir = Vector2.UnitY;
+        if (clouds && weatherShows && HawkShadow.Active is HawkShadow h)
+        {
+            hawk = new Vector4(h.Position.X, h.Position.Y, HawkWingspan, h.Strength);
+            hawkDir = h.Direction;
+        }
+        var shared = new SharedValues(light, lightDir, haze, edgeStrength, observer, cover, drift, shadow, hawk, hawkDir);
         holoUniforms.Set(camera, view, swallow, reveal, HoloColor, RimGlow, time, EdgeWidth, shared);
         grainUniforms.Set(camera, view, swallow, reveal, HoloColor, RimGlow, time, EdgeWidth, shared);
     }
 
     // This frame's values that depend on the time of day, the weather and where the camera is, handed to each hologram shader
     private readonly record struct SharedValues(DayLight Light, Vector3 SceneLightDir, Vector3 Haze, float EdgeStrength, float Observer,
-                                                float CloudCover, Vector2 CloudDrift, float CloudShadow);
+                                                float CloudCover, Vector2 CloudDrift, float CloudShadow, Vector4 Hawk, Vector2 HawkDir);
 
     // The uniforms every hologram shader shares, found once per shader
     private class HoloUniforms
@@ -322,7 +332,7 @@ public class HologramRenderer
         private readonly Shader shader;
         private readonly int origin, boxYaw, halfWidth, fogStart, swallow, reveal, cubeHeight, viewCenter, viewZoom, viewPos, holoColor, rimGlow, time, isFloor;
         private readonly int lightDir, ambientLight, directLight, hazeColor, edgeWidth, edgeStrength, observer, worldHalf, lampColor, selfLit;
-        private readonly int shadeColor, golden, nightLevel, cloudCover, cloudDrift, cloudShadow;
+        private readonly int shadeColor, golden, nightLevel, cloudCover, cloudDrift, cloudShadow, hawkShadow, hawkDir;
 
         public HoloUniforms(Shader shader)
         {
@@ -357,6 +367,8 @@ public class HologramRenderer
             cloudCover = Raylib.GetShaderLocation(shader, "cloudCover");
             cloudDrift = Raylib.GetShaderLocation(shader, "cloudDrift");
             cloudShadow = Raylib.GetShaderLocation(shader, "cloudShadow");
+            hawkShadow = Raylib.GetShaderLocation(shader, "hawkShadow");
+            hawkDir = Raylib.GetShaderLocation(shader, "hawkDir");
         }
 
         public void Set(Camera3D camera, ViewWindow view, float swallowAmount, float revealAmount, Vector3 color, float rimGlowAmount, float seconds,
@@ -393,6 +405,8 @@ public class HologramRenderer
             Raylib.SetShaderValue(shader, cloudCover, v.CloudCover, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, cloudDrift, v.CloudDrift, ShaderUniformDataType.Vec2);
             Raylib.SetShaderValue(shader, cloudShadow, v.CloudShadow, ShaderUniformDataType.Float);
+            Raylib.SetShaderValue(shader, hawkShadow, v.Hawk, ShaderUniformDataType.Vec4);
+            Raylib.SetShaderValue(shader, hawkDir, v.HawkDir, ShaderUniformDataType.Vec2);
         }
     }
 

@@ -22,6 +22,7 @@ public class Hud
 
     // TRAIT SLIDERS: one row per scale (name, brass track, the trait's word), a glowing pip on the bird's spot.
     private const int SliderRowHeight = 22;
+    private const int RecordsShown = 3, RecordLineHeight = 17, RecordGap = 6, RecordSize = 14;    // the bird's last records, under "Fond of"
     private const int NeedGap = 6;                                    // between the three need bars
     private static readonly Color NeedLow = new Color(240, 158, 38, 255);    // a need the bird is going to see to
     private const int SliderWordSize = 14;
@@ -42,6 +43,15 @@ public class Hud
     private static readonly Color DialNight = new Color(18, 26, 48, 255);
     private static readonly Color DialGlow = new Color(120, 84, 110, 255);
     private static readonly Color DialDay = new Color(196, 158, 92, 255);
+
+    // THE WEATHER ROW (stats screen): a sky glyph, the word, three drops, and a strip of falling streaks on the right
+    private const int WeatherRowHeight = 32;            // the stats screen's height counts this (SidePanels.StatsBaseHeight)
+    private const int WeatherGlyphSize = 26;
+    private const float DropsTwoAt = 0.5f, DropsThreeAt = 0.85f;    // how hard it rains for the second and third drop to light
+    private const int StreakStripWidth = 84;
+    private const float StreakMax = 16f;                // streaks in the strip at full rain
+    private const float StreakSpeed = 36f, StreakSpeedGain = 44f;   // pixels a second: light rain, plus this much more at full rain
+    private const float StreakLength = 7f, StreakSplat = 0.12f;     // pixels; seconds a splash lingers
 
     // Screen rectangles, recalculated every frame so they follow window resizes.
     private Rectangle statsRect;
@@ -135,10 +145,12 @@ public class Hud
     }
 
     // The bird card grows and shrinks with its rows (at least one, for the "nothing stands out" line).
+    // Its last few records add a line each under "Fond of".
     private int BirdCardHeight(Bird? bird)
     {
         int rows = bird == null ? 1 : Math.Max(1, ShownScales(bird).Count);
-        return CardBaseHeight + rows * SliderRowHeight;
+        int records = bird == null ? 0 : Math.Min(RecordsShown, bird.Records.Count);
+        return CardBaseHeight + rows * SliderRowHeight + (records > 0 ? RecordGap + records * RecordLineHeight : 0);
     }
 
     // The trait a bird holds on a scale, or null when it's average there.
@@ -329,14 +341,111 @@ public class Hud
         UiText.Draw(date, dateX, y + 4, 16, Palette.DimText);
         y += 24;
 
-        // The weather under it: Fair, Clouding over, Drizzle, Rain, Clearing
-        UiText.Draw(engine.Weather.Word, x, y, 16, Palette.DimText);
-        y += 24;
+        // The weather under it: a little sky glyph, the word, the rain level, and rain falling beside them
+        DrawWeather(engine.Weather, clock, x, y, (int)statsRect.Width - Pad * 2, accent);
+        y += WeatherRowHeight;
 
         DrawFeatherGrid(engine, x, y);
 
         Vector2 center = new Vector2(statsRect.X + statsRect.Width - Pad - DialRadius, statsRect.Y + Pad + HeaderSize + 8 + DialRadius + 4);
         DrawDial(clock, center, accent);
+    }
+
+    // The weather row: a glyph (sun or moon, dimmed and covered by cloud), the weather word, three drops lit by how hard
+    // it rains, and a strip on the right where streaks fall (more of them, and faster, the harder it rains).
+    private void DrawWeather(Weather weather, WorldClock clock, int x, int y, int width, Color accent)
+    {
+        float time = (float)Raylib.GetTime();
+        float rain = weather.Rain;
+        bool wet = rain > 0.05f;
+
+        DrawSkyGlyph(new Vector2(x + WeatherGlyphSize * 0.5f, y + WeatherRowHeight * 0.5f - 3f), clock.SunElevation > 0f,
+                     weather.Cloud, weather.Cover, time);
+
+        int wordX = x + WeatherGlyphSize + 8;
+        string word = weather.Word;
+        UiText.Draw(word, wordX, y + 4, 16, wet ? Palette.Text : Palette.DimText);
+
+        // Three drops: one lit for light rain, two for showers, three for a downpour
+        float dropX = wordX + UiText.Measure(word, 16) + 10f;
+        int lit = !wet ? 0 : rain > DropsThreeAt ? 3 : rain > DropsTwoAt ? 2 : 1;
+        if (wet)
+            for (int i = 0; i < 3; i++) DrawDrop(new Vector2(dropX + i * 9f, y + 12f), i < lit ? accent : Palette.PanelDark);
+
+        if (wet) DrawFallingStreaks(weather, x + width - StreakStripWidth, y + 2, StreakStripWidth, WeatherRowHeight - 6);
+    }
+
+    // The sun (rays slowly turning) or a crescent moon, dimmed as the cloud thickens, with a cloud lump in front that grows
+    // with the sky's cover and grays with the cloud.
+    private static void DrawSkyGlyph(Vector2 center, bool day, float cloud, float cover, float time)
+    {
+        Vector2 orb = center + new Vector2(-4f, -3f);
+        float orbFade = 1f - 0.8f * cloud;
+        if (day)
+        {
+            Color sun = Raylib.Fade(new Color(240, 200, 110, 255), orbFade);
+            Raylib.DrawCircleV(orb, 5f, sun);
+            for (int i = 0; i < 8; i++)
+            {
+                float angle = time * 0.4f + i * MathF.Tau / 8f;
+                Vector2 dir = new Vector2(MathF.Cos(angle), MathF.Sin(angle));
+                Raylib.DrawLineEx(orb + dir * 7f, orb + dir * 10f, 1.5f, sun);
+            }
+        }
+        else
+        {
+            Raylib.DrawCircleV(orb, 6f, Raylib.Fade(new Color(200, 214, 230, 255), orbFade));
+            Raylib.DrawCircleV(orb + new Vector2(3.5f, -2.5f), 5.5f, new Color(14, 20, 28, 255));    // bites out the crescent
+        }
+
+        if (cover < 0.05f) return;
+        float s = 0.55f + 0.45f * cover;
+        Color body = Raylib.Fade(Color.Lerp(new Color(196, 210, 220, 255), new Color(106, 120, 134, 255), cloud), MathF.Min(1f, cover * 2f));
+        Vector2 c = center + new Vector2(3f + MathF.Sin(time * 0.7f), 4f);    // drifts a little
+        Raylib.DrawCircleV(c + new Vector2(-5f, 1f) * s, 4.5f * s, body);
+        Raylib.DrawCircleV(c + new Vector2(0f, -1.5f) * s, 6f * s, body);
+        Raylib.DrawCircleV(c + new Vector2(5.5f, 1f) * s, 4.5f * s, body);
+        Raylib.DrawRectangleRec(new Rectangle(c.X - 5.5f * s, c.Y + 1f * s, 11f * s, 4.5f * s), body);
+    }
+
+    // One small raindrop: a round bottom with a point on top.
+    private static void DrawDrop(Vector2 center, Color color)
+    {
+        Raylib.DrawCircleV(center + new Vector2(0f, 2f), 2.6f, color);
+        Raylib.DrawTriangle(center + new Vector2(0f, -4f), center + new Vector2(-2.4f, 1.5f), center + new Vector2(2.4f, 1.5f), color);
+    }
+
+    // Streaks falling inside a strip. Where each one is comes from the weather's rain clock and its number (the same idea as
+    // WorldDrawer.AddRain), so nothing is stored and they stand still while the game is paused.
+    private static void DrawFallingStreaks(Weather weather, float left, float top, float width, float height)
+    {
+        int count = (int)MathF.Ceiling(StreakMax * weather.Rain);
+        float bottom = top + height;
+        float clock = weather.RainClock;
+        Color streak = new Color(158, 184, 209, 255);
+
+        for (int i = 0; i < count; i++)
+        {
+            // Speed follows the spell's strength, not the rain right now: it must not change as the rain eases, or the
+            // clock-based position would run backwards
+            float speed = (StreakSpeed + StreakSpeedGain * weather.Strength) * (0.85f + 0.3f * Rng.Fixed(i, 0, 0, 91));
+            float fallTime = height / speed;
+            float round = clock / (fallTime + StreakSplat) + Rng.Fixed(i, 0, 0, 92);
+            int k = (int)MathF.Floor(round);
+            float since = (round - k) * (fallTime + StreakSplat);
+            float x = left + 3f + Rng.Fixed(i, k, 1, 93) * (width - 6f);
+
+            if (since < fallTime)
+            {
+                float head = top + since * speed;
+                Raylib.DrawLineEx(new Vector2(x, MathF.Max(top, head - StreakLength)), new Vector2(x, head), 1.5f, Raylib.Fade(streak, 0.85f));
+            }
+            else
+            {
+                float grow = (since - fallTime) / StreakSplat;
+                Raylib.DrawLineEx(new Vector2(x - 1f - 2f * grow, bottom), new Vector2(x + 1f + 2f * grow, bottom), 1f, Raylib.Fade(streak, 0.6f * (1f - grow)));
+            }
+        }
     }
 
     // The 24-hour dial: night all round, the glow and the daylight as arcs, an hour hand, and the time in the middle.
@@ -442,7 +551,7 @@ public class Hud
 
         DrawNameField(bird, x, y, nameHovered, accent);
         y += 24;
-        string doing = bird.Roosting ? "Roosting" : bird.Napping ? "Napping" : bird.Mover.WaterActivity ?? bird.State.ToString();
+        string doing = bird.Frozen ? "Frozen still" : bird.Roosting ? "Roosting" : bird.Napping ? "Napping" : bird.Mover.WaterActivity ?? bird.State.ToString();
         UiText.Draw(doing, x, y, 20, Palette.DimText);
         if (bird.Visits > 1)
         {
@@ -470,12 +579,29 @@ public class Hud
         UiText.Draw($"Fond of {favorite.Name}", x + 10, y, TraitSize, Palette.DimText);
         string altHint = showAllTraits ? "ALL TRAITS" : "HOLD ALT: ALL TRAITS";
         UiText.Draw(altHint, x + innerWidth - UiText.Measure(altHint, HeaderSize), y + 3, HeaderSize, Palette.DimText);
+        DrawRecords(bird, x, y + TraitSize + RecordGap, innerWidth);
 
         bool following = engine.FollowedBird == bird;
         UiDraw.Button(followButton, following ? "Following" : "Follow", accent, lit: following);
         UiDraw.Button(centerButton, "Center", accent);
 
         if (hoveredRow != null) DrawTraitTip(hoveredRow.Value.Scale, hoveredRow.Value.Trait, accent);
+    }
+
+    // The bird's last few records, newest first, each cut short with "..." if it doesn't fit.
+    private static void DrawRecords(Bird bird, int x, int y, int innerWidth)
+    {
+        int shown = 0;
+        for (int i = bird.Records.Count - 1; i >= 0 && shown < RecordsShown; i--, shown++)
+        {
+            string line = bird.Records[i];
+            if (UiText.Measure(line, RecordSize) > innerWidth)
+            {
+                while (line.Length > 1 && UiText.Measure(line + "...", RecordSize) > innerWidth) line = line[..^1];
+                line += "...";
+            }
+            UiText.Draw(line, x, y + shown * RecordLineHeight, RecordSize, Palette.DimText);
+        }
     }
 
     // One need's bar: hologram color normally, orange once the bird goes to see to it.

@@ -1,0 +1,66 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "v516-0",
+      "text": "It builds"
+    },
+    {
+      "completed": true,
+      "id": "v516-1",
+      "text": "Smoke test (qa-plan.md section 3)"
+    },
+    {
+      "completed": true,
+      "id": "v516-2",
+      "text": "The card shows the new rows; Follow / Center still sit inside the card"
+    },
+    {
+      "completed": true,
+      "id": "v516-3",
+      "text": "Re-roll traits until each new one shows up; hovering shows its flavor line"
+    },
+    {
+      "completed": true,
+      "id": "v516-4",
+      "text": "Watchman sits on rocks more often and longer than other birds"
+    },
+    {
+      "completed": true,
+      "id": "v516-5",
+      "text": "Particular walks to its favorite seed; when starving it takes the nearest"
+    },
+    {
+      "completed": true,
+      "id": "v516-6",
+      "text": "Oath-keeper never appears together with Wayfarer"
+    },
+    {
+      "completed": true,
+      "id": "v516-7",
+      "text": "Open-handed birds drop feathers more often; Oath-keepers return more often"
+    },
+    {
+      "completed": true,
+      "id": "v516-8",
+      "text": "Quit and relaunch: traits kept; an old save loads fine"
+    },
+    {
+      "completed": false,
+      "id": "v516-9",
+      "text": "Commit"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793740800000,
+  "description": "Watchman (sits on rocks 2.5x as often, 1.8x as long), Particular (goes for a pile with its favorite seed before any other unless starving), Oath-keeper (return weight 4, never rolled with Wayfarer) and Open-handed (feathers 1.6x as often). Each is its own rare scale (weight 0.2, like Rain-proud), so the bird card now has 11 slider rows and the card is 88 px taller (`CardHeight` in `Hud.cs`). Session 41. Written back to your project; not compiled (only read back for errors), so build first. No species leans yet: every species rolls them equally. Files: `Traits.cs`, `BirdMover.cs`, `Bird.cs`, `Hud.cs`, `GameEngine.cs`.",
+  "order": 26600,
+  "priority": "Medium",
+  "tags": [
+    "Traits",
+    "5.16"
+  ],
+  "title": "5.16 Step 12: Four new traits",
+  "updatedAt": 1794010000000
+}

@@ -1,0 +1,14 @@
+{
+  "archived": false,
+  "checklist": [],
+  "columnId": "ideas",
+  "createdAt": 1793549370513,
+  "description": "Gap today: part offsets are measured from the birb's middle, not the parent (no sockets). Target: slots (Body, Head, Beak, Crest, Eyes, Wings, Tail, Legs, Feet) with mesh pickers from `slot_style` names, per-slot sliders and color presets, automatic symmetry, randomize; the raw editor stays as Advanced. Order: sockets, slot UI, sliders and colors, randomize (the species randomizer would reuse it; sockets first make random bodies hold together). Open: side window or full-screen workshop; can custom birbs be called anytime.",
+  "order": 9000,
+  "priority": "Low",
+  "tags": [
+    "Designer"
+  ],
+  "title": "Birb Builder, character-creator style",
+  "updatedAt": 1794050000000
+}

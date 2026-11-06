@@ -1,0 +1,31 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": false,
+      "id": "randomizer-0",
+      "text": "Answer the questions: trigger, stays or visits, name word lists, how far looks stray, rare ones"
+    },
+    {
+      "completed": false,
+      "id": "randomizer-1",
+      "text": "Generator for SpeciesFile and BirbShape"
+    },
+    {
+      "completed": false,
+      "id": "randomizer-2",
+      "text": "Checks: loads, saves, shows in LEDs and ATTRACTS; no repeated names; deleting works"
+    }
+  ],
+  "columnId": "ideas",
+  "createdAt": 1793575200005,
+  "description": "A whole new species made at random, saved as a Designer species file. After migration, trees and the stream; Birb Builder sockets would help. Design: `vision.md` (Species). Build sketch, questions and checks: `next-session-plan.md`, Species randomizer.",
+  "order": 16000,
+  "priority": "Low",
+  "tags": [
+    "Species",
+    "Designer"
+  ],
+  "title": "Species randomizer",
+  "updatedAt": 1793575200005
+}

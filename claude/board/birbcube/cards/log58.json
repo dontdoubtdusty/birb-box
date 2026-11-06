@@ -1,0 +1,25 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "log58-0",
+      "text": "Add SkyOrbs.cs, skyorb.fs and StationFinder.cs to file-map.md (session 36)"
+    },
+    {
+      "completed": true,
+      "id": "log58-1",
+      "text": "Say what 5.05 changed (recorded on the 5.05/5.06/5.08 card)"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793549866489,
+  "description": "Tested and committed, but no doc says what changed. The code has `SkyOrbs.cs` and `skyorb.fs` (5.06), clouds in `HorizonSky` (`SetClouds`), and `StationFinder.cs` with radio changes (5.08).",
+  "order": 20100,
+  "priority": "Low",
+  "tags": [
+    "Bookkeeping"
+  ],
+  "title": "Log 5.05, 5.06 and 5.08 in the docs",
+  "updatedAt": 1794010000000
+}

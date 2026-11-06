@@ -17,6 +17,7 @@ public partial class BirdMover
     private Puddle? puddle;              // sipping at this rain puddle instead of the pool (see Puddles.cs)
     private bool thirstTrip;             // went because it was thirsty (Bird.SeeToNeeds), not on a whim: a little hunger won't stop it
     private bool waterFlight;            // flying most of the way there, the water being far off
+    private bool loggedBath;             // its first bath already made a log line (so the log isn't flooded)
     private Vector3 flightFrom, flightLanding;
     public bool IsBathTrip => water != WaterVisit.None && bathTrip && !shaking;
     public bool OnWaterTrip => water != WaterVisit.None;
@@ -25,8 +26,8 @@ public partial class BirdMover
     public string? WaterActivity => water switch
     {
         WaterVisit.Going => "Off to the water",
-        WaterVisit.Sipping => "Drinking",
-        WaterVisit.Bathing => "Bathing",
+        WaterVisit.Sipping => puddle != null ? "Drinking" : $"At the {Pool.HouseName}",
+        WaterVisit.Bathing => $"In the {Pool.HouseName}",
         WaterVisit.Drying => "Drying off",
         _ => null,
     };
@@ -202,6 +203,11 @@ public partial class BirdMover
                     waterTimer = bathTrip ? Rng.Range(3f, 6f) * bird.Nature.BathLength : Sips() * MathF.Tau / SipRate;
                     bird.HopPhase = 0f;
                     splashTimer = 0f;
+                    if (bathTrip && !loggedBath)
+                    {
+                        loggedBath = true;
+                        EventLog.Add($"{bird.Name} is bathing in the {Pool.HouseName}.");
+                    }
                     return true;
                 }
                 WalkTo(waterSpot, dt);

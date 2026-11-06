@@ -1,0 +1,42 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "v513-0",
+      "text": "Smoke test (qa-plan.md section 3)"
+    },
+    {
+      "completed": true,
+      "id": "v513-1",
+      "text": "Within a few minutes you see birds sit for a while and preen, scratch, fluff or stretch"
+    },
+    {
+      "completed": true,
+      "id": "v513-2",
+      "text": "The garden still feels lively, not frozen (if not, lower Sit still)"
+    },
+    {
+      "completed": true,
+      "id": "v513-3",
+      "text": "A sitting bird that gets hungry gets up and goes to eat"
+    },
+    {
+      "completed": false,
+      "id": "v513-4",
+      "text": "Commit"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793553000000,
+  "description": "Wandering birds used to stop for only 0.8-2.5 s, so idle acts almost never got to play. Now about 1 in 5 standing stops (not pecks) becomes a 10-40 s sit: the bird stays put, looks about and turns a little, and hunger ends it. Idle-act gaps cut from 8-20 s to 4-10 s. New slider: Tools panel, Bird behavior, \"Sit still\" (`SimTuning.SitChance`); sit length `SitMin`/`SitMax` at the top of `BirdMover.cs`. Workspace sample: one followed bird stood 26% of 150 s, with one 22 s sit.",
+  "order": 25000,
+  "priority": "Medium",
+  "tags": [
+    "Simulation",
+    "Animation",
+    "5.13"
+  ],
+  "title": "5.13 Sit spells, idle acts more often",
+  "updatedAt": 1793740365326
+}

@@ -1,0 +1,22 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "v507-0",
+      "text": "Commit 5.07"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793549370513,
+  "description": "Rain streaks next to the eye no longer fill the Hologram View as thick columns. You confirmed it works in the game on Oct 31; only the commit is left.",
+  "order": 19000,
+  "priority": "High",
+  "tags": [
+    "Fix",
+    "Rain",
+    "5.07"
+  ],
+  "title": "5.07 Rain near the camera (B2)",
+  "updatedAt": 1793549866489
+}

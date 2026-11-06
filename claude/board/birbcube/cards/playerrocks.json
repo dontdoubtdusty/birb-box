@@ -1,0 +1,14 @@
+{
+  "archived": false,
+  "checklist": [],
+  "columnId": "next",
+  "createdAt": 1793830000000,
+  "description": "Player can add rocks, big and small. Open: control (in-world, as the project prefers, or an ImGui stand-in first), moving and removing, limits. Build after 5.16 and 5.17 compile and pass testing. Rocks already save; birds, food, pool and lush ring must respect new ones. Estimate 80-150k tokens.",
+  "order": 180,
+  "priority": "Medium",
+  "tags": [
+    "Rocks"
+  ],
+  "title": "Player-placed rocks",
+  "updatedAt": 1793830000000
+}

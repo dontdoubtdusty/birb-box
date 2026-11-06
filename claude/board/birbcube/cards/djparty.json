@@ -1,0 +1,42 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": false,
+      "id": "djparty-0",
+      "text": "Answer the questions: radio or own tune, who and what the DJs are, rarity, who joins, event name"
+    },
+    {
+      "completed": false,
+      "id": "djparty-1",
+      "text": "The DJs and their spot"
+    },
+    {
+      "completed": false,
+      "id": "djparty-2",
+      "text": "Dance poses in BirbAnimator"
+    },
+    {
+      "completed": false,
+      "id": "djparty-3",
+      "text": "Soft color drift in light and fog"
+    },
+    {
+      "completed": false,
+      "id": "djparty-4",
+      "text": "Checks: no hard pulses, everyone settles back, save and load"
+    }
+  ],
+  "columnId": "ideas",
+  "createdAt": 1793575200006,
+  "description": "A rare storyteller event: two DJ birds turn up and the garden dances for about a song. Design: `vision.md` (Time, weather and events). Questions and checks: `next-session-plan.md`, DJ dance party.",
+  "order": 17000,
+  "priority": "Low",
+  "tags": [
+    "Event",
+    "Step 11",
+    "Radio"
+  ],
+  "title": "DJ dance party",
+  "updatedAt": 1793575200006
+}

@@ -16,7 +16,7 @@ public class SidePanels
     private const int RimPad = 12;          // brass showing around each screen
     private const int SlotGap = 14;         // between screens in the same column
     public const int ColumnWidth = BucketPanel.PanelWidth + RimPad * 2;
-    private const int StatsBaseHeight = 124;   // the counts, the time of day and the weather
+    private const int StatsBaseHeight = 132;   // the counts, the time of day and the weather row (Hud.WeatherRowHeight)
     public const int FeatherColumns = 4;        // the collection of feathers under them, a species to a cell
     public const int FeatherMaxShown = 8;       // more species than this are summed up in a "+N more" line
     public const int FeatherCellWidth = 50, FeatherRowHeight = 20, FeatherOverflowHeight = 16;

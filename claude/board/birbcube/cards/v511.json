@@ -1,0 +1,41 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "v511-0",
+      "text": "Smoke test (qa-plan.md section 3)"
+    },
+    {
+      "completed": true,
+      "id": "v511-1",
+      "text": "Follow a bird at Perch zoom: it preens now and then and turns its head back"
+    },
+    {
+      "completed": true,
+      "id": "v511-2",
+      "text": "A scratch reads as a scratch (short-legged birds may show mostly the head tilt)"
+    },
+    {
+      "completed": true,
+      "id": "v511-3",
+      "text": "Walking off mid-act blends cleanly"
+    },
+    {
+      "completed": false,
+      "id": "v511-4",
+      "text": "Commit"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793551500000,
+  "description": "Two new idle acts for standing birds in `BirbAnimator.cs`: preen (head turned back into the left shoulder, nibbling, wing held out a little) and scratch (left foot up, head tipped over to meet it, quick scratching, eyes half shut). Picked by shares: preen 35%, fluff 25%, stretch 20%, scratch 20%; gaps unchanged (8-20 s). Compiled and run in Claude's workspace; at screenshot distance the poses were too small to judge, so the look is unconfirmed.",
+  "order": 23000,
+  "priority": "Medium",
+  "tags": [
+    "Animation",
+    "5.11"
+  ],
+  "title": "5.11 Preen and scratch idles",
+  "updatedAt": 1793740365326
+}

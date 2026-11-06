@@ -1,0 +1,15 @@
+{
+  "archived": false,
+  "checklist": [],
+  "columnId": "ideas",
+  "createdAt": 1793549370513,
+  "description": "Seed drifts and birds fly slower against it. Open: does it move the rain streaks too, which traits react.",
+  "order": 3000,
+  "priority": "Low",
+  "tags": [
+    "Weather",
+    "Step 10"
+  ],
+  "title": "Wind (a Step 10b slice)",
+  "updatedAt": 1793549370513
+}

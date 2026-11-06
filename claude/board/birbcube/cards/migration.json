@@ -1,0 +1,41 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": false,
+      "id": "migration-0",
+      "text": "Answer the questions: which species when, goodbyes, flock-only species, out-of-view stopovers"
+    },
+    {
+      "completed": false,
+      "id": "migration-1",
+      "text": "Seasons on Species, Birds.cs, species files and the Designer"
+    },
+    {
+      "completed": false,
+      "id": "migration-2",
+      "text": "Arrivals and regulars follow the season"
+    },
+    {
+      "completed": false,
+      "id": "migration-3",
+      "text": "Stopover flock event"
+    },
+    {
+      "completed": false,
+      "id": "migration-4",
+      "text": "Checks: no out-of-season arrivals, flock comes and goes together, save and load"
+    }
+  ],
+  "columnId": "ideas",
+  "createdAt": 1793575200004,
+  "description": "Seasonal species, plus a stopover flock at a season's turn (a storyteller event close to the Murmuration). Design: `vision.md` (Species). Build sketch, questions and checks: `next-session-plan.md`, Migration.",
+  "order": 15000,
+  "priority": "Medium",
+  "tags": [
+    "Species",
+    "Seasons"
+  ],
+  "title": "Migration",
+  "updatedAt": 1793575200004
+}

@@ -1,0 +1,46 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "v517-0",
+      "text": "It builds (not compiled; read and traced by hand)"
+    },
+    {
+      "completed": true,
+      "id": "v517-1",
+      "text": "Drag the ring slowly and let go within about 2 notches short of N, W, S or E: it settles on the letter"
+    },
+    {
+      "completed": true,
+      "id": "v517-2",
+      "text": "Let go just past a letter (half a notch): it pulls back onto it"
+    },
+    {
+      "completed": true,
+      "id": "v517-3",
+      "text": "A fast flick still coasts past letters and stops on an ordinary notch elsewhere; no jitter while settling"
+    },
+    {
+      "completed": true,
+      "id": "v517-4",
+      "text": "Does it feel too sticky? Tune CompassAhead / CompassBehind in Dial.cs"
+    },
+    {
+      "completed": false,
+      "id": "v517-5",
+      "text": "Commit"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793830000000,
+  "description": "The ring leans toward the compass points. When it slows down it settles on N/W/S/E if it would stop within 2 notches (20 degrees) short of one or half a notch past it. Side effect: the notch right next to a letter can only be reached by turning away from the letter. Session 42. Files: `Dial.cs`, `GameEngine.cs` (version).",
+  "order": 100,
+  "priority": "Medium",
+  "tags": [
+    "Dial",
+    "5.17"
+  ],
+  "title": "5.17 Ring pulls toward N/W/E/S",
+  "updatedAt": 1793830000000
+}

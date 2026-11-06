@@ -38,7 +38,7 @@ One command per line. `#` starts a comment. Every line is checked before the gam
 | `hour <h>` | Sets today's hour and holds the clock |
 | `season <name>` | Skips to spring, summer, autumn or winter (same hour) and holds the clock |
 | `clock hold\|run` | Holds or releases the clock |
-| `rain [strength]` / `drizzle` | Starts rain, waits for it to build all the way, holds the weather |
+| `rain [strength]` / `showers` / `drizzle` | Starts rain, waits for it to build all the way, holds the weather |
 | `clear` | Clears up, waits for a clear sky, holds the weather |
 | `soak` | Soaks the ground (puddles still need rain) |
 | `birds <n>` | Calls n birds (they walk or fly in; follow with `wait 20` or so) |

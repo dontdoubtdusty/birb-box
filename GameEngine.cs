@@ -8,7 +8,7 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Cube 5.19 Alpha";
+    public const string Version = "Birb Cube 5.22 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
@@ -42,6 +42,7 @@ public class GameEngine
     public Pouring Pour { get; private set; }
     public WorldClock Clock { get; private set; }
     public Weather Weather { get; private set; }
+    public Storyteller Story { get; private set; }
 
     // SIMULATION STATE
     public bool Paused = false;
@@ -151,6 +152,7 @@ public class GameEngine
         Pour = new Pouring();
         Clock = new WorldClock();
         Weather = new Weather();
+        Story = new Storyteller(View, FoodSpawner);
     }
 
     public void Run()
@@ -174,11 +176,13 @@ public class GameEngine
 
         Saves.LoadOrStartNew(this);
         Settings.Load(this);    // after the window is up, since it may go fullscreen
+        WarmUp();
 
         while (!Raylib.WindowShouldClose() && !Menu.QuitRequested)
         {
             float dt = Raylib.GetFrameTime();
             Pacing.Update(dt);
+            LogSlowFrame(dt);
             Update(dt);
             Draw();
         }
@@ -194,6 +198,40 @@ public class GameEngine
         Radio.Unload();
         Sounds.Unload();
         Raylib.CloseWindow();
+    }
+
+    // Draws two frames with the projector pretending to be fully up, before the first real frame. While the box is
+    // off the hologram pass is skipped, so its shaders, buffers and textures were first used on the player's first
+    // click of the power button, and the graphics driver's first-use work stalled that frame. Done here, the stall
+    // happens during start-up instead. Draw only; nothing is simulated.
+    private void WarmUp()
+    {
+        Projector.Warming = true;
+        for (int i = 0; i < 2; i++) Draw();
+        Projector.Warming = false;
+    }
+
+    // Slow-frame log (slowframes.txt next to the exe, at most MaxSlowLines lines): one line for each frame that took
+    // longer than SlowFrameSeconds, with what the box was doing, so a stall like the first-click lag can be traced.
+    private const float SlowFrameSeconds = 0.1f;
+    private const int MaxSlowLines = 200;
+    private int slowLines;
+    private int framesRun;
+    private float rawUpdateMs, rawDrawMs;
+
+    private void LogSlowFrame(float dt)
+    {
+        framesRun++;
+        if (framesRun < 5 || dt < SlowFrameSeconds || slowLines >= MaxSlowLines) return;    // the first frames are start-up
+        slowLines++;
+        try
+        {
+            string line = $"{DateTime.Now:HH:mm:ss} {Version} frame {dt * 1000f:0} ms (previous frame: update {rawUpdateMs:0}, draw {rawDrawMs:0}) " +
+                          $"on={Projector.IsOn} cube={Projector.Cube:0.00} scene={Mode.Showing}{Environment.NewLine}";
+            File.AppendAllText(Path.Combine(AppContext.BaseDirectory, "slowframes.txt"), line);
+        }
+        catch (IOException) { }    // a log that can't be written is not worth a crash
+        catch (UnauthorizedAccessException) { }
     }
 
     // A new world starts with wild seed and no birds; every bird arrives because of seed.
@@ -216,6 +254,7 @@ public class GameEngine
 
         // Smoothed so the number is readable instead of flickering
         float ms = (float)updateClock.Elapsed.TotalMilliseconds;
+        rawUpdateMs = ms;
         UpdateMs += (ms - UpdateMs) * 0.05f;
     }
 
@@ -253,7 +292,7 @@ public class GameEngine
         UpdateScene(dt, ref input);
         UpdateCameraAndRing(dt, ref input);
         UpdateBoxClicks(dt, input);
-        UpdateSimulation(dt);
+        UpdateSimulation(dt, input.BirdsShowing);
         UpdatePanels(dt, input);
     }
 
@@ -449,8 +488,9 @@ public class GameEngine
         Pour.Update(dt, pourBlocked, Mouse, Bucket.Bucket, FoodSpawner, View);
     }
 
-    // The bird world, its clock and its weather move on (unless paused), then birds that left are forgotten by the selection.
-    private void UpdateSimulation(float dt)
+    // The bird world, its clock, its weather and the Storyteller's events move on (unless paused), then birds that left
+    // are forgotten by the selection. birdsShowing: you're watching the garden, so events may center on the view.
+    private void UpdateSimulation(float dt, bool birdsShowing)
     {
         if (!Paused)
         {
@@ -463,6 +503,7 @@ public class GameEngine
             UpdateEntities(simDt);
             BirdSpawner.CheckRareSeen(View);
             BirdSpawner.Update(simDt);
+            Story.Update(simDt, birdsShowing);
             FoodSpawner.Update(simDt);
             Wear.Update(simDt, World);
         }
@@ -482,6 +523,7 @@ public class GameEngine
         Sides.Update(this, input.MouseOverImGui);
         Hud.Update(this, input.MouseOverImGui);
         Map.Update(this, input.MouseOverImGui);
+        foreach ((string text, Vector3 spot) in Story.TakeAnnouncements()) Renderer.ChatMessages.Announce(text, spot);
         Renderer.ChatMessages.Update(View, dt, Paused ? 0f : dt);    // the sleeping z's hold still while paused
         Bucket.Update(dt, input.MouseOverImGui);
 
@@ -678,6 +720,7 @@ public class GameEngine
 
             // Measured before EndDrawing, which waits for the screen to be ready.
             float ms = (float)drawClock.Elapsed.TotalMilliseconds;
+            rawDrawMs = ms;
             DrawMs += (ms - DrawMs) * 0.05f;
             DrawStats.EndFrame();
 

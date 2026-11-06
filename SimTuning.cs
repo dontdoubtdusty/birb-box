@@ -1,4 +1,4 @@
-// The simulation numbers the tools panel (Tab) can change. Saved in the settings file (see Settings.cs),
+// The simulation numbers the tools panel (Tab) can change (the Storyteller's pace too). Saved in the settings file (see Settings.cs),
 // so they survive a restart and a New world. Defaults keeps the values as written here, for the panel's
 // "Default:" hints and right-click reset. Fields rather than properties, so ImGui sliders can take them by ref.
 public class SimTuning
@@ -59,6 +59,13 @@ public class SimTuning
     public float SproutMinutes = 15f;              // how long a sprout lives, give or take a little
     public int MaxSprouts = 12;
 
+    // THE STORYTELLER (see Storyteller.cs): the rhythm is quiet, light beat, quiet, Big beat, rest
+    public float StoryPace = 1f;                   // times as often as below; 0 turns events off
+    public float StoryQuietMinutes = 5f;           // sim minutes of quiet before each beat (give or take 30%)
+    public float StoryRestMinutes = 10f;           // the longer rest after a Big beat (give or take 20%)
+    public float BigCooldownMinutes = 20f;         // at least this long between two Big events (hawk, murmuration)
+    public float GiftCooldownMinutes = 6f;         // and between two Gifts or Small ones
+
     // Keeps every number usable, in case the file was edited by hand or a min slider passed its max.
     public void Clamp()
     {
@@ -96,5 +103,10 @@ public class SimTuning
         SproutChancePerSeed = Math.Clamp(SproutChancePerSeed, 0f, 1f);
         SproutMinutes = MathF.Max(1f, SproutMinutes);
         MaxSprouts = Math.Clamp(MaxSprouts, 0, 200);
+        StoryPace = Math.Clamp(StoryPace, 0f, 10f);
+        StoryQuietMinutes = MathF.Max(0.1f, StoryQuietMinutes);
+        StoryRestMinutes = MathF.Max(0.1f, StoryRestMinutes);
+        BigCooldownMinutes = MathF.Max(0f, BigCooldownMinutes);
+        GiftCooldownMinutes = MathF.Max(0f, GiftCooldownMinutes);
     }
 }

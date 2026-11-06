@@ -1,0 +1,77 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "s13b2-0",
+      "text": "Smoke test (qa-plan.md section 3)"
+    },
+    {
+      "completed": true,
+      "id": "s13b2-1",
+      "text": "Start with no feathers: shelves are empty; after your first feather that species' shelf appears with a plaque"
+    },
+    {
+      "completed": true,
+      "id": "s13b2-2",
+      "text": "Every shelf charges the right species' feathers; the tag shows the price and how many you hold"
+    },
+    {
+      "completed": true,
+      "id": "s13b2-3",
+      "text": "Short purse: Buy is refused, the log says what it costs, the tag hints at the ledger"
+    },
+    {
+      "completed": true,
+      "id": "s13b2-4",
+      "text": "Ledger: click the book, pick give and get, Trade; 3 out, 1 in, never negative, Trade greyed when invalid"
+    },
+    {
+      "completed": true,
+      "id": "s13b2-5",
+      "text": "Tools panel \"+10 of each feather\": more than 4 species give page arrows that turn the shelf"
+    },
+    {
+      "completed": true,
+      "id": "s13b2-6",
+      "text": "Lure jar on the crate takes any feather and moves to the Frostcrest shelf after its first feather"
+    },
+    {
+      "completed": true,
+      "id": "s13b2-7",
+      "text": "Feeders cost Dusk Down (Tray) and Gild Quill (Tube) and look big enough in the shop"
+    },
+    {
+      "completed": true,
+      "id": "s13b2-8",
+      "text": "A bought item restocks after its wait"
+    },
+    {
+      "completed": true,
+      "id": "s13b2-9",
+      "text": "Quit and relaunch: feathers come back; an old save loads"
+    },
+    {
+      "completed": true,
+      "id": "s13b2-10",
+      "text": "Prices feel right (a sack of Blue Barley is 20 Rime Feathers)"
+    },
+    {
+      "completed": false,
+      "id": "s13b2-11",
+      "text": "Commit (with 5.11-5.15 together)"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793549370513,
+  "description": "One shelf per species, shown after its first feather (four to a page, arrows to turn), selling the seeds that species eats, priced in its own feathers (jar 2, sack 4 jars; Blue Barley jar 5). The shopkeeper's ledger book on the counter opens a panel: 3 feathers of one kind for 1 of another already collected. Feeders are paid in a matching species' feather (Tray: Dusk Down, Tube: Gild Quill) and drawn bigger in the shop. The crate by the door sells a rare species' lure seed for feathers of any kind until you hold that species' feather, then it moves to that species' shelf. Restock timers are no longer saved. Session 40. Compiled, screenshotted and script-tested in Claude's workspace (shelves, paging with 8 species, ledger, refusals, lure move); not yet run on your machine. Prices are a first guess: tune `JarPrice` in `Seeds.cs` by playing.",
+  "order": 26000,
+  "priority": "High",
+  "tags": [
+    "Step 13",
+    "Store",
+    "5.15"
+  ],
+  "title": "5.15 Step 13b-2: Store shelves and the exchange",
+  "updatedAt": 1793740365326
+}

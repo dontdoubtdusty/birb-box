@@ -1,0 +1,14 @@
+{
+  "archived": false,
+  "checklist": [],
+  "columnId": "ideas",
+  "createdAt": 1793549370513,
+  "description": "All in `BirbAnimator.cs`, low risk. Still to do: anticipation and overshoot; follow-through springs on crest, tail and wingtips; look-at targets (food, birds, cursor); timing variety (holds and snaps); dust puffs, bouncing grains, wing gusts; an optional 12 fps toy mode. Done: squash and stretch, blink, fluff, wing stretch, sip, bathe, shake off, rain hunch, naps, preen, scratch.",
+  "order": 10000,
+  "priority": "Low",
+  "tags": [
+    "Animation"
+  ],
+  "title": "More bird animation",
+  "updatedAt": 1794050000000
+}

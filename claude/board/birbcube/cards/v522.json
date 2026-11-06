@@ -1,0 +1,82 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "v522-0",
+      "text": "It builds (dotnet build: no errors, no warnings)"
+    },
+    {
+      "completed": true,
+      "id": "v522-1",
+      "text": "Smoke test (qa-plan.md section 3); the hologram still looks normal (shader compiled)"
+    },
+    {
+      "completed": true,
+      "id": "v522-2",
+      "text": "Tab, Storyteller, Hawk's Shadow with 6+ birds in view: a soft shadow crosses (not a flash); label shows; some freeze (card: Frozen still), some fly off and come back about a minute later; one log line"
+    },
+    {
+      "completed": true,
+      "id": "v522-3",
+      "text": "A Watchman in range calls first; a napper wakes; a bather flies out"
+    },
+    {
+      "completed": true,
+      "id": "v522-4",
+      "text": "Murmuration with seed on the ground: a flock comes in from one side, eats, and leaves together; no feathers, no chat labels"
+    },
+    {
+      "completed": true,
+      "id": "v522-5",
+      "text": "Windfall: piles fall near the view, of seed the birds here like"
+    },
+    {
+      "completed": true,
+      "id": "v522-6",
+      "text": "Records show on the bird card (last 3) and survive save, load and a regular's return"
+    },
+    {
+      "completed": true,
+      "id": "v522-7",
+      "text": "4x for a few in-game days: events spaced out, no two Big ones inside 20 min, nothing at night"
+    },
+    {
+      "completed": true,
+      "id": "v522-8",
+      "text": "Save mid-murmuration and reload: the flock leaves at once; save mid-hawk: nobody stuck frozen"
+    },
+    {
+      "completed": true,
+      "id": "v522-9",
+      "text": "The store and the Designer show no hawk shadow; the Hologram View does"
+    },
+    {
+      "completed": true,
+      "id": "v522-10",
+      "text": "An old save loads"
+    },
+    {
+      "completed": true,
+      "id": "v522-11",
+      "text": "Pace feels right? Tune in Tab, Storyteller"
+    },
+    {
+      "completed": false,
+      "id": "v522-12",
+      "text": "Commit"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1794002400000,
+  "description": "One pacer (`Storyteller.cs`): quiet, light beat, quiet, Big beat, rest; one event at a time; Big cooldown 20 min, Gift 6 min; weighted roll among allowed events; 70% centered on the view while you watch. Hawk's Shadow (soft shadow crosses the garden; Watchman alarm, scatter or freeze by Nerve, scattered birds fly back), Murmuration (a flock strips the ground seed and leaves together), Windfall (seed piles drop near the view). Log line always, a label in view; bird records (last 3 on the card). Tab panel: Storyteller section with fire buttons and pace sliders. Session 47. Builds on Windows (dotnet build, no warnings); not run. The shader change is untested: if the hologram looks flat or untinted, hologram.fs failed to compile.",
+  "order": 27000,
+  "priority": "High",
+  "tags": [
+    "Step 11",
+    "Storyteller",
+    "5.22"
+  ],
+  "title": "5.22 Step 11: Storyteller with Hawk's Shadow, Murmuration, Windfall",
+  "updatedAt": 1794010000000
+}

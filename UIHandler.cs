@@ -147,6 +147,12 @@ public class UIHandler
         }
         t.Clamp();    // a min slider pushed past its max drags the max along
 
+        // Temporary: shows what the forest ambience is doing, to track down a loud swell. Remove once found.
+        if (ImGui.CollapsingHeader("Ambience"))
+        {
+            ImGui.Text(Ambience.DebugLine);
+        }
+
         if (ImGui.CollapsingHeader("Day and night"))
         {
             DrawClockTools(engine.Clock, t, d);
@@ -155,6 +161,11 @@ public class UIHandler
         if (ImGui.CollapsingHeader("Weather"))
         {
             DrawWeatherTools(engine.Weather, engine.Clock, t, d);
+        }
+
+        if (ImGui.CollapsingHeader("Storyteller"))
+        {
+            DrawStoryTools(engine.Story, t, d);
         }
 
         if (ImGui.CollapsingHeader("Cheats"))
@@ -245,7 +256,7 @@ public class UIHandler
     // soak the ground at once (so puddles can form), or hold the weather as it is.
     private static void DrawWeatherTools(Weather weather, WorldClock clock, SimTuning t, SimTuning d)
     {
-        string spell = weather.Raining ? (weather.Strength < 1f ? "drizzle" : "steady rain") : "dry";
+        string spell = weather.Raining ? (weather.Level == 1 ? "light rain" : weather.Level == 2 ? "showers" : "downpour") : "dry";
         ImGui.Text($"{weather.Word}: {spell} spell, {weather.HoursLeft:0.0} h left");
         ImGui.Text($"Cloud {weather.Cloud:0.00}  rain {weather.Rain:0.00}  ground wet {weather.GroundWet:0.00}  puddles {weather.Puddles.All.Count}");
         ImGui.Text($"Drifting clouds: cover {weather.Cover:0.00}");
@@ -254,7 +265,9 @@ public class UIHandler
         float fair = weather.FairCover;
         if (ImGui.SliderFloat("Fair-weather clouds", ref fair, 0f, 1f, "%.2f")) weather.SetFairCover(fair);
 
-        if (ImGui.Button("Rain")) weather.StartRain(1f);
+        if (ImGui.Button("Downpour")) weather.StartRain(Weather.DownpourStrength);
+        ImGui.SameLine();
+        if (ImGui.Button("Showers")) weather.StartRain(Weather.ShowersStrength);
         ImGui.SameLine();
         if (ImGui.Button("Drizzle")) weather.StartRain(Weather.DrizzleStrength);
         ImGui.SameLine();
@@ -265,6 +278,30 @@ public class UIHandler
 
         Slider("Rain comes", ref t.RainOften, d.RainOften, 0.1f, 10f, "%.2fx as often");
         Slider("Rain spoils seed", ref t.RainSpoil, d.RainSpoil, 1f, 10f, "%.2fx");
+    }
+
+    // The Storyteller (see Storyteller.cs): what's running, the next beat and the cooldowns, a button to fire each event
+    // now (ignoring its cooldown and conditions), and the pace.
+    private static void DrawStoryTools(Storyteller story, SimTuning t, SimTuning d)
+    {
+        ImGui.Text(story.Running != null ? $"Running: {story.Running.Name}" : "Nothing running");
+        string beat = story.BigBeatNext ? "Big beat" : "light beat";
+        ImGui.Text(t.StoryPace > 0f ? $"Next: {beat} in {story.NextBeatIn / 60f:0.0} min (counts while nothing runs)" : "Events are off (pace 0)");
+        ImGui.Text($"Cooldowns: Big {story.CooldownLeft(StoryCategory.Big) / 60f:0.0} min, Gift {story.CooldownLeft(StoryCategory.Gift) / 60f:0.0} min");
+
+        bool first = true;
+        foreach (StoryEvent ev in story.Events)
+        {
+            if (!first) ImGui.SameLine();
+            first = false;
+            if (ImGui.Button(ev.Name)) story.Fire(ev.Key);
+        }
+
+        Slider("Pace", ref t.StoryPace, d.StoryPace, 0f, 5f, "%.2fx (0 off)");
+        Slider("Quiet between", ref t.StoryQuietMinutes, d.StoryQuietMinutes, 0.5f, 30f, "%.1f min");
+        Slider("Rest after Big", ref t.StoryRestMinutes, d.StoryRestMinutes, 0.5f, 60f, "%.1f min");
+        Slider("Big cooldown", ref t.BigCooldownMinutes, d.BigCooldownMinutes, 0f, 90f, "%.1f min");
+        Slider("Gift cooldown", ref t.GiftCooldownMinutes, d.GiftCooldownMinutes, 0f, 30f, "%.1f min");
     }
 
     // 5.5 -> "05:30"

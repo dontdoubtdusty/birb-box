@@ -1,0 +1,31 @@
+{
+  "color": "emerald-blue",
+  "columns": [
+    {
+      "id": "ideas",
+      "title": "Ideas and unplaced"
+    },
+    {
+      "id": "next",
+      "title": "Up next"
+    },
+    {
+      "id": "doing",
+      "title": "In progress"
+    },
+    {
+      "id": "test",
+      "title": "Built, needs testing"
+    },
+    {
+      "id": "done",
+      "title": "Done"
+    }
+  ],
+  "createdAt": 1793549370513,
+  "genre": "Cozy bird simulation",
+  "order": 1,
+  "pitch": "A holographic bird terrarium in a spaceship cabin: brass dials, glow and fog, birds that keep living out of view.",
+  "title": "Birb Cube",
+  "updatedAt": 1793549370513
+}

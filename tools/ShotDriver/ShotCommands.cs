@@ -39,6 +39,7 @@ public static partial class ShotDriver
         ["clock"]    = new("clock hold|run", 1, a => engine.Clock.Held = a[0] == "hold"),
         ["rain"]     = new("rain [strength, default 1]", 0, a => Rain(a.Length > 0 ? Float(a[0]) : 1f)),
         ["drizzle"]  = new("drizzle", 0, a => Rain(Weather.DrizzleStrength)),
+        ["showers"]  = new("showers", 0, a => Rain(Weather.ShowersStrength)),
         ["clear"]    = new("clear", 0, a => ClearSky()),
         ["soak"]     = new("soak", 0, a => engine.Weather.Soak()),
 

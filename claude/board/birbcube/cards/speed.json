@@ -1,0 +1,14 @@
+{
+  "archived": false,
+  "checklist": [],
+  "columnId": "ideas",
+  "createdAt": 1793549370513,
+  "description": "One focused speed pass first (`next-session-plan.md` section 4). Open decision in `vision.md`: WASD pans the view and would clash with walking.",
+  "order": 7000,
+  "priority": "Low",
+  "tags": [
+    "Speed"
+  ],
+  "title": "Speed pass, then walk around the cabin",
+  "updatedAt": 1793549370513
+}

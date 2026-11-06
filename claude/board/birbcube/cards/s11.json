@@ -1,0 +1,61 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "s11-0",
+      "text": "Answer the questions: which events, how often, how they're announced, out of view too"
+    },
+    {
+      "completed": true,
+      "id": "s11-1",
+      "text": "Storyteller pacer with cooldowns"
+    },
+    {
+      "completed": true,
+      "id": "s11-2",
+      "text": "First events: Hawk's Shadow, Murmuration, Windfall"
+    },
+    {
+      "completed": true,
+      "id": "s11-3",
+      "text": "Tools panel buttons to fire each event"
+    },
+    {
+      "completed": true,
+      "id": "s11-4",
+      "text": "Events survive save and load, or drop cleanly"
+    },
+    {
+      "completed": true,
+      "id": "s11-5",
+      "text": "Checks: events never clump, each ends cleanly (tested Nov 5)"
+    },
+    {
+      "completed": false,
+      "id": "s11-6",
+      "text": "Rare visitor"
+    },
+    {
+      "completed": false,
+      "id": "s11-7",
+      "text": "Lost fledgling"
+    },
+    {
+      "completed": false,
+      "id": "s11-8",
+      "text": "Gilded Hour"
+    }
+  ],
+  "columnId": "next",
+  "createdAt": 1793549370513,
+  "description": "The pacer, Hawk's Shadow, Murmuration, Windfall and bird records are built (5.22, see its test card). Still to come: Rare visitor (needs per-species conditions), Lost fledgling (needs a young-bird behavior), Gilded Hour (light effect plus extra feathers), Squabble (with 12b), then the migration stopover (reuse Murmuration) and the DJ party. Questions: `next-session-plan.md`, Step 11.",
+  "order": 1000,
+  "priority": "High",
+  "tags": [
+    "Step 11",
+    "Simulation"
+  ],
+  "title": "Step 11: Storyteller, more events",
+  "updatedAt": 1794010000000
+}

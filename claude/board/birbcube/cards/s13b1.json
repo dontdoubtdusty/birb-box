@@ -1,0 +1,102 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "s13b1-0",
+      "text": "Answer the 13b questions"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-1",
+      "text": "A feather per species (Ember Plume, Dusk Down, Gild Quill, Rime Feather, plus Designer ones)"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-2",
+      "text": "Drops, drift and click to collect"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-3",
+      "text": "Counts per species in the HUD, saved"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-4",
+      "text": "No coin left anywhere (HUD, log lines, pedestal, store text)"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-5",
+      "text": "Smoke test (qa-plan.md section 3; buying now spends feathers)"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-6",
+      "text": "Birds drop feathers in their own color; they float down swaying and lie flat"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-7",
+      "text": "Click a feather: it vanishes, the log says it was collected and the HUD count goes up"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-8",
+      "text": "The HUD collection fills in as you collect; hover shows the feather's name; nothing overlaps the dial"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-9",
+      "text": "The pedestal's right window reads FEATHERS with the total"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-10",
+      "text": "Store: Buy spends feathers (any kind, biggest stack first); the tag and log say when short"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-11",
+      "text": "Quit and relaunch: counts and loose feathers come back; an old save loads with zero feathers"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-12",
+      "text": "Tools panel: Feathers sliders and the \"+10 of each feather\" cheat work"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-13",
+      "text": "The rustle and tick sounds are fine as placeholders"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-14",
+      "text": "Income feels right (store about 3x pricier until 13b-2)"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-15",
+      "text": "Optional: delete the empty Coin.cs and the unused coin_land.wav and coin_pickup.wav"
+    },
+    {
+      "completed": true,
+      "id": "s13b1-16",
+      "text": "Commit"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793549370513,
+  "description": "Feathers replace coins. A full meal drops a feather of the bird's own species (0.22 a meal, regulars and named birds 1.5x): Ember Plume, Dusk Down, Gild Quill, Rime Feather, and \"<Name> Feather\" for Designer species. It pops, floats down swaying, lies flat in the species' color for 60 s (half that out of view). Counts are per species, saved; the right column shows a collection grid (a species appears after its first feather; hover for the name) and the pedestal window reads FEATHERS with the total. The store still has its old prices and takes feathers of any kind, biggest stack first, until 13b-2. Old saves' coins are reset to zero. New soft placeholder sounds. Session 39. Compiled and run in Claude's workspace (drops, drift, collect, spend, save and load, old-format save); not yet run on your machine.",
+  "order": 700,
+  "priority": "High",
+  "tags": [
+    "Step 13",
+    "Feathers",
+    "5.14"
+  ],
+  "title": "5.14 Step 13b-1: Feathers drop and are counted",
+  "updatedAt": 1793929823965
+}

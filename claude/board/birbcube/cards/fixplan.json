@@ -1,0 +1,25 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "fixplan-0",
+      "text": "Streams: \"Do first\" line replaced (water trips live in BirdMover.Water.cs)"
+    },
+    {
+      "completed": true,
+      "id": "fixplan-1",
+      "text": "Trees: \"Do first\" line replaced (perching and roosting still in BirdMover.cs; look before adding tree perches)"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793908800000,
+  "description": "In claude/next-session-plan.md two \"Do first\" lines point at the BirdMover water split, which is done. Batch with the next rewrite of that doc (a doc can only be rewritten whole).",
+  "order": 27100,
+  "priority": "Low",
+  "tags": [
+    "Docs"
+  ],
+  "title": "Plan doc: update two stale \"Do first\" lines",
+  "updatedAt": 1794010000000
+}

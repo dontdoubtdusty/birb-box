@@ -7,6 +7,8 @@ using Raylib_cs;
 //  - "<name> has rejoined the chat" instead, for a regular coming back.
 //  - name tags: just the name, floating over a bird for as long as it's in view (which birds: NameLabels setting).
 //  - sleeping z's: little z's drifting up from every roosting bird, in a pale hologram tint, so sleepers read in the dark.
+//  - event labels ("A hawk's shadow passes over"): a Storyteller event happening in view, in plain text, where it centers.
+// Quiet birds (a passing flock, birds the hawk scattered) get no entered / left labels; flock birds get no name tags.
 // Labels fade out, and dim near the hologram's edge like everything else in the fog.
 // Each label's text is drawn once into its own small texture, then shown on a flat rectangle
 // that always faces the camera. To stay readable over grass, dirt and birds, every label sits on a
@@ -77,10 +79,12 @@ public class ChatMessages
 
     private class Message
     {
-        public Bird Bird;
+        public Bird? Bird;                // null for an event's label
+        public string? Text;              // an event's label text ("A hawk's shadow passes over"); null for a bird's
         public bool Leaving;              // a "left the chat" label
         public Vector3 LastPosition;      // kept so the label can finish fading if the bird is gone
         public float Age;
+        public float Lifetime = ChatMessages.Lifetime;
         public RenderTexture2D Texture;   // Id 0 until PrepareTextures draws it
 
         public Message(Bird bird, bool leaving)
@@ -89,7 +93,18 @@ public class ChatMessages
             Leaving = leaving;
             LastPosition = bird.Position;
         }
+
+        public Message(string text, Vector3 position)
+        {
+            Text = text;
+            LastPosition = position;
+            Lifetime = EventLifetime;
+        }
     }
+
+    // EVENT LABELS (the Storyteller's events, when they happen in view): stay where they started, rise a little, last longer
+    private const float EventLifetime = 7f;
+    private const float EventLift = 0.8f;         // they start this much higher than a bird's label, above the birds
 
     private readonly List<Message> messages = new();
     private readonly List<Message> finished = new();     // waiting for their textures to be freed
@@ -117,13 +132,14 @@ public class ChatMessages
             firstUpdate = false;
         }
 
+        // Quiet birds (a passing flock, birds scattered by the hawk) never get one
         foreach (Bird bird in birds)
         {
             if (announcedBirds.Contains(bird.EntityID)) continue;
             if (!view.Contains(bird.Position)) continue;
 
             announcedBirds.Add(bird.EntityID);
-            messages.Add(new Message(bird, leaving: false));
+            if (!bird.Quiet) messages.Add(new Message(bird, leaving: false));
         }
 
         // Checked the moment a bird starts leaving, so one that is already on its way out never gets a label later
@@ -132,19 +148,19 @@ public class ChatMessages
             if (bird.State != BirdState.Leaving || departedBirds.Contains(bird.EntityID)) continue;
 
             departedBirds.Add(bird.EntityID);
-            if (view.Contains(bird.Position)) messages.Add(new Message(bird, leaving: true));
+            if (view.Contains(bird.Position) && !bird.Quiet) messages.Add(new Message(bird, leaving: true));
         }
 
         foreach (Message msg in messages)
         {
             msg.Age += dt;
-            if (!msg.Leaving && World.Instance.Contains(msg.Bird)) msg.LastPosition = msg.Bird.Position;
+            if (!msg.Leaving && msg.Bird != null && World.Instance.Contains(msg.Bird)) msg.LastPosition = msg.Bird.Position;
         }
 
         while (messages.Count > MaxMessages) Finish(messages[0]);
         foreach (Message msg in messages.ToList())
         {
-            if (msg.Age >= Lifetime) Finish(msg);
+            if (msg.Age >= msg.Lifetime) Finish(msg);
         }
 
         UpdateNameLabels(view, birds);
@@ -189,8 +205,15 @@ public class ChatMessages
 
             if (!view.IsShown(bird.Position, 0.5f)) continue;
             if (messages.Any(msg => !msg.Leaving && msg.Bird == bird)) continue;
+            if (bird.FlockMember) continue;    // a passing flock has no names worth showing
             labeledBirds.Add(bird);
         }
+    }
+
+    // An event's label at this world spot (the Storyteller only sends ones that happen in view).
+    public void Announce(string text, Vector3 position)
+    {
+        messages.Add(new Message(text, position));
     }
 
     private void Finish(Message msg)
@@ -216,7 +239,8 @@ public class ChatMessages
             if (msg.Texture.Id != 0) continue;
             msg.Texture = Raylib.LoadRenderTexture(TextureWidth, TextureHeight);
             Raylib.SetTextureFilter(msg.Texture.Texture, TextureFilter.Bilinear);
-            RenderLabel(msg.Texture, msg.Bird.Name, msg.Bird.Species.Color, msg.Leaving, msg.Bird.Visits > 1);
+            if (msg.Bird != null) RenderLabel(msg.Texture, msg.Bird.Name, msg.Bird.Species.Color, msg.Leaving, msg.Bird.Visits > 1);
+            else RenderEventLabel(msg.Texture, msg.Text ?? "");
         }
 
         PrepareNameTags();
@@ -314,6 +338,22 @@ public class ChatMessages
         Raylib.EndTextureMode();
     }
 
+    // An event's line in plain light text on its plate, centered and shrunk to fit.
+    private static void RenderEventLabel(RenderTexture2D target, string text)
+    {
+        int size = 36;
+        while (size > 10 && UiText.Measure(text, size) > TextureWidth - PlatePadding * 2 - 4) size -= 2;
+        int width = UiText.Measure(text, size);
+        int x = (TextureWidth - width) / 2;
+        int y = (TextureHeight - size) / 2;
+
+        Raylib.BeginTextureMode(target);
+            Raylib.ClearBackground(Color.Blank);
+            DrawPlate(x, width);
+            DrawOutlined(text, x, y, size, Palette.Text);
+        Raylib.EndTextureMode();
+    }
+
     // A faint dark rounded plate behind a line of text, a little wider than the text.
     // Drawn with premultiplied blending so the texture keeps the plate's alpha as given
     // (normal blending onto a clear texture would square it and leave the plate fainter).
@@ -364,10 +404,11 @@ public class ChatMessages
 
             float alpha = 1f;
             if (msg.Age < FadeIn) alpha = msg.Age / FadeIn;
-            else if (msg.Age > Lifetime - FadeOut) alpha = (Lifetime - msg.Age) / FadeOut;
+            else if (msg.Age > msg.Lifetime - FadeOut) alpha = (msg.Lifetime - msg.Age) / FadeOut;
 
             float drift = msg.Leaving ? -msg.Age * RiseSpeed : msg.Age * RiseSpeed;    // leaving labels sink
-            Vector3 local = view.ToLocal(msg.LastPosition) + new Vector3(0, StartHeight + drift, 0);
+            float lift = msg.Bird == null ? StartHeight + EventLift : StartHeight;
+            Vector3 local = view.ToLocal(msg.LastPosition) + new Vector3(0, lift + drift, 0);
             alpha *= view.FogFade(local);
             if (alpha <= 0.01f) continue;
 

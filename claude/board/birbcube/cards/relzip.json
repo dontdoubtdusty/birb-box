@@ -1,0 +1,50 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "rz-0",
+      "text": "Release script: self-contained win-x64 publish, zipped, no shortcuts"
+    },
+    {
+      "completed": true,
+      "id": "rz-1",
+      "text": "README: Windows only, play from the zip, build from source; Read Me First.txt has controls"
+    },
+    {
+      "completed": true,
+      "id": "rz-2a",
+      "text": "Run Make Release Zip.bat: it finishes and the zip appears in \"Birb Cube Release\" (Nov 5)"
+    },
+    {
+      "completed": true,
+      "id": "rz-2b",
+      "text": "Unzip to a new folder and double-click BirbCube.exe: game starts (Nov 5)"
+    },
+    {
+      "completed": false,
+      "id": "rz-2c",
+      "text": "Zip size is reasonable (tell me if it is over ~250 MB)"
+    },
+    {
+      "completed": false,
+      "id": "rz-2d",
+      "text": "Test on a PC without the .NET SDK or runtime (a friend's, or a clean VM)"
+    },
+    {
+      "completed": false,
+      "id": "rz-3",
+      "text": "Commit and push, then upload the zip to GitHub Releases"
+    }
+  ],
+  "columnId": "test",
+  "createdAt": 1793830000000,
+  "description": "Self-contained win-x64 zip for friends, made by `Make Release Zip.bat` into \"..\\Birb Cube Release\" (radio defaults and Read Me First.txt included, no music). You upload it by hand on GitHub Releases. Risks: the unsigned exe triggers SmartScreen (explained in Read Me First); cimgui.dll may need the VC++ redistributable on a clean PC.",
+  "order": 150,
+  "priority": "Medium",
+  "tags": [
+    "Release"
+  ],
+  "title": "Shareable download for friends",
+  "updatedAt": 1794010000000
+}

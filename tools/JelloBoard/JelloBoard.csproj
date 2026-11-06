@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The Jello board: a tiny local web server for the task board in claude\board\.
+       Separate from the game; BirdsApp.csproj leaves tools\ out of its build. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>JelloBoard</AssemblyName>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="web\**\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

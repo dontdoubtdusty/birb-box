@@ -1,0 +1,36 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": false,
+      "id": "rainbow-0",
+      "text": "Answer the questions: streak tilt, anything in the room view, bird nudges, log line"
+    },
+    {
+      "completed": false,
+      "id": "rainbow-1",
+      "text": "Rain front direction on Weather"
+    },
+    {
+      "completed": false,
+      "id": "rainbow-2",
+      "text": "The bow in horizon.fs via HorizonSky"
+    },
+    {
+      "completed": false,
+      "id": "rainbow-3",
+      "text": "Checks: never above 42 degrees, at night or without rain opposite; stays opposite the sun as the ring turns"
+    }
+  ],
+  "columnId": "next",
+  "createdAt": 1793575200001,
+  "description": "Real-condition rainbows in the Hologram View sky. After Thunderstorms. Design: `vision.md` (Time, weather and events). Build sketch, questions and checks: `next-session-plan.md`, Rainbows.",
+  "order": 8000,
+  "priority": "Medium",
+  "tags": [
+    "Weather",
+    "Hologram View"
+  ],
+  "title": "Rainbows",
+  "updatedAt": 1793575200001
+}

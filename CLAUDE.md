@@ -9,8 +9,8 @@ Birb Cube: a cozy hologram-style 3D bird simulation for Windows 10/11 x64. C# / 
 - Run: `dotnet run`. Build: `dotnet build`. It is a `WinExe` (assembly `BirbCube`), so there is no console; crashes go to `crash.txt` next to the exe plus a message box (`Program.cs`).
 - `Build Birb Cube.bat`: quick local play copy with shortcuts (needs the .NET runtime to play).
 - `Make Release Zip.bat`: self-contained release zip; takes its name from the version.
-- Version: the single `Version` constant in `GameEngine.cs` (`"Birb Cube 5.19 Alpha"`). It also shows on the pedestal bezel and in the zip name.
-- Compile checks and headless screenshots: `tools/ShotDriver` (separate program, excluded from the game build). Follow `tools/ShotDriver/README.md`; do not write a new driver. Run `bash tools/setup-workspace.sh` once, then `bash tools/shot.sh <script.txt> [outdir]` (xvfb, Linux side).
+- Version: the single `Version` constant in `GameEngine.cs` (`"Birb Cube <n> Alpha"`). It also shows on the pedestal bezel and in the zip name.
+- Compile check: `dotnet build`. Headless screenshots: `tools/ShotDriver` (separate program, excluded from the game build, `tools/ShotDriver/README.md`) needs a Linux workspace with xvfb; WSL isn't installed on this PC, so it can't run here. Do not write a new driver.
 - Smoke test after every change: `claude/qa-plan.md` section 3.
 
 ## Architecture
@@ -45,7 +45,7 @@ Flat project: all `.cs` files in the repo root, no namespaces. `resources/**` is
 - If you used a language, library or framework pattern I may not have seen, name it and explain it in one or two sentences, once. Comparisons to C# are welcome.
 
 ## Bookkeeping
-- At session start, read claude/file-map.md, claude/session-log.md and claude/vision.md before searching the code, then the Jello board named in the log. The code wins if they disagree; flag the mismatch.
+- At session start, read claude/file-map.md, claude/session-log.md and claude/vision.md before searching the code, then the Jello board (`claude/board/`, local JSON files; the log says how to read it). The code wins if they disagree; flag the mismatch.
 - Bump the version by 0.01 each time a feature is finished. Bigger jumps only when I say.
 
 ## Wrap up
@@ -56,3 +56,6 @@ When I say "wrap up", do all of these:
 4. Bump the version by 0.01 if a feature was finished.
 5. Optionally suggest 1-2 small "try it yourself" tasks. Never block on them.
 6. Give me a short summary.
+
+## Instructions
+When I write "Instructions:", read `claude/instructions-for-claude.md` first and act on it together with the rest of my message.

@@ -1,0 +1,14 @@
+{
+  "archived": false,
+  "checklist": [],
+  "columnId": "next",
+  "createdAt": 1793549370513,
+  "description": "The weekly pass, Thursday afternoons after the token reset. Split a file when it does several jobs, not because it's long. Next date and the watch list: `qa-plan.md` section 7.",
+  "order": 2000,
+  "priority": "Medium",
+  "tags": [
+    "Upkeep"
+  ],
+  "title": "De-tangling pass (weekly)",
+  "updatedAt": 1794050000000
+}

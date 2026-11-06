@@ -1,0 +1,76 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "v518-0",
+      "text": "It builds"
+    },
+    {
+      "completed": true,
+      "id": "v518-1",
+      "text": "Headless run checked"
+    },
+    {
+      "completed": true,
+      "id": "v518-2",
+      "text": "Smoke test (qa-plan.md section 3)"
+    },
+    {
+      "completed": true,
+      "id": "v518-3",
+      "text": "Room view at noon: no forest sound. Dive into the Hologram View: it fades in quietly"
+    },
+    {
+      "completed": true,
+      "id": "v518-4",
+      "text": "One-shots every 8 to 30 s, never the same twice running; the bed loops with no click or gap"
+    },
+    {
+      "completed": true,
+      "id": "v518-5",
+      "text": "Leave and re-enter: it starts from a different spot each time"
+    },
+    {
+      "completed": true,
+      "id": "v518-6",
+      "text": "Ducks under rain, the radio and the Esc menu"
+    },
+    {
+      "completed": true,
+      "id": "v518-7",
+      "text": "Fades out with the light at dusk, silent at night"
+    },
+    {
+      "completed": true,
+      "id": "v518-8",
+      "text": "Follows the Birds volume; silent in the store"
+    },
+    {
+      "completed": true,
+      "id": "v518-9",
+      "text": "Loudness tuned (BedVolume, ShotVolume in Ambience.cs)"
+    },
+    {
+      "completed": true,
+      "id": "v518-10",
+      "text": "Release copy plays it too"
+    },
+    {
+      "completed": false,
+      "id": "v518-11",
+      "text": "Commit"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793757574788,
+  "description": "A quiet forest bed (leaves, distant birds, 2:25 seamless stereo loop, `forest_day_bed.ogg`) plus nine far-off calls and rustles (`forest_day_1..9.wav`) dropped in at random every 8 to 30 s with random pitch, volume and side. Heard only in the Hologram View, only by day (fades with the light through dusk). Ducks under rain, the radio and the Esc menu; follows the Birds volume. Starts from a random spot on each visit. Made from your recording: loud bird events cut out of the bed and kept as the one-shots; one repeating 3.7 kHz bird (2:15 to 2:52 of the source) left out because it would give the loop away. Session 43. Files: `Ambience.cs` (new), `Sounds.cs` (loads and updates it; `Sounds.Update` takes `daylight` and `radioHeard`), `GameEngine.cs` (version, call), `resources/sounds/ambience/`.",
+  "order": 26800,
+  "priority": "Medium",
+  "tags": [
+    "Sound",
+    "5.18"
+  ],
+  "title": "5.18 Forest ambience in the Hologram View",
+  "updatedAt": 1794010000000
+}

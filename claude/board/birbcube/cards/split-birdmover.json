@@ -1,0 +1,46 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "sb-0",
+      "text": "Every line of the old file accounted for in the two new ones"
+    },
+    {
+      "completed": true,
+      "id": "sb-1",
+      "text": "Compiles in the workspace with the screenshot driver; the tour runs"
+    },
+    {
+      "completed": true,
+      "id": "sb-2",
+      "text": "Water probe: all five water states seen plus thirst trips, flights and bath trips"
+    },
+    {
+      "completed": true,
+      "id": "sb-3",
+      "text": "It builds on your machine"
+    },
+    {
+      "completed": true,
+      "id": "sb-4",
+      "text": "Smoke test: sips, baths, shake off, far thirsty birds fly over, puddle sips after rain"
+    },
+    {
+      "completed": false,
+      "id": "sb-5",
+      "text": "Commit"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793908800000,
+  "description": "De-tangling, session 44. The water half of BirdMover (passing visits, puddle sips, thirsty trips, flying to water, sipping, bathing, shaking off) moved word for word into BirdMover.Water.cs, a partial class. BirdMover.cs went from 1041 lines to 713; the new file is 338. Nothing should behave differently. No version bump (no feature).",
+  "order": 26700,
+  "priority": "Medium",
+  "tags": [
+    "Upkeep",
+    "Refactor"
+  ],
+  "title": "BirdMover water split (no version)",
+  "updatedAt": 1794010000000
+}

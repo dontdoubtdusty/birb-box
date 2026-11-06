@@ -1,0 +1,30 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "v505-2",
+      "text": "Look at the sun, moon and clouds in the room view and the Hologram View"
+    },
+    {
+      "completed": true,
+      "id": "v505-3",
+      "text": "Try the radio's station finder"
+    },
+    {
+      "completed": true,
+      "id": "v505-4",
+      "text": "Commit"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793549370513,
+  "description": "Made outside a logged session, so nothing records what changed. The code has `SkyOrbs.cs` and `skyorb.fs` (the sun and moon under the cube's ceiling, 5.06), clouds in `HorizonSky` (`SetClouds`), and `StationFinder.cs` with radio changes (5.08).",
+  "order": 20000,
+  "priority": "Medium",
+  "tags": [
+    "Bookkeeping"
+  ],
+  "title": "5.05, 5.06, 5.08: unlogged changes",
+  "updatedAt": 1793549866489
+}

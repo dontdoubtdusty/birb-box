@@ -118,6 +118,16 @@ public class Bird : Entity
 
     private bool removed = false;
 
+    // STORYTELLER EVENTS (see Storyteller.cs)
+    public bool FlockMember { get; private set; }      // passing through with a murmuration: stays hungry, no feathers, never a regular
+    public bool Quiet { get; set; }                     // gets no "entered / left the chat" label (flock birds, birds scattered by the hawk)
+    private float frozenTimer;                          // > 0: keeping dead still (the Hawk's Shadow)
+    public bool Frozen => frozenTimer > 0f;
+    // RECORDS: what it lived through ("Fled the Hawk's Shadow, day 12"), newest last; saved and carried with regulars
+    private const int MaxRecords = 8;
+    private readonly List<string> records = new();
+    public IReadOnlyList<string> Records => records;
+
     public Bird(Species type, string name)
     {
         Species = type;
@@ -245,6 +255,8 @@ public class Bird : Entity
         Thirst = Thirst,
         Rest = Rest,
         Napping = Napping,
+        Records = records.Count > 0 ? new(records) : null,
+        Flock = FlockMember,
     };
 
     // A bird that was heading for or eating some seed goes back to wandering; it finds its food again in a moment.
@@ -279,6 +291,8 @@ public class Bird : Entity
         if (save.Traits != null) bird.SetPersonality(save.Traits);
         if (save.FavoriteSeed is SeedType favorite && species.Eats(favorite)) bird.FavoriteSeed = favorite;
         bird.leftForNight = save.NightAway;
+        if (save.Records != null) bird.records.AddRange(save.Records.TakeLast(MaxRecords));
+        if (save.Flock) bird.JoinFlock();    // a flock saved mid-visit; Storyteller.AfterLoad sends it off
         if (save.Roosting && bird.State == BirdState.Wandering)
         {
             bird.Roosting = true;
@@ -322,6 +336,14 @@ public class Bird : Entity
                 CheckInterest(dt);
                 UpdateNight();
             }
+        }
+
+        // Frozen under the hawk's shadow: it keeps dead still where it is, head up, then carries on with what it was doing
+        if (frozenTimer > 0f && State is not (BirdState.Arriving or BirdState.Leaving))
+        {
+            frozenTimer -= dt;
+            Pose = BirdPose.LookAround;
+            return;
         }
 
         switch (State)
@@ -384,7 +406,7 @@ public class Bird : Entity
     // Every so often a wandering bird may lose interest and leave. Much likelier when nothing it eats is lying about.
     private void CheckInterest(float dt)
     {
-        if (State != BirdState.Wandering || IsFlying || Asleep) return;
+        if (State != BirdState.Wandering || IsFlying || Asleep || FlockMember) return;    // a flock leaves together (Murmuration)
 
         interestTimer -= dt;
         if (interestTimer > 0f) return;
@@ -408,9 +430,10 @@ public class Bird : Entity
     }
 
     // A regular coming back for another visit (see BirdSpawner.TakeRegular).
-    public void StartNewVisit()
+    // countVisit: false for a bird coming back after the hawk scared it off, which is still the same visit.
+    public void StartNewVisit(bool countVisit = true)
     {
-        Visits++;
+        if (countVisit) Visits++;
         returnsLater = true;
         starveTimer = 0f;
         thirstTimer = 0f;
@@ -684,6 +707,11 @@ public class Bird : Entity
                 TargetFood = null;
                 State = BirdState.Wandering;
                 SetHome(Position);
+                if (FlockMember)
+                {
+                    ArriveHungry();    // a passing flock strips the seed: it never stays full, and leaves no feathers
+                    return;
+                }
                 if (Rng.Chance(SimTuning.Now.FeatherDropChance * Nature.FeatherDrop * (IsNamed || Visits > 1 ? RegularFeatherBonus : 1f)))
                 {
                     World.Instance.AddEntity(new Feather(Position + new Vector3(0, 0.3f, 0), Species));
@@ -700,17 +728,50 @@ public class Bird : Entity
     }
 
     // returns: false when it's gone for good (old age), so it never comes back as a regular.
-    public void StartLeaving(string reason, bool returns = true)
+    // reason: the log line, or null to leave quietly (an event writes its own line). A flock bird never comes back.
+    public void StartLeaving(string? reason, bool returns = true)
     {
         if (State == BirdState.Leaving) return;
 
-        returnsLater = returns;
+        returnsLater = returns && !FlockMember;
         State = BirdState.Leaving;
         Roosting = false;
         Napping = false;
+        frozenTimer = 0f;
         TargetFood = null;
         Mover.PickLeavingTarget();
-        EventLog.Add(reason);
+        if (reason != null) EventLog.Add(reason);
+    }
+
+    // ---------------- STORYTELLER EVENTS ----------------
+
+    // Keeps dead still for this long (the Hawk's Shadow). Needs and age still run.
+    public void Freeze(float seconds) => frozenTimer = MathF.Max(frozenTimer, seconds);
+
+    // Something gave it a fright: a napping bird wakes up.
+    public void Startle()
+    {
+        if (!Napping) return;
+        Napping = false;
+        Mover.EndRoost();
+    }
+
+    // Becomes one of a passing flock (Murmuration): unnamed, unlabeled, wide awake and not thirsty, never a regular.
+    public void JoinFlock()
+    {
+        FlockMember = true;
+        Quiet = true;
+        returnsLater = false;
+        Thirst = 1f;
+        Rest = 1f;
+    }
+
+    // Adds a line to what it lived through, with the day: "Fled the Hawk's Shadow, day 12". Flock birds keep none.
+    public void AddRecord(string what)
+    {
+        if (FlockMember) return;
+        records.Add($"{what}, day {WorldClock.Instance.DayNumber}");
+        if (records.Count > MaxRecords) records.RemoveAt(0);
     }
 
     // How far the tip of its beak sticks out in front of its middle (for sitting the right distance from a feeding port).

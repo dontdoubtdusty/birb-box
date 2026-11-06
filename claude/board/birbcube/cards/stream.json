@@ -1,0 +1,62 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "stream-0",
+      "text": "BirdMover WATER split done (Nov 5; water code is in BirdMover.Water.cs)"
+    },
+    {
+      "completed": true,
+      "id": "stream-q",
+      "text": "Decide relief, order, old saves, water touches (Nov 5)"
+    },
+    {
+      "completed": false,
+      "id": "wb-a",
+      "text": "A. Terrain height grid per new world, saved; FormatVersion bump; old save loads flat and offers New world"
+    },
+    {
+      "completed": false,
+      "id": "wb-b",
+      "text": "B. Every ground thing reads HeightAt (birds, seed, feathers, rocks, feeders, sprouts, splashes, hawk, labels, clicks, Hologram View eye); seed rolls downhill; puddles in hollows"
+    },
+    {
+      "completed": false,
+      "id": "wb-c",
+      "text": "C. Floor becomes a lit mesh; fog still hides the cut at the walls"
+    },
+    {
+      "completed": false,
+      "id": "wb-d",
+      "text": "D. Pool sits in a dip (both pool shape copies match)"
+    },
+    {
+      "completed": false,
+      "id": "wb-e",
+      "text": "E. Stream from a spring to the pool: flow, sip, bathe, cross, seed drifts, trickle sound, minimap"
+    },
+    {
+      "completed": false,
+      "id": "wb-f",
+      "text": "F. Reeds, lily pads, stepping stones"
+    },
+    {
+      "completed": false,
+      "id": "stream-5",
+      "text": "Checks: nothing floats or sinks, clicks on slopes, nobody walks the deep middle, draw ms"
+    }
+  ],
+  "columnId": "next",
+  "createdAt": 1793575200002,
+  "description": "Gentle uneven ground, then the pool and a stream carved into it. Step B (about 20 files assume flat ground at Y=0) is the bulk. Before Trees. Design: `vision.md`, World Beautification. Steps, questions and checks: `next-session-plan.md`, World Beautification.",
+  "order": 9000,
+  "priority": "Medium",
+  "tags": [
+    "Garden",
+    "Water",
+    "Terrain"
+  ],
+  "title": "World Beautification: uneven ground, pool dip, stream",
+  "updatedAt": 1794040000000
+}

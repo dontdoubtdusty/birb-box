@@ -1,0 +1,31 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "v512-0",
+      "text": "Select a bird, press Tab: the section shows and updates"
+    },
+    {
+      "completed": true,
+      "id": "v512-1",
+      "text": "Watch a hungry bird pick food and a thirsty one fly to water"
+    },
+    {
+      "completed": false,
+      "id": "v512-2",
+      "text": "Commit"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793551500001,
+  "description": "Instead of a separate F1 panel: a \"Selected bird\" section under Birds in the Tab tools panel showing state, pose, sleep, position and height, the food it picked (pile, sprout or feeder; seed; distance; seed left), its flight target, water activity, rock perch and home distance. World and view outlines dropped (the minimap already shows both). Screenshot checked in Claude's workspace.",
+  "order": 24000,
+  "priority": "Low",
+  "tags": [
+    "Tooling",
+    "5.12"
+  ],
+  "title": "5.12 Selected bird readout in the Tab panel",
+  "updatedAt": 1793740365326
+}

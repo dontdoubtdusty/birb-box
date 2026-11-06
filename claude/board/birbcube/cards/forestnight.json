@@ -1,0 +1,36 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": false,
+      "id": "forestnight-0",
+      "text": "A night recording: crickets or insects, an owl now and then, very few birds"
+    },
+    {
+      "completed": false,
+      "id": "forestnight-1",
+      "text": "Same layout as the day set: forest_night_bed.ogg plus forest_night_N.wav one-shots in resources/sounds/ambience/"
+    },
+    {
+      "completed": false,
+      "id": "forestnight-2",
+      "text": "Crossfade day and night beds through dusk and dawn (Ambience.cs now fades the day bed out with WorldClock Darkness; the night bed would fade in as it falls)"
+    },
+    {
+      "completed": false,
+      "id": "forestnight-3",
+      "text": "Decide: dawn and dusk bird bouts (a bed of their own), and whether rain gets its own forest sound"
+    }
+  ],
+  "columnId": "ideas",
+  "createdAt": 1793757574788,
+  "description": "Night version of the forest ambience (5.18 is daytime only; at night the Hologram View is silent apart from the hum). Needs a night recording from you; the code side is small. Reuses the stereo bed + random one-shots layout.",
+  "order": 13500,
+  "priority": "Low",
+  "tags": [
+    "Sound",
+    "You"
+  ],
+  "title": "Forest ambience at night",
+  "updatedAt": 1793757574788
+}

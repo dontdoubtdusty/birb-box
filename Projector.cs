@@ -22,9 +22,14 @@ public class Projector
     private float flicker = 1f, flickerTimer;
     private float pressAge = PushIn + PushHold + PushOut;    // seconds since the button was last pressed; starts at rest
 
-    public float Lens { get; private set; }     // the lens, the logo, the readouts and LEDs, and the hum
-    public float Beams { get; private set; }    // the beams and the pyramid of light
-    public float Cube { get; private set; }     // how much of the cube has risen: 0 none, 1 all of it
+    // Set only by GameEngine.WarmUp at start-up: every level reads as fully up, so one hidden frame draws the
+    // whole hologram and the graphics driver does its first-use work then, not on the player's first click.
+    public bool Warming;
+
+    private float lens, beams, cube;
+    public float Lens => Warming ? 1f : lens;      // the lens, the logo, the readouts and LEDs, and the hum
+    public float Beams => Warming ? 1f : beams;    // the beams and the pyramid of light
+    public float Cube => Warming ? 1f : cube;      // how much of the cube has risen: 0 none, 1 all of it
     public float ButtonPush { get; private set; }    // how far the power button is pushed in: 0 at rest, 1 all the way
 
     public bool Showing => Cube > 0f;            // anything of the hologram to draw
@@ -65,10 +70,10 @@ public class Projector
             flickerTimer = FlickerStep;
         }
 
-        Lens = Stage(LensStart, LensEnd);
-        float beams = Stage(BeamStart, BeamEnd);
-        Beams = IsOn && beams < 1f ? beams * flicker : beams;    // they only sputter while catching
-        Cube = Stage(CubeStart, CubeEnd);
+        lens = Stage(LensStart, LensEnd);
+        float beamLevel = Stage(BeamStart, BeamEnd);
+        beams = IsOn && beamLevel < 1f ? beamLevel * flicker : beamLevel;    // they only sputter while catching
+        cube = Stage(CubeStart, CubeEnd);
     }
 
     // How far in the button is this long after a press: quickly in, a short hold, then easing back out.

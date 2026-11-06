@@ -103,6 +103,7 @@ public class SaveGame
             SimTime = engine.SimTime,
             ClockDays = engine.Clock.Days,
             Weather = engine.Weather.ToSave(),
+            Story = engine.Story.ToSave(),
             Feathers = engine.Feathers.ToSave(),
             FrostcrestSeen = Birds.IsDiscovered(Species.Frostcrest),    // also in SeenSpecies; kept so older versions still read it
             SeenSpecies = Birds.SaveSeen(),
@@ -160,6 +161,7 @@ public class SaveGame
         else engine.Clock.Reset(data.Birds.Count > 0 ? WorldClock.OldSaveStartHour : WorldClock.StartHour);
         engine.Clock.Refresh();                                         // before the birds load, so roosting birds stay roosting
         engine.Weather.Restore(data.Weather);                           // a new world, or a save from before 4.96, starts fair and dry
+        engine.Story.Restore(data.Story);                               // a running event is dropped; a new world starts with a quiet stretch
         engine.Feathers.Restore(data.Feathers);    // a save from before feathers (5.14) had coins instead; they are dropped
         Birds.RestoreSeen(data.FrostcrestSeen ? data.SeenSpecies.Append(Species.Frostcrest.Key) : data.SeenSpecies);
         engine.Store.VisitedBefore = data.VisitedStore;
@@ -226,6 +228,7 @@ public class SaveGame
             world.AddEntity(bird);
         }
         world.FlushChanges();
+        Storyteller.AfterLoad();    // a flock saved mid-visit moves on
     }
 
     // Birds of a species that's gone (its file deleted or renamed), or that has no look left to wear, leave for good:
@@ -281,6 +284,7 @@ public class SaveData
     public float SimTime { get; set; }
     public double? ClockDays { get; set; }                            // the world's calendar (WorldClock.Days); null before 4.92
     public WeatherSave? Weather { get; set; }                         // the rain, the clouds, the wet ground and its puddles; null before 4.96
+    public StorySave? Story { get; set; }                             // the Storyteller's timers (not a running event); null before 5.22
     public Dictionary<string, int> Feathers { get; set; } = new();    // how many of each species' feather, by species key (FeatherPurse)
     public bool FrostcrestSeen { get; set; }                          // from before 4.99; now also in SeenSpecies
     public List<string> SeenSpecies { get; set; } = new();            // keys of rare species seen at least once (Birds.IsDiscovered)
@@ -359,6 +363,8 @@ public class BirdSave
     public float? Thirst { get; set; }               // null in a save from before 5.10: rolled on load
     public float? Rest { get; set; }
     public bool Napping { get; set; }
+    public List<string>? Records { get; set; }       // what it lived through (Bird.Records); null when none, or before 5.22
+    public bool Flock { get; set; }                  // passing through with a murmuration (sent off on load)
 }
 
 public class FoodSave
@@ -403,6 +409,14 @@ public class WeatherSave
     public float? FairCover { get; set; }                  // the dry spell's cloudiness; null before 5.05
     public float? Cover { get; set; }                      // the drifting clouds' cover right now; null before 5.05
     public List<PuddleSave> Puddles { get; set; } = new();
+}
+
+// The Storyteller's pacing (see Storyteller.cs). A running event isn't saved.
+public class StorySave
+{
+    public bool BigBeatNext { get; set; }
+    public float NextBeatIn { get; set; }                               // sim seconds
+    public Dictionary<string, float> Cooldowns { get; set; } = new();   // seconds left, by StoryCategory name
 }
 
 public class PuddleSave

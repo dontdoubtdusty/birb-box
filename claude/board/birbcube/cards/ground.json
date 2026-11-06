@@ -1,0 +1,14 @@
+{
+  "archived": false,
+  "checklist": [],
+  "columnId": "done",
+  "createdAt": 1793549370513,
+  "description": "56x56 world, panning stops at the edge, grass that wears bare and grows back.",
+  "order": 4000,
+  "priority": "Medium",
+  "tags": [
+    "4.51"
+  ],
+  "title": "Step 6: Smaller world, grass and dirt",
+  "updatedAt": 1793549370513
+}

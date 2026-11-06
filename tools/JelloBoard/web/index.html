@@ -1,0 +1,1042 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Jello</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fredoka:wght@600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: a header bar over either a grid of game tiles or one game's row of columns (stacked on phones).
+   Theme: jelly. Flavors for color, a glossy top highlight on raised things, and a soft wobble when things move. */
+:root {
+  --bg: #F7F5FA; --surface: #EFEBF5; --raised: #FFFFFF; --line: #E2DCEB; --line-strong: #CDC4DB;
+  --fg: #2A2333; --muted: #675D76; --faint: #918799;
+  --grape: #8B5CC7; --strawberry: #D3405F; --lime: #4A9636; --lemon: #B98912; --blueberry: #4A6FD1; --orange: #D46A26;
+  --gloss: linear-gradient(180deg, rgba(255, 255, 255, .7), rgba(255, 255, 255, 0) 55%);
+  --jiggle-shadow: inset 0 -2px 0 rgba(42, 35, 51, .05), 0 2px 8px rgba(80, 50, 120, .08);
+  --scrim: rgba(36, 24, 52, .42);
+  --shadow: 0 1px 2px rgba(42, 35, 51, .05), 0 8px 22px rgba(80, 50, 120, .08);
+  --on-accent: #FFFFFF;
+  --font-logo: 'Fredoka', ui-rounded, 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  --purple: var(--grape); --pink: var(--strawberry); --blue: var(--blueberry); --emerald: var(--lime); --amber: var(--lemon); --rose: var(--strawberry); --indigo: var(--blueberry);
+  --accent: var(--grape);
+  --col-bg: rgba(255, 255, 255, .82); --col-line: rgba(42, 35, 51, .08); --card-bg: #FFFFFF; --card-hover: #FAF7FD;
+  --backdrop-a: 55%; --backdrop-veil: rgba(247, 245, 250, .35);
+}
+/* Dark is the default theme; light applies only when the viewer picked it (data-theme="light"). */
+:root:not([data-theme="light"]) {
+  --bg: #14101B; --surface: #1B1624; --raised: #2A2433; --line: #3A3347; --line-strong: #4D4260;
+  --fg: #E9E4F0; --muted: #B0A7BF; --faint: #867D95;
+  --grape: #B48CF0; --strawberry: #FF7A97; --lime: #8BD46E; --lemon: #F2C94C; --blueberry: #7E9CFF; --orange: #FF9E5E;
+  --gloss: linear-gradient(180deg, rgba(255, 255, 255, .07), rgba(255, 255, 255, 0) 55%);
+  --jiggle-shadow: inset 0 -2px 0 rgba(0, 0, 0, .25), 0 1px 3px rgba(0, 0, 0, .35);
+  --scrim: rgba(8, 4, 14, .62); --shadow: 0 2px 14px rgba(0, 0, 0, .4); --on-accent: #1A1424; color-scheme: dark;
+  --col-bg: rgba(14, 10, 20, .86); --col-line: rgba(255, 255, 255, .06); --card-bg: #2A2433; --card-hover: #332C3E;
+  --backdrop-a: 38%; --backdrop-veil: rgba(14, 10, 20, .55);
+}
+
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.5 var(--font-body); display: flex; flex-direction: column; overflow: hidden; }
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; margin: 0; text-wrap: balance; }
+button, input, select, textarea { font: inherit; color: inherit; }
+svg.i { width: 1em; height: 1em; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: .45rem; border: 1px solid transparent; border-radius: 12px; padding: .4rem .8rem; font-size: .8rem; font-weight: 700; cursor: pointer; background: var(--line); transition: background .15s, transform .1s; white-space: nowrap; }
+.btn:hover { background: var(--line-strong); }
+.btn:active { transform: scale(.97); }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-primary:hover { background: color-mix(in srgb, var(--accent) 85%, black); }
+.btn-danger { background: var(--rose); color: #fff; }
+.btn-danger:hover { background: color-mix(in srgb, var(--rose) 85%, black); }
+.btn-ghost { background: transparent; color: var(--muted); }
+.btn-ghost:hover { background: var(--line); color: var(--fg); }
+.icon-btn { padding: .45rem; }
+.count { font-family: var(--font-mono); font-size: .7rem; background: var(--amber); color: #1C1F2B; border-radius: 99px; padding: 0 .4rem; }
+
+/* Header */
+.hdr { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; padding-block: .7rem; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--surface); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: .65rem; cursor: pointer; border: 0; background: none; padding: 0; text-align: left; }
+.logo { width: 2.4rem; height: 2.4rem; border-radius: 14px; display: grid; place-items: center; color: #fff; font-size: 1.3rem; background: linear-gradient(135deg, var(--purple), var(--pink) 55%, var(--amber)); }
+.brand-name { font-family: var(--font-display); font-weight: 600; font-size: 1.25rem; letter-spacing: .06em; line-height: 1.1; }
+.brand-sub { font-size: .75rem; font-weight: 700; color: var(--muted); }
+.hdr-left, .hdr-right { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; min-width: 0; }
+.search { position: relative; display: flex; align-items: center; }
+.search svg { position: absolute; left: .65rem; color: var(--faint); }
+.search input { width: 13rem; max-width: 52vw; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: .35rem .8rem .35rem 2rem; font-size: .85rem; }
+.chip { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 700; color: var(--muted); background: var(--line); border-radius: 99px; padding: .15rem .6rem; }
+
+/* Main area */
+main { flex: 1; min-height: 0; overflow-y: auto; }
+.notice { max-width: 34rem; margin: 3rem auto; padding: 1.5rem; text-align: center; color: var(--muted); }
+.notice h2 { color: var(--fg); margin-bottom: .4rem; font-size: 1.3rem; }
+.banner { margin: .75rem max(16px, env(safe-area-inset-left, 0px)) 0; padding: .55rem .9rem; border-radius: 12px; font-size: .85rem; font-weight: 700; background: color-mix(in srgb, var(--amber) 16%, transparent); color: var(--fg); }
+
+/* Dashboard */
+.dash { max-width: 72rem; margin: 0 auto; padding-block: 2rem 3rem; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.dash-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 1.5rem; }
+.dash-head h2 { font-size: 1.8rem; }
+.dash-head p { margin: .2rem 0 0; color: var(--muted); font-weight: 600; font-size: .9rem; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); gap: 1.25rem; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; overflow: hidden; box-shadow: var(--shadow); cursor: pointer; display: flex; flex-direction: column; transition: transform .2s, box-shadow .2s; text-align: left; padding: 0; }
+.tile:hover { transform: translateY(-3px); }
+.tile-band { position: relative; min-height: 6.5rem; padding: 1rem 1.1rem; display: flex; flex-direction: column; justify-content: space-between; gap: .6rem; color: #fff; }
+.tile-band::before { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent 30%, rgba(0, 0, 0, .28)); }
+.tile-band > * { position: relative; }
+.tile-genre { align-self: flex-start; font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; background: rgba(0, 0, 0, .3); border-radius: 99px; padding: .15rem .65rem; }
+.tile-title { font-size: 1.45rem; text-shadow: 0 1px 6px rgba(0, 0, 0, .25); }
+.tile-tools { position: absolute; top: .8rem; right: .8rem; display: flex; gap: .3rem; opacity: 0; transition: opacity .15s; }
+.tile:hover .tile-tools, .tile:focus-within .tile-tools { opacity: 1; }
+.tile-tools button { background: rgba(0, 0, 0, .4); color: #fff; border: 0; border-radius: 10px; padding: .35rem; cursor: pointer; display: grid; }
+.tile-body { padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: .8rem; flex: 1; }
+.tile-pitch { margin: 0; font-size: .85rem; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tile-stats { display: flex; justify-content: space-between; gap: .5rem; margin-top: auto; padding-top: .7rem; border-top: 1px solid var(--line); font-size: .78rem; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tile-progress { height: 5px; border-radius: 9px; background: var(--line); overflow: hidden; }
+.tile-progress span { display: block; height: 100%; background: var(--emerald); }
+
+/* Board */
+.board-wrap { height: 100%; overflow-x: auto; overflow-y: hidden; }
+.board { display: flex; gap: 1.1rem; align-items: flex-start; height: 100%; padding-block: 1.25rem; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); width: max-content; }
+.col { width: 20rem; flex: none; max-height: 100%; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--shadow); }
+.col-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .8rem .9rem .7rem 1.1rem; border-bottom: 1px solid var(--line); }
+.col-title { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+.col-title h3 { font-size: 1rem; overflow-wrap: anywhere; }
+.col-count { font-family: var(--font-mono); font-size: .72rem; font-weight: 600; background: var(--line); border-radius: 99px; padding: .05rem .55rem; }
+.col-tools { display: flex; gap: .1rem; opacity: .55; transition: opacity .15s; }
+.col:hover .col-tools, .col-tools:focus-within { opacity: 1; }
+.col-tools .btn { padding: .3rem; }
+.col-body { flex: 1; min-height: 3rem; overflow-y: auto; padding: .75rem; display: flex; flex-direction: column; gap: .7rem; }
+.col-body.over { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.col-foot { padding: .5rem .75rem .75rem; }
+.col-foot .btn { width: 100%; justify-content: flex-start; }
+.col-empty { font-size: .8rem; color: var(--faint); text-align: center; padding: .6rem; }
+.drop-mark { height: 4px; border-radius: 4px; background: var(--accent); margin-block: -2px; flex: none; }
+
+/* Cards */
+.card { background: var(--raised); border: 1px solid var(--line); border-radius: 16px; padding: .8rem .9rem; box-shadow: 0 1px 2px rgba(0, 0, 0, .05); cursor: pointer; display: flex; flex-direction: column; gap: .45rem; transition: box-shadow .15s, border-color .15s; }
+.card:hover { border-color: var(--line-strong); }
+.card[draggable="true"] { cursor: grab; }
+.card.dragging { opacity: .35; transform: rotate(-1.5deg) scale(.97); }
+.card-top { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.pri { font-family: var(--font-mono); font-size: .66rem; font-weight: 600; border: 1px solid; border-radius: 99px; padding: 0 .55rem; }
+.pri-Critical { color: var(--rose); background: color-mix(in srgb, var(--rose) 12%, transparent); }
+.pri-High { color: var(--amber); background: color-mix(in srgb, var(--amber) 12%, transparent); }
+.pri-Medium { color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, transparent); }
+.pri-Low { color: var(--faint); background: color-mix(in srgb, var(--faint) 12%, transparent); }
+.card h4 { font-size: .95rem; letter-spacing: .01em; overflow-wrap: anywhere; }
+.desc { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
+.card .desc { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.desc p { margin: 0 0 .35rem; }
+.desc ul, .desc ol { margin: 0 0 .35rem; padding-left: 1.2rem; }
+.desc code { font-family: var(--font-mono); font-size: .85em; background: var(--line); border-radius: 6px; padding: .05rem .3rem; }
+.desc a { color: var(--accent); }
+.chk { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: .5rem .6rem; display: flex; flex-direction: column; gap: .35rem; }
+.chk-head { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: .68rem; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+.bar { height: 5px; border-radius: 9px; background: var(--line); overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.chk-list { display: flex; flex-direction: column; gap: .2rem; max-height: 7.5rem; overflow-y: auto; }
+.chk-item { display: flex; align-items: flex-start; gap: .45rem; font-size: .78rem; cursor: pointer; }
+.chk-item input { margin-top: .2rem; accent-color: var(--accent); flex: none; }
+.chk-item.done span { text-decoration: line-through; color: var(--faint); }
+.tags { display: flex; flex-wrap: wrap; gap: .3rem; padding-top: .45rem; border-top: 1px solid var(--line); }
+.tag { font-size: .68rem; font-weight: 800; color: var(--accent); background: color-mix(in srgb, var(--accent) 11%, transparent); border-radius: 8px; padding: .05rem .45rem; }
+
+/* Dialogs */
+dialog.modal { border: 1px solid var(--line); border-radius: 22px; background: var(--surface); color: var(--fg); padding: 0; width: min(40rem, calc(100vw - 32px)); max-height: min(90vh, 52rem); box-shadow: 0 20px 60px rgba(0, 0, 0, .35); }
+dialog.modal.narrow { width: min(28rem, calc(100vw - 32px)); }
+dialog.modal[open] { display: flex; flex-direction: column; animation: pop .22s cubic-bezier(.175, .885, .32, 1.275); }
+dialog::backdrop { background: var(--scrim); backdrop-filter: blur(3px); }
+@keyframes pop { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
+.m-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .9rem 1.2rem; border-bottom: 1px solid var(--line); }
+.m-head h3 { font-size: 1.15rem; overflow-wrap: anywhere; }
+.m-body { padding: 1.1rem 1.2rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; min-height: 0; }
+.m-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; padding: .8rem 1.2rem; border-top: 1px solid var(--line); }
+.m-foot .spacer { flex: 1; }
+.field { display: flex; flex-direction: column; gap: .3rem; }
+.field > span, .label { font-size: .7rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+.field input[type=text], .field select, .field textarea { width: 100%; box-sizing: border-box; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: .55rem .8rem; font-size: .9rem; }
+.field textarea { resize: vertical; min-height: 8rem; font-family: var(--font-body); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.swatches { display: flex; gap: .7rem; }
+.swatches label { cursor: pointer; }
+.swatches input { position: absolute; opacity: 0; }
+.swatches span { display: block; width: 2rem; height: 2rem; border-radius: 99px; box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px transparent; }
+.swatches input:checked + span { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--fg); }
+.swatches input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 4px; }
+.sub-row { display: flex; align-items: center; gap: .5rem; }
+.sub-row input[type=text] { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: .3rem .6rem; font-size: .85rem; }
+.sub-row input[type=checkbox] { accent-color: var(--accent); }
+.subs { display: flex; flex-direction: column; gap: .4rem; }
+.link-btn { border: 0; background: none; color: var(--accent); font-weight: 800; font-size: .78rem; cursor: pointer; display: inline-flex; align-items: center; gap: .3rem; padding: 0; }
+.view-meta { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.view-desc { font-size: .9rem; color: var(--fg); }
+.view-desc .desc, .view-desc { color: var(--fg); }
+.move-row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; padding: .7rem; border-radius: 14px; background: var(--bg); border: 1px solid var(--line); }
+.move-row select { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: .3rem .5rem; font-size: .85rem; max-width: 100%; }
+.arch-item { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .8rem 1rem; border-radius: 14px; background: var(--raised); border: 1px solid var(--line); }
+.arch-item h4 { font-size: .9rem; overflow-wrap: anywhere; }
+.arch-item p { margin: 0; font-size: .75rem; color: var(--muted); }
+.arch-item > div:last-child { display: flex; gap: .4rem; flex: none; }
+textarea.json { width: 100%; box-sizing: border-box; min-height: 16rem; font-family: var(--font-mono); font-size: .75rem; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: .7rem; }
+
+/* Toasts */
+.toasts { position: fixed; right: max(16px, calc(env(safe-area-inset-right, 0px) + 16px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); z-index: 60; display: flex; flex-direction: column; gap: .5rem; pointer-events: none; }
+.toast { background: var(--fg); color: var(--bg); border-radius: 14px; padding: .55rem .9rem; font-size: .8rem; font-weight: 700; box-shadow: var(--shadow); animation: up .3s cubic-bezier(.175, .885, .32, 1.275); transition: opacity .2s, transform .2s; max-width: 22rem; }
+.toast.bad { background: var(--rose); color: #fff; }
+@keyframes up { from { transform: translateY(100%); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* Jelly: glossy raised surfaces, flavor tints, wobble on movement */
+.btn-primary, .btn-danger { background-image: var(--gloss); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .16); }
+.btn:active { animation: squish .28s ease-out; }
+.logo { background: radial-gradient(circle at 30% 25%, rgba(255, 255, 255, .55), transparent 40%), linear-gradient(160deg, var(--strawberry), var(--grape)); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .18); }
+.brand:hover .logo { animation: wobble .6s ease; }
+.col { border-radius: 24px; }
+.col-head { position: relative; }
+.col-head::before { content: ""; position: absolute; left: 1.4rem; right: 1.4rem; top: 0; height: 5px; border-radius: 0 0 8px 8px; opacity: .85; background: var(--flavor, var(--grape)); }
+.col-count { background: color-mix(in srgb, var(--flavor, var(--grape)) 20%, transparent); color: var(--fg); }
+.card { border-radius: 18px; background-color: var(--raised); background-image: var(--gloss); box-shadow: var(--jiggle-shadow); }
+.card:hover { animation: wobble .55s ease; }
+.card.plop { animation: plop .6s cubic-bezier(.3, 1.4, .5, 1); }
+.pri { border: 0; padding: .05rem .6rem; background-image: var(--gloss); }
+.pri-High { color: var(--orange); background-color: color-mix(in srgb, var(--orange) 15%, transparent); }
+.pri-Critical { background-color: color-mix(in srgb, var(--strawberry) 15%, transparent); }
+.pri-Medium { background-color: color-mix(in srgb, var(--blueberry) 14%, transparent); }
+.pri-Low { color: var(--muted); background-color: color-mix(in srgb, var(--grape) 9%, transparent); }
+.bar, .tile-progress { height: 7px; background: color-mix(in srgb, var(--line) 80%, transparent); }
+.bar span, .tile-progress span { border-radius: 9px; background-image: linear-gradient(180deg, rgba(255, 255, 255, .45), rgba(255, 255, 255, 0) 60%); background-color: var(--flavor, var(--grape)); }
+.tile-progress span { background-color: var(--lime); }
+.tag { background-image: var(--gloss); }
+.drop-mark { height: 6px; background-color: var(--flavor, var(--grape)); background-image: var(--gloss); animation: wobble .5s ease infinite; }
+.tile-band::after { content: ""; position: absolute; inset: 0 0 auto; height: 55%; background: linear-gradient(180deg, rgba(255, 255, 255, .28), transparent); pointer-events: none; }
+.tile:hover { animation: wobble .6s ease; }
+.toast { border-radius: 16px; background-image: var(--gloss); animation: jellyIn .5s cubic-bezier(.3, 1.5, .5, 1); }
+dialog.modal { border-radius: 26px; }
+dialog.modal[open] { animation: jellyIn .45s cubic-bezier(.3, 1.4, .5, 1); }
+@keyframes wobble { 0% { transform: scale(1, 1); } 25% { transform: scale(1.025, .975); } 50% { transform: scale(.985, 1.015); } 75% { transform: scale(1.008, .992); } 100% { transform: scale(1, 1); } }
+@keyframes squish { 0% { transform: scale(1, 1); } 40% { transform: scale(1.06, .92); } 100% { transform: scale(1, 1); } }
+@keyframes plop { 0% { transform: translateY(-10px) scale(.96, 1.05); } 45% { transform: translateY(0) scale(1.06, .93); } 70% { transform: scale(.98, 1.02); } 100% { transform: none; } }
+@keyframes jellyIn { 0% { transform: scale(.85, .9); opacity: 0; } 55% { transform: scale(1.04, .97); opacity: 1; } 80% { transform: scale(.99, 1.01); } 100% { transform: none; } }
+
+/* Trello-style layout: Inter type, compact cards, near-black translucent columns over a blurred flavor backdrop.
+   Placed after the jelly block so it wins; gloss, wobble and flavor bars still apply. */
+body { font-size: 14px; line-height: 1.45; }
+h1, h2, h3, h4 { font-weight: 600; }
+.brand-name { font-family: var(--font-logo); }
+main { background:
+    linear-gradient(var(--backdrop-veil), var(--backdrop-veil)),
+    radial-gradient(ellipse 60% 70% at 15% 10%, color-mix(in srgb, var(--bd1, var(--grape)) var(--backdrop-a), transparent), transparent 70%),
+    radial-gradient(ellipse 60% 70% at 85% 90%, color-mix(in srgb, var(--bd2, var(--strawberry)) var(--backdrop-a), transparent), transparent 70%),
+    radial-gradient(ellipse 50% 60% at 60% 20%, color-mix(in srgb, var(--blueberry) calc(var(--backdrop-a) * .6), transparent), transparent 70%),
+    var(--bg); }
+.hdr { background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(8px); }
+.board { gap: .75rem; padding-block: 1rem; }
+.col { width: 17rem; border-radius: 16px; background: var(--col-bg); border: 1px solid var(--col-line); box-shadow: 0 4px 18px rgba(0, 0, 0, .25); backdrop-filter: blur(6px); }
+.col-head { border-bottom: 0; padding: .75rem .6rem .35rem .85rem; }
+.col-head::before { left: 1rem; right: 1rem; height: 4px; }
+.col-title { flex: 1; justify-content: space-between; padding-right: .25rem; }
+.col-title h3 { font-size: .875rem; font-weight: 700; }
+.col-count { font-family: var(--font-body); font-size: .75rem; font-weight: 500; background: none; color: var(--muted); padding: 0; }
+.col-body { padding: .35rem .5rem; gap: .5rem; }
+.col-foot { padding: .25rem .5rem .5rem; }
+.col-foot .btn { font-weight: 500; color: var(--muted); }
+.card { border-radius: 12px; background-color: var(--card-bg); border: 1px solid transparent; padding: .6rem .75rem; gap: .35rem; }
+.card:hover { background-color: var(--card-hover); border-color: color-mix(in srgb, var(--flavor, var(--grape)) 55%, transparent); }
+.card h4 { font-size: .875rem; font-weight: 500; line-height: 1.4; letter-spacing: 0; }
+.desc { font-size: .78rem; }
+.chk { background: color-mix(in srgb, var(--bg) 40%, transparent); }
+.btn { font-weight: 600; border-radius: 10px; }
+.field > span, .label { font-weight: 600; }
+.tile-genre, .tag, .banner { font-weight: 600; }
+.pri { font-family: var(--font-body); font-weight: 600; }
+
+/* Phone: columns stack, the page scrolls down instead of sideways */
+@media (max-width: 720px) {
+  .board-wrap { height: auto; overflow: visible; }
+  .board { flex-direction: column; width: auto; height: auto; align-items: stretch; }
+  .col { width: auto; max-height: none; }
+  .col-body { overflow: visible; }
+  .row2 { grid-template-columns: 1fr; }
+  .hide-sm { display: none; }
+  .col-tools, .tile-tools { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+
+<header class="hdr">
+  <div class="hdr-left">
+    <button class="btn icon-btn" id="backBtn" data-action="home" hidden><svg class="i" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></svg><span>All games</span></button>
+    <button class="brand" data-action="home" aria-label="All games">
+      <span class="logo"><svg class="i" viewBox="0 0 24 24"><path d="M5 17.5C5 11 7.8 6 12 6s7 5 7 11.5zM3 18h18M8.8 15c0-2.6.9-4.8 2.2-6"/></svg></span>
+      <span><span class="brand-name">JELLO</span><br><span class="brand-sub" id="subtitle">Wobbly little boards for your games</span></span>
+    </button>
+  </div>
+  <div class="hdr-right">
+    <span class="chip" id="viewOnly" hidden><svg class="i" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>View only</span>
+    <label class="search" id="searchWrap" hidden><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><span class="sr">Search cards</span><input type="text" id="searchInput" placeholder="Search cards, tags, notes"></label>
+    <button class="btn icon-btn" data-action="export" title="Back up as JSON"><svg class="i" viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span class="hide-sm">Export</span></button>
+    <label class="btn icon-btn" id="importLabel" title="Add games from a JSON backup"><svg class="i" viewBox="0 0 24 24"><path d="M12 20V9M7 14l5-5 5 5M5 4h14"/></svg><span class="hide-sm">Import</span><input type="file" id="importInput" accept=".json,application/json" class="sr"></label>
+    <button class="btn icon-btn" data-action="mute" id="muteBtn" title="Sound effects"></button>
+    <button class="btn icon-btn" data-action="theme" id="themeBtn" title="Light or dark"></button>
+    <span id="boardBtns" hidden style="display:contents">
+      <button class="btn" data-action="archive" title="Archived cards"><svg class="i" viewBox="0 0 24 24"><path d="M3 4h18v5H3zM5 9v11h14V9M10 13h4"/></svg><span class="count" id="archiveCount">0</span></button>
+      <button class="btn btn-primary edit-only" data-action="new-card"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add card</button>
+      <button class="btn edit-only" data-action="new-column"><svg class="i" viewBox="0 0 24 24"><path d="M4 4h6v16H4zM17 8v8M13 12h8"/></svg><span class="hide-sm">Column</span></button>
+    </span>
+    <button class="btn btn-primary edit-only" id="newGameBtn" data-action="new-game"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New game</button>
+  </div>
+</header>
+<div id="banner" class="banner" hidden></div>
+<main id="main"></main>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<!-- Card read view -->
+<dialog class="modal" id="viewDlg"></dialog>
+
+<!-- Card edit form -->
+<dialog class="modal" id="cardDlg">
+  <form id="cardForm" method="dialog" style="display:contents">
+    <div class="m-head"><h3 id="cardDlgTitle">New card</h3><button type="button" class="btn btn-ghost icon-btn" data-action="close" aria-label="Close"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="m-body">
+      <label class="field"><span>Title</span><input type="text" id="fTitle" required placeholder="e.g. Fishing mini-game"></label>
+      <div class="row2">
+        <label class="field"><span>Priority</span><select id="fPriority"><option>Low</option><option selected>Medium</option><option>High</option><option>Critical</option></select></label>
+        <label class="field"><span>Column</span><select id="fColumn"></select></label>
+      </div>
+      <label class="field"><span>Description (Markdown)</span><textarea id="fDesc" rows="6" placeholder="What it is, why, the rules..."></textarea></label>
+      <label class="field"><span>Tags (comma-separated)</span><input type="text" id="fTags" placeholder="Simulation, Shader, Step 11"></label>
+      <div class="field">
+        <div style="display:flex;justify-content:space-between;align-items:center"><span class="label">Subtasks</span><button type="button" class="link-btn" data-action="add-sub"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Add subtask</button></div>
+        <div class="subs" id="fSubs"></div>
+      </div>
+    </div>
+    <div class="m-foot"><button type="button" class="btn btn-ghost" data-action="close">Cancel</button><button type="submit" class="btn btn-primary">Save card</button></div>
+  </form>
+</dialog>
+
+<!-- Game form -->
+<dialog class="modal narrow" id="gameDlg">
+  <form id="gameForm" method="dialog" style="display:contents">
+    <div class="m-head"><h3 id="gameDlgTitle">New game</h3><button type="button" class="btn btn-ghost icon-btn" data-action="close" aria-label="Close"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="m-body">
+      <label class="field"><span>Game title</span><input type="text" id="gTitle" required placeholder="e.g. Starlight Valley"></label>
+      <label class="field"><span>Genre</span><input type="text" id="gGenre" placeholder="e.g. Cozy farming sim"></label>
+      <div class="field"><span>Flavor</span><div class="swatches" id="gColors"></div></div>
+      <label class="field"><span>Pitch</span><textarea id="gPitch" rows="3" style="min-height:4.5rem" placeholder="One or two lines about the game"></textarea></label>
+    </div>
+    <div class="m-foot"><button type="button" class="btn btn-ghost" data-action="close">Cancel</button><button type="submit" class="btn btn-primary">Save game</button></div>
+  </form>
+</dialog>
+
+<!-- Column name form -->
+<dialog class="modal narrow" id="colDlg">
+  <form id="colForm" method="dialog" style="display:contents">
+    <div class="m-head"><h3 id="colDlgTitle">New column</h3><button type="button" class="btn btn-ghost icon-btn" data-action="close" aria-label="Close"><svg class="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="m-body"><label class="field"><span>Column title</span><input type="text" id="cTitle" required placeholder="e.g. Lore and world"></label></div>
+    <div class="m-foot"><button type="button" class="btn btn-ghost" data-action="close">Cancel</button><button type="submit" class="btn btn-primary">Save column</button></div>
+  </form>
+</dialog>
+
+<!-- Archive, confirm and JSON dialogs -->
+<dialog class="modal" id="archDlg"></dialog>
+<dialog class="modal narrow" id="askDlg"></dialog>
+<dialog class="modal" id="jsonDlg"></dialog>
+
+<!-- Local copies (served by tools\JelloBoard), so the board works offline -->
+<script src="lib/marked.min.js"></script>
+<script src="lib/purify.min.js"></script>
+<script src="lib/confetti.browser.js"></script>
+<script>
+// ---------- Small helpers ----------
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const newId = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const isDoneTitle = t => /(done|complete|finished)/i.test(t || '');
+const byOrder = (a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.id).localeCompare(String(b.id));
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// SVG icon set (stroke icons drawn on a 24-unit grid)
+const ICON = {
+  pencil: 'M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4', archive: 'M3 4h18v5H3zM5 9v11h14V9M10 13h4',
+  trash: 'M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13', x: 'M6 6l12 12M18 6L6 18', up: 'M6 15l6-6 6 6', down: 'M6 9l6 6 6-6',
+  left: 'M15 6l-6 6 6 6', right: 'M9 6l6 6-6 6', plus: 'M12 5v14M5 12h14', copy: 'M8 8h12v12H8zM4 16V4h12',
+  sun: 'M12 8a4 4 0 1 0 0 8 4 4 0 1 0 0-8zM12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4',
+  moon: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z', sound: 'M4 9v6h4l5 4V5L8 9H4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11',
+  mute: 'M4 9v6h4l5 4V5L8 9H4zM17 9l5 6M22 9l-5 6', layers: 'M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5', check: 'M5 12l5 5 9-10',
+};
+const icon = n => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICON[n]}"/></svg>`;
+
+// Game accent gradients, keyed by name (old Tailwind class strings map onto these on import)
+const COLORS = { 'purple-pink': ['--grape', '--strawberry'], 'emerald-blue': ['--lime', '--blueberry'], 'amber-rose': ['--lemon', '--orange'], 'indigo-purple': ['--blueberry', '--grape'] };
+const FLAVOR_NAMES = { 'purple-pink': 'Grape and strawberry', 'emerald-blue': 'Lime and blueberry', 'amber-rose': 'Lemon and orange', 'indigo-purple': 'Blueberry and grape' };
+// Column flavors, cycled left to right
+const FLAVORS = ['--lemon', '--blueberry', '--orange', '--strawberry', '--lime', '--grape'];
+const gradient = key => { const c = COLORS[key] || COLORS['purple-pink']; return `linear-gradient(135deg, var(${c[0]}), var(${c[1]}))`; };
+const colorKeyFrom = v => COLORS[v] ? v : (Object.keys(COLORS).find(k => { const [a, b] = k.split('-'); return String(v).includes(a) && String(v).includes(b); }) || 'purple-pink');
+
+// Markdown to safe HTML (escaped plain text if the libraries didn't load)
+if (window.DOMPurify) DOMPurify.addHook('afterSanitizeAttributes', n => { if (n.tagName === 'A') { n.setAttribute('target', '_blank'); n.setAttribute('rel', 'noopener'); } });
+function md(text) {
+  if (!text) return '';
+  try { if (window.marked && window.DOMPurify) return DOMPurify.sanitize(marked.parse(text)); } catch {}
+  return esc(text).replace(/\n/g, '<br>');
+}
+
+// ---------- Per-viewer preferences (browser storage, may be unavailable) ----------
+const Prefs = {
+  get(k, d) { try { const v = localStorage.getItem('jello.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem('jello.' + k, JSON.stringify(v)); } catch {} },
+};
+
+// ---------- Sound effects (soft jelly bloops; Web Audio, only after a click) ----------
+const Sound = {
+  ctx: null, muted: Prefs.get('muted', false),
+  bloop(freq, dur = .12, gain = .08, slide = 1.6) {
+    if (this.muted) return;
+    try {
+      this.ctx ||= new (window.AudioContext || window.webkitAudioContext)();
+      const o = this.ctx.createOscillator(), g = this.ctx.createGain(), t = this.ctx.currentTime;
+      o.type = 'sine'; o.frequency.setValueAtTime(freq * slide, t); o.frequency.exponentialRampToValueAtTime(freq, t + dur * .6);
+      g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + .015); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+      o.connect(g); g.connect(this.ctx.destination); o.start(t); o.stop(t + dur + .02);
+    } catch {}
+  },
+  click() { this.bloop(520, .08, .06); },
+  pop() { this.bloop(260, .14, .09, 2); },
+  chime() { this.bloop(440, .12); setTimeout(() => this.bloop(660, .16), 80); },
+  cheer() { [392, 494, 587, 784].forEach((f, i) => setTimeout(() => this.bloop(f, .18, .08), i * 85)); },
+};
+// A little shower of jelly drops in the flavor colors
+function celebrate() {
+  Sound.cheer();
+  if (!window.confetti || reduceMotion) return;
+  const css = getComputedStyle(document.documentElement);
+  const colors = FLAVORS.map(f => css.getPropertyValue(f).trim()).filter(Boolean);
+  confetti({ particleCount: 34, spread: 65, startVelocity: 32, gravity: 1.3, scalar: 1.3, ticks: 140, shapes: ['circle'], colors, origin: { y: .7 } });
+}
+
+// ---------- State (what the page knows; rendering reads only this) ----------
+const State = {
+  status: 'loading',        // loading | ready | slow (server lost after loading) | offline (never reached)
+  canWrite: true,
+  problems: [],             // board files the server could not read
+  games: new Map(),         // gameId -> game
+  cards: new Map(),         // gameId -> Map(cardId -> card)
+  gameId: null,             // open board, or null for the dashboard
+  search: '',
+  viewCardId: null,         // card shown in the read view
+  dragging: null,           // card id being dragged
+  plopId: null,             // card that just landed (plays the plop once)
+};
+const currentGame = () => State.games.get(State.gameId) || null;
+const gameCards = gid => [...(State.cards.get(gid)?.values() ?? [])];
+const sortedGames = () => [...State.games.values()].sort(byOrder);
+
+// Which column a card shows in (cards whose column was removed fall into the first one)
+function columnOf(card, game) {
+  return game.columns?.some(c => c.id === card.columnId) ? card.columnId : game.columns?.[0]?.id;
+}
+function columnCards(game, colId) {
+  return gameCards(game.id).filter(c => !c.archived && columnOf(c, game) === colId).sort(byOrder);
+}
+function matches(card, q) {
+  if (!q) return true;
+  q = q.toLowerCase();
+  return [card.title, card.description, ...(card.tags || []), ...(card.checklist || []).map(i => i.text)].some(t => String(t || '').toLowerCase().includes(q));
+}
+
+// ---------- Store (the local board server: files in claude\board\, one per card) ----------
+const Store = {
+  rev: null,                  // fingerprint of the files as last loaded
+  pending: 0,                 // writes sent but not finished
+  queue: Promise.resolve(),   // writes go out one at a time, in order
+  polling: false,
+
+  // Load the board, then keep checking for changes made outside this page (Claude, a text editor, another tab)
+  async start() {
+    await this.reload();
+    setInterval(() => this.poll(), 1500);
+  },
+
+  // Fetch every game and card and replace State with what the files say
+  async reload() {
+    try {
+      const res = await fetch('/api/board', { cache: 'no-store' });
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      if (this.pending) return; // a write is still going out; the reload after it will catch up
+      this.rev = data.rev;
+      State.games = new Map(data.games.map(g => [g.id, g]));
+      State.cards = new Map(data.games.map(g => [g.id, new Map((data.cards[g.id] || []).map(c => [c.id, c]))]));
+      State.problems = data.problems || [];
+      State.status = 'ready';
+    } catch {
+      State.status = State.games.size ? 'slow' : 'offline';
+    }
+    render();
+  },
+
+  // Ask the server whether any board file changed; reload if so (or if it just came back)
+  async poll() {
+    if (this.pending || this.polling || State.dragging) return;
+    this.polling = true;
+    try {
+      const res = await fetch('/api/rev', { cache: 'no-store' });
+      const { rev } = await res.json();
+      if (rev !== this.rev || State.status !== 'ready') await this.reload();
+    } catch {
+      const was = State.status;
+      State.status = State.games.size ? 'slow' : 'offline';
+      if (was !== State.status) render();
+    } finally { this.polling = false; }
+  },
+
+  // Show a change at once, send it to the server, then settle on what the files say
+  write(method, path, data) {
+    this.apply(method, path, data);
+    render();
+    this.pending++;
+    const send = async () => {
+      try {
+        const res = await fetch('/api/' + path, { method, headers: { 'Content-Type': 'application/json' }, body: data ? JSON.stringify(data) : undefined });
+        if (res.ok) return true;
+        toast(res.status === 404 ? 'That card or game is no longer on disk, so the change was not saved.' : 'That change did not save.', true);
+      } catch { toast('That change did not save: the board server is not running. Start Jello Board.bat.', true); }
+      return false;
+    };
+    const result = this.queue.then(send);
+    this.queue = result.then(async () => { if (--this.pending === 0) await this.reload(); });
+    return result;
+  },
+
+  // The same change applied to State, so the page doesn't wait for the server
+  apply(method, path, data) {
+    const [, gid, , cid] = path.split('/');
+    if (cid) {
+      if (!State.cards.has(gid)) State.cards.set(gid, new Map());
+      const cards = State.cards.get(gid);
+      if (method === 'DELETE') cards.delete(cid);
+      else cards.set(cid, method === 'PATCH' ? { ...cards.get(cid), ...data, id: cid } : { ...data, id: cid });
+    } else if (method === 'DELETE') { State.games.delete(gid); State.cards.delete(gid); }
+    else State.games.set(gid, method === 'PATCH' ? { ...State.games.get(gid), ...data, id: gid } : { ...data, id: gid });
+  },
+
+  set(path, data) { return this.write('PUT', path, data); },
+  update(path, data) { return this.write('PATCH', path, data); },
+  remove(path) { return this.write('DELETE', path); },
+};
+const gamePath = gid => `games/${gid}`;
+const cardPath = (gid, cid) => `games/${gid}/cards/${cid}`;
+
+// ---------- Actions (every change to the data goes through here) ----------
+const Actions = {
+  // Create or edit a game
+  saveGame({ id, title, genre, pitch, color }) {
+    const now = Date.now();
+    if (id && State.games.has(id)) return Store.update(gamePath(id), { title, genre, pitch, color, updatedAt: now });
+    const gid = newId('g');
+    const columns = ['Ideas', 'Up next', 'In progress', 'Needs testing', 'Done'].map((t, i) => ({ id: `col${i + 1}`, title: t }));
+    return Store.set(gamePath(gid), { title, genre, pitch, color, columns, order: now, createdAt: now, updatedAt: now });
+  },
+
+  // Delete a game and every card in it
+  async deleteGame(gid) {
+    for (const c of gameCards(gid)) await Store.remove(cardPath(gid, c.id));
+    await Store.remove(gamePath(gid));
+  },
+
+  // Column list changes are one write to the game document
+  setColumns(game, columns) { return Store.update(gamePath(game.id), { columns, updatedAt: Date.now() }); },
+  addColumn(game, title) { return this.setColumns(game, [...(game.columns || []), { id: newId('col'), title }]); },
+  renameColumn(game, colId, title) { return this.setColumns(game, game.columns.map(c => c.id === colId ? { ...c, title } : c)); },
+  moveColumn(game, colId, dir) {
+    const cols = [...game.columns], i = cols.findIndex(c => c.id === colId), j = i + dir;
+    if (i < 0 || j < 0 || j >= cols.length) return;
+    [cols[i], cols[j]] = [cols[j], cols[i]];
+    return this.setColumns(game, cols);
+  },
+  // Deleting a column archives its cards instead of destroying them
+  async deleteColumn(game, colId) {
+    const inCol = gameCards(game.id).filter(c => !c.archived && columnOf(c, game) === colId);
+    for (const c of inCol) await Store.update(cardPath(game.id, c.id), { archived: true, updatedAt: Date.now() });
+    await this.setColumns(game, game.columns.filter(c => c.id !== colId));
+  },
+
+  // Create or replace a card from the edit form
+  saveCard(game, data) {
+    const now = Date.now();
+    const existing = data.id && State.cards.get(game.id)?.get(data.id);
+    if (existing) {
+      const moved = existing.columnId !== data.columnId;
+      const order = moved ? this.endOrder(game, data.columnId) : existing.order;
+      return Store.update(cardPath(game.id, data.id), { title: data.title, priority: data.priority, columnId: data.columnId, description: data.description, tags: data.tags, checklist: data.checklist, order, updatedAt: now });
+    }
+    const id = newId('c');
+    const { id: _drop, ...fields } = data;
+    return Store.set(cardPath(game.id, id), { ...fields, archived: false, order: this.endOrder(game, data.columnId), createdAt: now, updatedAt: now });
+  },
+  endOrder(game, colId) { const list = columnCards(game, colId); return list.length ? (list[list.length - 1].order ?? 0) + 1000 : 1000; },
+
+  // Move a card into a column, placed before another card (or at the end)
+  moveCard(game, cardId, colId, beforeId) {
+    const card = State.cards.get(game.id)?.get(cardId);
+    if (!card) return;
+    const list = columnCards(game, colId).filter(c => c.id !== cardId);
+    const found = beforeId ? list.findIndex(c => c.id === beforeId) : -1;
+    const idx = found >= 0 ? found : list.length;
+    const prev = list[idx - 1], next = list[idx];
+    const order = prev && next ? (prev.order + next.order) / 2 : prev ? prev.order + 1000 : next ? next.order - 1000 : 1000;
+    const fromCol = columnOf(card, game);
+    if (fromCol === colId && order === card.order) return;
+    Sound.pop(); State.plopId = cardId; setTimeout(() => { if (State.plopId === cardId) State.plopId = null; }, 700);
+    if (fromCol !== colId && isDoneTitle(game.columns.find(c => c.id === colId)?.title)) celebrate();
+    return Store.update(cardPath(game.id, cardId), { columnId: colId, order, updatedAt: Date.now() });
+  },
+  // One step up or down inside its column
+  nudgeCard(game, cardId, dir) {
+    const card = State.cards.get(game.id)?.get(cardId); if (!card) return;
+    const col = columnOf(card, game), list = columnCards(game, col), i = list.findIndex(c => c.id === cardId);
+    if (dir < 0 && i > 0) return this.moveCard(game, cardId, col, list[i - 1].id);
+    if (dir > 0 && i < list.length - 1) return this.moveCard(game, cardId, col, list[i + 2]?.id);
+  },
+
+  // Tick or untick one subtask
+  toggleItem(game, cardId, itemId) {
+    const card = State.cards.get(game.id)?.get(cardId); if (!card) return;
+    const checklist = (card.checklist || []).map(i => i.id === itemId ? { ...i, completed: !i.completed } : i);
+    const item = checklist.find(i => i.id === itemId);
+    if (item?.completed) { Sound.chime(); if (checklist.every(i => i.completed)) celebrate(); } else Sound.pop();
+    return Store.update(cardPath(game.id, cardId), { checklist, updatedAt: Date.now() });
+  },
+
+  archiveCard(game, cardId) { Sound.pop(); return Store.update(cardPath(game.id, cardId), { archived: true, updatedAt: Date.now() }); },
+  restoreCard(game, cardId) {
+    const card = State.cards.get(game.id)?.get(cardId); if (!card) return;
+    const col = columnOf(card, game);
+    return Store.update(cardPath(game.id, cardId), { archived: false, columnId: col, order: this.endOrder(game, col), updatedAt: Date.now() });
+  },
+  deleteCard(game, cardId) { return Store.remove(cardPath(game.id, cardId)); },
+
+  // Add games from a backup (Game Forge exports work too); never overwrites
+  async importBackup(data) {
+    const games = Array.isArray(data?.games) ? data.games : [];
+    let n = 0;
+    for (const g of games) {
+      if (!g || !g.title) continue;
+      const gid = g.id && !State.games.has(g.id) && /^[A-Za-z0-9_\-]{1,60}$/.test(g.id) ? g.id : newId('g');
+      const columns = (g.columns || []).map(c => ({ id: /^[A-Za-z0-9_\-]{1,60}$/.test(c.id) ? c.id : newId('col'), title: String(c.title || 'Column') }));
+      const now = Date.now();
+      await Store.set(gamePath(gid), { title: String(g.title), genre: String(g.genre || ''), pitch: String(g.pitch || ''), color: colorKeyFrom(g.color), columns, order: now + n, createdAt: now, updatedAt: now });
+      const perCol = {};
+      for (const c of g.cards || []) {
+        if (!c || !c.title) continue;
+        const colId = columns.some(x => x.id === c.columnId) ? c.columnId : columns[0]?.id;
+        perCol[colId] = (perCol[colId] || 0) + 1000;
+        const cid = /^[A-Za-z0-9_\-]{1,60}$/.test(c.id || '') ? c.id : newId('c');
+        await Store.set(cardPath(gid, cid), {
+          title: String(c.title), columnId: colId, order: typeof c.order === 'number' ? c.order : perCol[colId], archived: !!c.archived,
+          priority: ['Low', 'Medium', 'High', 'Critical'].includes(c.priority) ? c.priority : 'Medium',
+          description: String(c.description || ''), tags: (c.tags || []).map(String),
+          checklist: (c.checklist || []).map(i => ({ id: String(i.id || newId('k')), text: String(i.text || ''), completed: !!i.completed })),
+          createdAt: now, updatedAt: now,
+        });
+      }
+      n++;
+    }
+    return n;
+  },
+};
+
+// ---------- Rendering ----------
+let renderQueued = false;
+function render() {
+  if (State.dragging) { renderQueued = true; return; }
+  if (renderQueued === 'frame') return;
+  renderQueued = 'frame';
+  requestAnimationFrame(() => { renderQueued = false; draw(); });
+}
+
+// Redraw the header, the main view and any open read view from State
+function draw() {
+  const game = currentGame();
+  if (State.gameId && !game && State.status === 'ready' && State.games.size) { State.gameId = null; location.hash = ''; }
+  const onBoard = !!currentGame();
+  $('#backBtn').hidden = !onBoard;
+  $('#searchWrap').hidden = !onBoard;
+  $('#boardBtns').hidden = !onBoard;
+  $('#newGameBtn').hidden = onBoard;
+  $('#subtitle').textContent = onBoard ? `${currentGame().title} board` : 'Wobbly little boards for your games';
+  $('#viewOnly').hidden = State.canWrite;
+  document.querySelectorAll('.edit-only').forEach(el => { if (!State.canWrite) el.hidden = true; });
+  $('#importLabel').hidden = !State.canWrite;
+  $('#muteBtn').innerHTML = icon(Sound.muted ? 'mute' : 'sound');
+  $('#themeBtn').innerHTML = icon(isDark() ? 'moon' : 'sun');
+  const banner = $('#banner');
+  banner.hidden = State.status !== 'slow' && !State.problems.length;
+  banner.textContent = State.status === 'slow'
+    ? 'Lost touch with the board server. Is the Jello board window still open? Changes made now will not save.'
+    : `Some board files could not be read, so they are missing here: ${State.problems.join('; ')}`;
+
+  const main = $('#main');
+  if (State.status === 'offline') main.innerHTML = notice('The board server is not running', 'Double-click "Jello Board.bat" in the birb-box folder. This page picks it up on its own.');
+  else if (onBoard) drawBoard(currentGame(), main);
+  else main.innerHTML = drawDashboard();
+  // Backdrop colors follow the open game's flavor pair (defaults on the dashboard)
+  const pair = COLORS[onBoard ? colorKeyFrom(currentGame().color) : 'purple-pink'];
+  main.style.setProperty('--bd1', `var(${pair[0]})`); main.style.setProperty('--bd2', `var(${pair[1]})`);
+
+  if (State.viewCardId && $('#viewDlg').open) drawView();
+}
+const notice = (h, p) => `<div class="notice"><h2>${esc(h)}</h2><p>${esc(p)}</p></div>`;
+
+// Grid of game tiles
+function drawDashboard() {
+  const games = sortedGames();
+  const loading = State.status === 'loading' || State.status === 'slow';
+  let body;
+  if (!games.length) body = loading ? notice('Loading your games', 'Your boards will appear here in a moment.') : notice('No games yet', State.canWrite ? 'Create a game to start its board, or import a backup from Game Forge.' : 'Nothing has been added to this board yet.');
+  else body = `<div class="tiles">${games.map(g => {
+    const cards = gameCards(g.id).filter(c => !c.archived);
+    const doneIds = (g.columns || []).filter(c => isDoneTitle(c.title)).map(c => c.id);
+    const done = cards.filter(c => doneIds.includes(columnOf(c, g))).length;
+    const pct = cards.length ? Math.round(done / cards.length * 100) : 0;
+    return `<div class="tile" role="button" tabindex="0" data-action="open-game" data-id="${esc(g.id)}">
+      <div class="tile-band" style="background:${gradient(g.color)}">
+        <span class="tile-genre">${esc(g.genre || 'Game')}</span>
+        <h3 class="tile-title">${esc(g.title)}</h3>
+        ${State.canWrite ? `<div class="tile-tools"><button data-action="edit-game" data-id="${esc(g.id)}" aria-label="Edit game">${icon('pencil')}</button><button data-action="delete-game" data-id="${esc(g.id)}" aria-label="Delete game">${icon('trash')}</button></div>` : ''}
+      </div>
+      <div class="tile-body">
+        <p class="tile-pitch">${esc(g.pitch || 'No pitch yet.')}</p>
+        <div class="tile-progress" title="${pct}% done"><span style="width:${pct}%"></span></div>
+        <div class="tile-stats"><span>${(g.columns || []).length} columns</span><span>${cards.length} cards, ${done} done</span></div>
+      </div>
+    </div>`;
+  }).join('')}</div>`;
+  return `<div class="dash"><div class="dash-head"><div><h2>Your game projects</h2><p>Open a game to see its board.</p></div></div>${body}</div>`;
+}
+
+// One game's columns and cards
+function drawBoard(game, main) {
+  const keepScroll = main.querySelector('.board-wrap')?.scrollLeft ?? 0;
+  const colScroll = {}; main.querySelectorAll('.col-body').forEach(b => colScroll[b.dataset.col] = b.scrollTop);
+  const q = State.search;
+  const cols = game.columns || [];
+  main.innerHTML = `<div class="board-wrap"><div class="board">${cols.map((col, i) => {
+    const all = columnCards(game, col.id), list = all.filter(c => matches(c, q));
+    return `<section class="col" aria-label="${esc(col.title)}" style="--flavor:var(${FLAVORS[i % FLAVORS.length]})">
+      <div class="col-head">
+        <div class="col-title"><h3>${esc(col.title)}</h3><span class="col-count">${q ? `${list.length}/${all.length}` : all.length}</span></div>
+        ${State.canWrite ? `<div class="col-tools">
+          <button class="btn btn-ghost" data-action="col-left" data-col="${esc(col.id)}" ${i === 0 ? 'disabled' : ''} aria-label="Move column left">${icon('left')}</button>
+          <button class="btn btn-ghost" data-action="col-right" data-col="${esc(col.id)}" ${i === cols.length - 1 ? 'disabled' : ''} aria-label="Move column right">${icon('right')}</button>
+          <button class="btn btn-ghost" data-action="col-rename" data-col="${esc(col.id)}" aria-label="Rename column">${icon('pencil')}</button>
+          <button class="btn btn-ghost" data-action="col-delete" data-col="${esc(col.id)}" aria-label="Delete column">${icon('trash')}</button>
+        </div>` : ''}
+      </div>
+      <div class="col-body" data-col="${esc(col.id)}">${list.map(c => cardHTML(c)).join('') || `<div class="col-empty">${q ? 'No matches' : 'No cards yet'}</div>`}</div>
+      ${State.canWrite ? `<div class="col-foot"><button class="btn btn-ghost" data-action="new-card" data-col="${esc(col.id)}">${icon('plus')}Add a card</button></div>` : ''}
+    </section>`;
+  }).join('') || notice('No columns', 'Add a column to start this board.')}</div></div>`;
+  main.querySelector('.board-wrap').scrollLeft = keepScroll;
+  main.querySelectorAll('.col-body').forEach(b => { if (colScroll[b.dataset.col]) b.scrollTop = colScroll[b.dataset.col]; });
+  $('#archiveCount').textContent = gameCards(game.id).filter(c => c.archived).length;
+}
+
+// One card as it sits in a column
+function cardHTML(card) {
+  const list = card.checklist || [], done = list.filter(i => i.completed).length, pct = list.length ? Math.round(done / list.length * 100) : 0;
+  const pri = ['Low', 'Medium', 'High', 'Critical'].includes(card.priority) ? card.priority : 'Medium';
+  return `<article class="card${State.plopId === card.id ? ' plop' : ''}" data-card="${esc(card.id)}" ${State.canWrite ? 'draggable="true"' : ''} tabindex="0">
+    <div class="card-top"><span class="pri pri-${pri}">${pri}</span></div>
+    <h4>${esc(card.title)}</h4>
+    ${card.description ? `<div class="desc">${md(card.description)}</div>` : ''}
+    ${list.length ? `<div class="chk">
+      <div class="chk-head"><span>Subtasks</span><span>${done}/${list.length} (${pct}%)</span></div>
+      <div class="bar"><span style="width:${pct}%"></span></div>
+      <div class="chk-list">${list.map(i => `<label class="chk-item ${i.completed ? 'done' : ''}"><input type="checkbox" data-action="tick" data-card="${esc(card.id)}" data-item="${esc(i.id)}" ${i.completed ? 'checked' : ''} ${State.canWrite ? '' : 'disabled'}><span>${esc(i.text)}</span></label>`).join('')}</div>
+    </div>` : ''}
+    ${(card.tags || []).length ? `<div class="tags">${card.tags.map(t => `<span class="tag">#${esc(t)}</span>`).join('')}</div>` : ''}
+  </article>`;
+}
+
+// The read view: full description, subtasks and move controls
+function drawView() {
+  const game = currentGame(), card = game && State.cards.get(game.id)?.get(State.viewCardId), dlg = $('#viewDlg');
+  if (!card || card.archived) { dlg.close(); State.viewCardId = null; return; }
+  const col = columnOf(card, game), list = columnCards(game, col), pos = list.findIndex(c => c.id === card.id);
+  const items = card.checklist || [], done = items.filter(i => i.completed).length;
+  const pri = ['Low', 'Medium', 'High', 'Critical'].includes(card.priority) ? card.priority : 'Medium';
+  const scroll = dlg.querySelector('.m-body')?.scrollTop ?? 0;
+  dlg.innerHTML = `<div class="m-head"><h3>${esc(card.title)}</h3><button class="btn btn-ghost icon-btn" data-action="close" aria-label="Close">${icon('x')}</button></div>
+    <div class="m-body">
+      <div class="view-meta"><span class="pri pri-${pri}">${pri}</span><span class="chip">${esc(game.columns.find(c => c.id === col)?.title || '')}, ${pos + 1} of ${list.length}</span>${(card.tags || []).map(t => `<span class="tag">#${esc(t)}</span>`).join('')}</div>
+      ${card.description ? `<div class="desc view-desc">${md(card.description)}</div>` : '<p class="desc">No description.</p>'}
+      ${items.length ? `<div class="chk"><div class="chk-head"><span>Subtasks</span><span>${done}/${items.length}</span></div><div class="bar"><span style="width:${Math.round(done / items.length * 100)}%"></span></div>
+        <div class="chk-list" style="max-height:none">${items.map(i => `<label class="chk-item ${i.completed ? 'done' : ''}"><input type="checkbox" data-action="tick" data-card="${esc(card.id)}" data-item="${esc(i.id)}" ${i.completed ? 'checked' : ''} ${State.canWrite ? '' : 'disabled'}><span>${esc(i.text)}</span></label>`).join('')}</div></div>` : ''}
+      ${State.canWrite ? `<div class="move-row"><span class="label">Move</span>
+        <label class="sr" for="vCol">Column</label><select id="vCol" data-action="view-col">${game.columns.map(c => `<option value="${esc(c.id)}" ${c.id === col ? 'selected' : ''}>${esc(c.title)}</option>`).join('')}</select>
+        <button class="btn" data-action="nudge" data-dir="-1" ${pos <= 0 ? 'disabled' : ''}>${icon('up')}Up</button>
+        <button class="btn" data-action="nudge" data-dir="1" ${pos >= list.length - 1 ? 'disabled' : ''}>${icon('down')}Down</button></div>` : ''}
+    </div>
+    ${State.canWrite ? `<div class="m-foot"><button class="btn btn-ghost" data-action="archive-card">${icon('archive')}Archive</button><span class="spacer"></span><button class="btn btn-primary" data-action="edit-card">${icon('pencil')}Edit</button></div>` : ''}`;
+  dlg.querySelector('.m-body').scrollTop = scroll;
+}
+
+// The archive list
+function drawArchive() {
+  const game = currentGame(), dlg = $('#archDlg'); if (!game) return;
+  const list = gameCards(game.id).filter(c => c.archived).sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  dlg.innerHTML = `<div class="m-head"><h3>Archived cards</h3><button class="btn btn-ghost icon-btn" data-action="close" aria-label="Close">${icon('x')}</button></div>
+    <div class="m-body">${list.length ? list.map(c => `<div class="arch-item"><div><h4>${esc(c.title)}</h4><p>${esc((c.tags || []).join(', '))}</p></div>
+      ${State.canWrite ? `<div><button class="btn btn-primary" data-action="restore" data-card="${esc(c.id)}">Restore</button><button class="btn" data-action="purge" data-card="${esc(c.id)}">Delete</button></div>` : ''}</div>`).join('') : '<p class="desc" style="text-align:center;padding:2rem 0">No archived cards in this game.</p>'}</div>`;
+}
+
+// ---------- Dialog helpers ----------
+function openDlg(id) { const d = $(id); if (!d.open) d.showModal(); return d; }
+function toast(msg, bad = false) {
+  const t = document.createElement('div'); t.className = 'toast' + (bad ? ' bad' : ''); t.textContent = msg;
+  $('#toasts').appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateY(8px)'; setTimeout(() => t.remove(), 220); }, bad ? 4500 : 2500);
+}
+// In-page confirm (the viewer blocks window.confirm)
+function ask({ title, body, ok = 'Delete', danger = true }) {
+  const d = $('#askDlg');
+  d.innerHTML = `<div class="m-head"><h3>${esc(title)}</h3></div><div class="m-body"><p style="margin:0">${esc(body)}</p></div>
+    <div class="m-foot"><button class="btn btn-ghost" data-ans="no">Cancel</button><button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-ans="yes">${esc(ok)}</button></div>`;
+  d.showModal();
+  return new Promise(res => {
+    const done = v => { d.removeEventListener('click', onClick); d.removeEventListener('close', onClose); if (d.open) d.close(); res(v); };
+    const onClick = e => { const b = e.target.closest('[data-ans]'); if (b) done(b.dataset.ans === 'yes'); };
+    const onClose = () => done(false);
+    d.addEventListener('click', onClick); d.addEventListener('close', onClose);
+  });
+}
+
+// Fill and open the card form (new card, or edit an existing one)
+function openCardForm(cardId, colId) {
+  const game = currentGame(); if (!game) return;
+  const card = cardId ? State.cards.get(game.id)?.get(cardId) : null;
+  const f = $('#cardForm'); f.reset(); f.dataset.id = card?.id || '';
+  $('#cardDlgTitle').textContent = card ? 'Edit card' : 'New card';
+  const sel = $('#fColumn');
+  sel.innerHTML = game.columns.map(c => `<option value="${esc(c.id)}">${esc(c.title)}</option>`).join('');
+  sel.value = card ? columnOf(card, game) : (colId || game.columns[0]?.id);
+  $('#fTitle').value = card?.title || '';
+  $('#fPriority').value = card?.priority || 'Medium';
+  $('#fDesc').value = card?.description || '';
+  $('#fTags').value = (card?.tags || []).join(', ');
+  $('#fSubs').innerHTML = '';
+  (card?.checklist || []).forEach(i => addSubRow(i.text, i.completed, i.id));
+  openDlg('#cardDlg'); $('#fTitle').focus();
+}
+// One editable subtask row (values set as properties, so quotes survive)
+function addSubRow(text = '', completed = false, id = null) {
+  const row = document.createElement('div'); row.className = 'sub-row'; row.dataset.id = id || newId('k');
+  row.innerHTML = `<input type="checkbox" aria-label="Done"><input type="text" placeholder="Subtask" aria-label="Subtask"><button type="button" class="btn btn-ghost icon-btn" aria-label="Remove subtask">${icon('x')}</button>`;
+  row.querySelector('[type=checkbox]').checked = completed;
+  row.querySelector('[type=text]').value = text;
+  row.querySelector('button').onclick = () => row.remove();
+  $('#fSubs').appendChild(row);
+  return row;
+}
+
+// Fill and open the game form
+function openGameForm(gid) {
+  const g = gid ? State.games.get(gid) : null, f = $('#gameForm'); f.reset(); f.dataset.id = g?.id || '';
+  $('#gameDlgTitle').textContent = g ? 'Edit game' : 'New game';
+  $('#gTitle').value = g?.title || ''; $('#gGenre').value = g?.genre || ''; $('#gPitch').value = g?.pitch || '';
+  const cur = colorKeyFrom(g?.color || 'purple-pink');
+  $('#gColors').innerHTML = Object.keys(COLORS).map(k => `<label><input type="radio" name="gColor" value="${k}" ${k === cur ? 'checked' : ''} aria-label="${FLAVOR_NAMES[k]}"><span style="background:${gradient(k)}"></span></label>`).join('');
+  openDlg('#gameDlg'); $('#gTitle').focus();
+}
+function openColumnForm(colId) {
+  const game = currentGame(), col = colId && game?.columns.find(c => c.id === colId), f = $('#colForm');
+  f.reset(); f.dataset.id = col?.id || '';
+  $('#colDlgTitle').textContent = col ? 'Rename column' : 'New column';
+  $('#cTitle').value = col?.title || '';
+  openDlg('#colDlg'); $('#cTitle').focus();
+}
+
+// ---------- Theme (per viewer) ----------
+const isDark = () => { const t = document.documentElement.dataset.theme; return t !== 'light'; };
+(() => { const t = Prefs.get('theme', null); if (t) document.documentElement.dataset.theme = t; })();
+
+// ---------- Export (a download, or copyable JSON if the download is blocked) ----------
+async function exportBackup() {
+  const data = { exportedAt: new Date().toISOString(), games: sortedGames().map(g => ({ ...g, cards: gameCards(g.id).sort(byOrder) })) };
+  const json = JSON.stringify(data, null, 2), name = `jello-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  try {
+    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(new Blob([json], { type: 'application/json' })), download: name });
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('Backup saved to your downloads.'); return;
+  } catch {}
+  const d = $('#jsonDlg');
+  d.innerHTML = `<div class="m-head"><h3>Backup JSON</h3><button class="btn btn-ghost icon-btn" data-action="close" aria-label="Close">${icon('x')}</button></div>
+    <div class="m-body"><p class="desc" style="margin:0">Copy this and save it as <code>${esc(name)}</code>.</p><label class="sr" for="jsonOut">Backup</label><textarea class="json" id="jsonOut" readonly></textarea></div>
+    <div class="m-foot"><button class="btn btn-primary" data-action="copy-json">${icon('copy')}Copy</button></div>`;
+  $('#jsonOut').value = json; d.showModal();
+}
+
+// ---------- Routing (#gameId opens that board) ----------
+function route() {
+  const id = decodeURIComponent(location.hash.slice(1));
+  State.gameId = id || null; State.search = ''; $('#searchInput').value = '';
+  render();
+}
+function openGame(id) { Sound.click(); location.hash = id; }
+function goHome() { Sound.click(); if (location.hash.length > 1) location.hash = ''; else route(); }
+addEventListener('hashchange', route);
+
+// ---------- Event wiring ----------
+document.addEventListener('click', async e => {
+  if (e.target.closest('.desc a') || e.target.closest('.chk-item')) return;
+  const a = e.target.closest('[data-action]');
+  const cardEl = !a && e.target.closest('.card');
+  if (cardEl) { State.viewCardId = cardEl.dataset.card; openDlg('#viewDlg'); drawView(); Sound.click(); return; }
+  if (!a) return;
+  const game = currentGame(), act = a.dataset.action;
+  switch (act) {
+    case 'home': goHome(); break;
+    case 'open-game': openGame(a.dataset.id); break;
+    case 'new-game': Sound.click(); openGameForm(); break;
+    case 'edit-game': e.stopPropagation(); openGameForm(a.dataset.id); break;
+    case 'delete-game': {
+      e.stopPropagation();
+      const g = State.games.get(a.dataset.id); if (!g) break;
+      if (await ask({ title: `Delete ${g.title}?`, body: `This deletes the game and all ${gameCards(g.id).length} of its cards, archived ones included. It can't be undone.`, ok: 'Delete game' })) { await Actions.deleteGame(g.id); toast('Game deleted.'); }
+      break;
+    }
+    case 'new-card': Sound.click(); openCardForm(null, a.dataset.col); break;
+    case 'new-column': Sound.click(); openColumnForm(); break;
+    case 'col-left': Actions.moveColumn(game, a.dataset.col, -1); break;
+    case 'col-right': Actions.moveColumn(game, a.dataset.col, 1); break;
+    case 'col-rename': openColumnForm(a.dataset.col); break;
+    case 'col-delete': {
+      const col = game.columns.find(c => c.id === a.dataset.col), n = columnCards(game, a.dataset.col).length;
+      if (await ask({ title: `Delete the ${col.title} column?`, body: n ? `Its ${n} card${n === 1 ? '' : 's'} will move to the archive, where you can restore them.` : 'The column is empty.', ok: 'Delete column' })) { await Actions.deleteColumn(game, col.id); toast(n ? 'Column deleted, cards archived.' : 'Column deleted.'); }
+      break;
+    }
+    case 'archive': Sound.click(); drawArchive(); openDlg('#archDlg'); break;
+    case 'restore': await Actions.restoreCard(game, a.dataset.card); toast('Card restored.'); drawArchive(); break;
+    case 'purge':
+      if (a.dataset.armed) { await Actions.deleteCard(game, a.dataset.card); toast('Card deleted.'); drawArchive(); }
+      else { a.dataset.armed = '1'; a.textContent = 'Delete for good'; a.classList.add('btn-danger'); }
+      break;
+    case 'edit-card': { const id = State.viewCardId; $('#viewDlg').close(); openCardForm(id); break; }
+    case 'archive-card': { const id = State.viewCardId; $('#viewDlg').close(); await Actions.archiveCard(game, id); toast('Card archived.'); break; }
+    case 'nudge': Actions.nudgeCard(game, State.viewCardId, +a.dataset.dir); break;
+    case 'add-sub': addSubRow().querySelector('[type=text]').focus(); break;
+    case 'close': a.closest('dialog').close(); break;
+    case 'mute': Sound.muted = !Sound.muted; Prefs.set('muted', Sound.muted); if (!Sound.muted) Sound.chime(); render(); break;
+    case 'theme': { const t = isDark() ? 'light' : 'dark'; document.documentElement.dataset.theme = t; Prefs.set('theme', t); Sound.click(); render(); break; }
+    case 'export': Sound.click(); exportBackup(); break;
+    case 'copy-json': {
+      const ta = $('#jsonOut');
+      try { await navigator.clipboard.writeText(ta.value); toast('Copied.'); } catch { ta.focus(); ta.select(); toast('Press Ctrl+C to copy the selected text.'); }
+      break;
+    }
+  }
+});
+
+// Subtask ticks and the read view's column picker
+document.addEventListener('change', e => {
+  const t = e.target, game = currentGame();
+  if (t.dataset.action === 'tick' && game) Actions.toggleItem(game, t.dataset.card, t.dataset.item);
+  if (t.dataset.action === 'view-col' && game) Actions.moveCard(game, State.viewCardId, t.value);
+});
+
+// Enter or Space on a focused tile or card opens it
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const tile = e.target.closest?.('.tile'), card = e.target.matches?.('.card') && e.target;
+  if (tile && e.target === tile) { e.preventDefault(); openGame(tile.dataset.id); }
+  if (card) { e.preventDefault(); State.viewCardId = card.dataset.card; openDlg('#viewDlg'); drawView(); }
+});
+
+$('#searchInput').addEventListener('input', e => { State.search = e.target.value.trim(); render(); });
+$('#viewDlg').addEventListener('close', () => { State.viewCardId = null; });
+
+$('#cardForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const game = currentGame(); if (!game) return;
+  const checklist = [...document.querySelectorAll('#fSubs .sub-row')].map(r => ({ id: r.dataset.id, text: r.querySelector('[type=text]').value.trim(), completed: r.querySelector('[type=checkbox]').checked })).filter(i => i.text);
+  const data = { id: e.target.dataset.id || null, title: $('#fTitle').value.trim(), priority: $('#fPriority').value, columnId: $('#fColumn').value, description: $('#fDesc').value, tags: $('#fTags').value.split(',').map(t => t.trim()).filter(Boolean), checklist };
+  if (!data.title) return;
+  $('#cardDlg').close(); Sound.click();
+  if (await Actions.saveCard(game, data)) toast(data.id ? 'Card saved.' : 'Card added.');
+});
+$('#gameForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const data = { id: e.target.dataset.id || null, title: $('#gTitle').value.trim(), genre: $('#gGenre').value.trim(), pitch: $('#gPitch').value.trim(), color: document.querySelector('[name=gColor]:checked')?.value || 'purple-pink' };
+  if (!data.title) return;
+  $('#gameDlg').close(); Sound.click();
+  if (await Actions.saveGame(data)) toast(data.id ? 'Game saved.' : 'Game created.');
+});
+$('#colForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const game = currentGame(), title = $('#cTitle').value.trim(); if (!game || !title) return;
+  $('#colDlg').close(); Sound.click();
+  if (e.target.dataset.id) await Actions.renameColumn(game, e.target.dataset.id, title);
+  else if (await Actions.addColumn(game, title)) toast('Column added.');
+});
+$('#importInput').addEventListener('change', e => {
+  const file = e.target.files[0]; e.target.value = ''; if (!file) return;
+  const r = new FileReader();
+  r.onload = async () => {
+    let data; try { data = JSON.parse(r.result); } catch { toast('That file isn’t valid JSON.', true); return; }
+    if (!Array.isArray(data?.games)) { toast('No games found in that file.', true); return; }
+    if (!await ask({ title: `Import ${data.games.length} game${data.games.length === 1 ? '' : 's'}?`, body: 'They are added next to your current games. Nothing existing is replaced.', ok: 'Import', danger: false })) return;
+    const n = await Actions.importBackup(data); toast(`Imported ${n} game${n === 1 ? '' : 's'}.`); if (n) celebrate();
+  };
+  r.readAsText(file);
+});
+
+// ---------- Drag and drop (move between and within columns) ----------
+const Drag = {
+  mark: Object.assign(document.createElement('div'), { className: 'drop-mark' }),
+  // The card the drop would land in front of, from the pointer's height
+  beforeCard(body, y) {
+    for (const el of body.querySelectorAll('.card:not(.dragging)')) { const r = el.getBoundingClientRect(); if (y < r.top + r.height / 2) return el; }
+    return null;
+  },
+  clear() { this.mark.remove(); document.querySelectorAll('.col-body.over').forEach(b => b.classList.remove('over')); },
+};
+document.addEventListener('dragstart', e => {
+  const card = e.target.closest?.('.card'); if (!card || !State.canWrite) return;
+  State.dragging = card.dataset.card; card.classList.add('dragging'); Sound.pop();
+  e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', card.dataset.card);
+});
+document.addEventListener('dragover', e => {
+  const body = e.target.closest?.('.col-body'); if (!body || !State.dragging) return;
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('.col-body.over').forEach(b => b !== body && b.classList.remove('over'));
+  body.classList.add('over');
+  const before = Drag.beforeCard(body, e.clientY);
+  if (before) { if (Drag.mark.nextSibling !== before) body.insertBefore(Drag.mark, before); }
+  else if (body.lastElementChild !== Drag.mark) body.appendChild(Drag.mark);
+});
+document.addEventListener('drop', e => {
+  const body = e.target.closest?.('.col-body'), game = currentGame(); if (!body || !State.dragging || !game) return;
+  e.preventDefault();
+  let next = Drag.mark.nextElementSibling; while (next && (!next.matches('.card') || next.classList.contains('dragging'))) next = next.nextElementSibling;
+  const id = State.dragging;
+  Drag.clear(); State.dragging = null;
+  Actions.moveCard(game, id, body.dataset.col, next?.dataset.card || null);
+  render();
+});
+document.addEventListener('dragend', () => {
+  Drag.clear(); document.querySelectorAll('.card.dragging').forEach(c => c.classList.remove('dragging'));
+  if (State.dragging) { State.dragging = null; }
+  if (renderQueued === true) renderQueued = false;
+  render();
+});
+
+// ---------- Start ----------
+route();
+Store.start();
+</script>
+
+</body></html>

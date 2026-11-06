@@ -57,6 +57,8 @@ uniform float nightLevel;    // 0 by day, 1 at full night (DayLight.Darkness): c
 uniform float cloudCover;    // how much of the sky the drifting clouds cover (Weather.Cover): 0 clear, 1 solid
 uniform vec2 cloudDrift;     // how far the clouds have drifted, in world units (Weather.CloudDrift)
 uniform float cloudShadow;   // how dark their shadows are right now: 0 in the store, the Designer, at night and under full overcast
+uniform vec4 hawkShadow;     // the Hawk's Shadow (HawkShadow.cs): world X, world Z, wingspan in world units, strength 0 to 1 (0: no hawk)
+uniform vec2 hawkDir;        // which way the hawk flies, world X and Z (unit length)
 
 out vec4 finalColor;
 
@@ -79,6 +81,10 @@ const float NightRim = 0.8;          // at full night the rim glow is this much 
 
 // CLOUD SHADOWS (5.05)
 const float ShadowSkyShare = 0.25;   // a cloud's shadow also takes this share of the light from all around (the sky above is dimmer)
+
+// THE HAWK'S SHADOW (5.22)
+const float HawkDarkness = 0.6;      // how much of the sun the hawk's shadow takes away at its darkest
+const float HawkSkyShare = 0.35;     // and this share of the light from all around
 
 float hash(vec2 p)
 {
@@ -105,6 +111,24 @@ float cloudField(vec2 world, float cover)
     f = (f - 0.5) * 1.8 + 0.5;                           // stretched, so cloud and open sky are clearly apart
     float threshold = mix(0.85, 0.0, cover);             // more cover lets more of the noise through
     return smoothstep(threshold, threshold + 0.12, f);
+}
+
+// ---------------- THE HAWK'S SHADOW ----------------
+// A soft bird shape by world position, 0 outside it, 1 inside: a slim body along the flight line, broad wings swept
+// back toward their tips, a small tail fan. Sizes are shares of the wingspan. Soft-edged, so it reads as a shadow
+// cast from high up, never a hard cutout.
+float hawkShape(vec2 world)
+{
+    vec2 d = world - hawkShadow.xy;
+    vec2 side = vec2(hawkDir.y, -hawkDir.x);
+    float along = dot(d, hawkDir) / hawkShadow.z;
+    float across = dot(d, side) / hawkShadow.z;
+
+    float body = 1.0 - smoothstep(0.5, 1.0, length(vec2(along / 0.3, across / 0.08)));
+    float sweep = along + abs(across) * 0.35;
+    float wings = 1.0 - smoothstep(0.5, 1.0, length(vec2(sweep / 0.12, across / 0.5)));
+    float tail = 1.0 - smoothstep(0.5, 1.0, length(vec2((along + 0.3) / 0.1, across / 0.1)));
+    return max(max(body, wings), tail);
 }
 
 // Bare dirt, with a few light seed specks scattered on it.
@@ -359,6 +383,14 @@ void main()
         float shadow = cloudField(boxPos.xz / viewZoom + viewCenter, cloudCover) * cloudShadow;
         diffuse *= 1.0 - shadow;
         ambient *= 1.0 - shadow * ShadowSkyShare;
+    }
+
+    // The hawk's shadow, on the ground and on whatever stands under it
+    if (hawkShadow.w > 0.0)
+    {
+        float hawk = hawkShape(boxPos.xz / viewZoom + viewCenter) * hawkShadow.w;
+        diffuse *= 1.0 - hawk * HawkDarkness;
+        ambient *= 1.0 - hawk * HawkSkyShare;
     }
     vec3 color = base.rgb * (ambient + directLight * diffuse);
 

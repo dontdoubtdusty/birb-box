@@ -1,0 +1,66 @@
+{
+  "archived": false,
+  "checklist": [
+    {
+      "completed": true,
+      "id": "v519-0",
+      "text": "It builds (compiled in the workspace with the screenshot driver: no errors; screenshots of the card, a trait tooltip and an average tooltip checked)"
+    },
+    {
+      "completed": true,
+      "id": "v519-1",
+      "text": "Smoke test (qa-plan.md section 3)"
+    },
+    {
+      "completed": true,
+      "id": "v519-2",
+      "text": "Select a bird: the card shows only its 2-3 standout trait rows, shorter than before; Follow and Center still sit under \"Fond of\""
+    },
+    {
+      "completed": true,
+      "id": "v519-3",
+      "text": "Hold Left Alt: all eleven rows appear and the card grows (hint reads ALL TRAITS); let go: it shrinks back. Nothing flickers or jumps"
+    },
+    {
+      "completed": true,
+      "id": "v519-4",
+      "text": "Hover a trait row: a panel under the card shows the name, flavor line, and what it changes with numbers"
+    },
+    {
+      "completed": true,
+      "id": "v519-5",
+      "text": "Hold Alt and hover an average row: the panel says \"<Scale>: average\" and a one-line note"
+    },
+    {
+      "completed": true,
+      "id": "v519-6",
+      "text": "Faint-hearted, Night Owl, Hearthbound tooltip lines read right"
+    },
+    {
+      "completed": true,
+      "id": "v519-7",
+      "text": "Renaming a bird still types normally; pressing Alt while typing does nothing odd"
+    },
+    {
+      "completed": true,
+      "id": "v519-8",
+      "text": "Tab panel's bird tracker still shows the raw trait numbers (untouched)"
+    },
+    {
+      "completed": false,
+      "id": "v519-9",
+      "text": "Commit"
+    }
+  ],
+  "columnId": "done",
+  "createdAt": 1793916000000,
+  "description": "The bird card shows only the 2-3 traits that make the bird stand out; hold Left Alt for all eleven scales. Every row has a tooltip: the flavor line (or an \"average\" note for scales where the bird has no trait) plus lines generated from the trait's numbers (`Traits.EffectLines`, from `TraitEffects`, so they always match). Decided Nov 5: traits stay discrete (no per-scale numbers); numbers show in tooltips; a held key, not a button. Card height now follows the rows shown (`CardBaseHeight` + rows, `Hud.BirdCardHeight`). When TraitEffects gets a new number, add a line to `numberLines` or `switchLines` in `Traits.cs`. Session 45. Files: `Hud.cs`, `Traits.cs`, `GameEngine.cs` (version only).",
+  "order": 26900,
+  "priority": "Medium",
+  "tags": [
+    "Traits",
+    "5.19"
+  ],
+  "title": "5.19 Bird card: standout traits and tooltips",
+  "updatedAt": 1794010000000
+}
