@@ -101,7 +101,10 @@ public class Bird : Entity
     private Vector3? perchSpot;                     // where it stands while eating at a feeder
     public Vector3 FlightTarget { get; set; }
     public bool ArrivingByAir { get; set; }
-    public bool IsFlying => Position.Y > GroundY + 0.05f;
+    public bool IsFlying => Position.Y > StandY(Position.X, Position.Z) + 0.05f;
+
+    // The Y that puts this bird's feet on the ground at a spot (the ground's height plus the feet offset).
+    public float StandY(float x, float z) => Terrain.HeightAt(x, z) + GroundY;
     public BirdMover Mover { get; private set; }
 
     // TIMERS
@@ -172,7 +175,7 @@ public class Bird : Entity
 
         bool onGround = !IsFlying;
         UseLook(fresh);
-        if (onGround) Position = new Vector3(Position.X, GroundY, Position.Z);
+        if (onGround) Position = new Vector3(Position.X, StandY(Position.X, Position.Z), Position.Z);
     }
 
     // The look a save names: its Designer file if that still belongs to this species, otherwise a built-in look by number.

@@ -25,6 +25,8 @@ public partial class WorldDrawer
     private const double WearUploadInterval = 0.2;    // seconds of real time between uploads
 
     private Model floorModel;
+    private bool floorBuilt = false;
+    private int floorVersion = -1;    // Terrain.Version the floor mesh was built from
     private Model featherModel;    // a unit sphere, squashed flat into a vane or thinned into a quill
     private Model rockModel;     // a low, faceted sphere; each rock is a few of these squashed together
     private readonly BirbAnimator animator = new BirbAnimator();
@@ -45,10 +47,8 @@ public partial class WorldDrawer
         locRippleLife = Raylib.GetShaderLocation(holoShader, "rippleLife");
         FindWeatherUniforms();
 
-        // A square floor big enough for the widest the cube can be, plus the Hologram View's misty margin past its walls;
-        // the shader's fog cuts off the rest.
-        float floorSize = view.HalfSize * ViewWindow.MaxCubeScale * 2f * (1f + ViewWindow.ObserverMargin);
-        floorModel = Raylib.LoadModelFromMesh(Raylib.GenMeshPlane(floorSize, floorSize, 1, 1));
+        // The floor covers the whole world; the shader's fog and the world's edge cut off the rest (see BuildFloor).
+        BuildFloor();
         grainRoundMesh = Raylib.GenMeshSphere(0.5f, 6, 8);
         grainBlockMesh = Raylib.GenMeshCube(1f, 1f, 1f);
         grainMaterial = Raylib.LoadMaterialDefault();
@@ -57,7 +57,6 @@ public partial class WorldDrawer
         rockModel = Raylib.LoadModelFromMesh(Raylib.GenMeshSphere(0.5f, 6, 9));
         shapes.Load(holoShader);
 
-        Raylib.SetMaterialShader(ref floorModel, 0, ref holo);
         Raylib.SetMaterialShader(ref featherModel, 0, ref holo);
         Raylib.SetMaterialShader(ref rockModel, 0, ref holo);
     }
@@ -74,14 +73,65 @@ public partial class WorldDrawer
         shapes.Unload();
     }
 
+    // Builds the floor from the ground's heights: one flat square on level ground, otherwise a grid of triangles with a normal at
+    // every corner so the slopes catch the light. It is drawn in world units and shrunk and moved into the cube by DrawFloor,
+    // so one mesh serves every zoom and pan. Rebuilt only when the ground changes (a new world, a load, or the pool levelling it).
+    private void BuildFloor()
+    {
+        if (floorBuilt) Raylib.UnloadModel(floorModel);
+
+        float half = World.Instance.HalfSize;
+        int cells = Terrain.IsFlat ? 1 : (int)MathF.Round(half * 2f / Terrain.Spacing);
+        float step = half * 2f / cells;
+
+        Mesh mesh = new Mesh { VertexCount = cells * cells * 6, TriangleCount = cells * cells * 2 };
+        mesh.AllocVertices();
+        mesh.AllocNormals();
+        mesh.AllocTexCoords();    // unused by the floor shader, but every vertex gets the full set
+        Span<Vector3> vertices = mesh.VerticesAs<Vector3>();
+        Span<Vector3> normals = mesh.NormalsAs<Vector3>();
+        Span<Vector2> texCoords = mesh.TexCoordsAs<Vector2>();
+        texCoords.Clear();
+
+        // The six corners of one square (two triangles) as (step in X, step in Z), counter-clockwise seen from above
+        ReadOnlySpan<int> cornerX = stackalloc int[] { 0, 0, 1, 1, 0, 1 };
+        ReadOnlySpan<int> cornerZ = stackalloc int[] { 0, 1, 0, 0, 1, 1 };
+
+        int v = 0;
+        for (int ix = 0; ix < cells; ix++)
+        {
+            for (int iz = 0; iz < cells; iz++)
+            {
+                for (int k = 0; k < 6; k++)
+                {
+                    float x = -half + (ix + cornerX[k]) * step;
+                    float z = -half + (iz + cornerZ[k]) * step;
+                    vertices[v] = new Vector3(x, Terrain.HeightAt(x, z), z);
+                    normals[v] = Terrain.NormalAt(x, z);
+                    v++;
+                }
+            }
+        }
+
+        Raylib.UploadMesh(ref mesh, false);
+        floorModel = Raylib.LoadModelFromMesh(mesh);
+        Raylib.SetMaterialShader(ref floorModel, 0, ref holoShader);
+        if (wearTexture.Id != 0) Raylib.SetMaterialTexture(ref floorModel, 0, MaterialMapIndex.Metalness, ref wearTexture);
+        floorBuilt = true;
+        floorVersion = Terrain.Version;
+    }
+
     public void DrawFloor(ViewWindow view)
     {
+        if (floorVersion != Terrain.Version) BuildFloor();
         RefreshWearTexture(GameEngine.Instance.Wear);
         SetPoolUniforms();
         SetWeatherUniforms();
         Raylib.SetShaderValue(holoShader, locWorldHalfSize, World.Instance.HalfSize, ShaderUniformDataType.Float);
         Raylib.SetShaderValue(holoShader, locIsFloor, 1, ShaderUniformDataType.Int);
-        Raylib.DrawModelEx(floorModel, Vector3.Zero, Vector3.UnitY, view.YawDegrees, Vector3.One, Color.White);
+        // The mesh is in world units: shrunk by the zoom, then moved and turned the same way everything else is (ToLocal, BoxToScene).
+        Vector3 floorAt = view.BoxToScene(view.ToLocal(Vector3.Zero));
+        Raylib.DrawModelEx(floorModel, floorAt, Vector3.UnitY, view.YawDegrees, new Vector3(view.Zoom), Color.White);
         DrawStats.CountModel();
         Raylib.SetShaderValue(holoShader, locIsFloor, 0, ShaderUniformDataType.Int);
     }
@@ -275,7 +325,7 @@ public partial class WorldDrawer
 
             if (bird == selected)
             {
-                float feet = bird.Mover.IsPerched ? (bird.Position.Y - bird.GroundY) * view.Zoom : 0f;    // on top of the rock
+                float feet = (bird.Mover.IsPerched ? bird.Position.Y - bird.GroundY : Terrain.HeightAt(bird.Position)) * view.Zoom;    // on the ground, or on top of the rock
                 Vector3 ringPos = new Vector3(scenePos.X, 0.02f + feet, scenePos.Z);
                 Raylib.DrawCircle3D(ringPos, bird.FootprintRadius * 1.1f * view.Zoom, Vector3.UnitX, 90f, ringColor);
             }

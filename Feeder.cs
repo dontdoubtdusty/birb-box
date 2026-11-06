@@ -84,7 +84,7 @@ public class Feeder : Entity
     private Vector3 RodEnd(int slot, float distance)
     {
         float side = slot == 0 ? 1f : -1f;
-        return new Vector3(Position.X + side * distance, Info.PerchHeight, Position.Z);
+        return new Vector3(Position.X + side * distance, Position.Y + Info.PerchHeight, Position.Z);
     }
 
     // Takes as much of the falling seed as fits. Returns what didn't fit, to spill onto the dirt.
@@ -124,7 +124,7 @@ public class Feeder : Entity
         away = away.LengthSquared() > 0.0001f ? Vector2.Normalize(away) : new Vector2(0f, 1f);
         return new Vector3(
             Position.X + away.X * Info.PerchRadius,
-            Info.PerchHeight + birdGroundY,
+            Position.Y + Info.PerchHeight + birdGroundY,
             Position.Z + away.Y * Info.PerchRadius);
     }
 
@@ -144,7 +144,7 @@ public class Feeder : Entity
 
     public void PlaceAt(Vector3 groundPoint)
     {
-        Position = new Vector3(groundPoint.X, 0f, groundPoint.Z);
+        Position = Terrain.OnGround(groundPoint);
         InWorld = true;
         World.Instance.AddEntity(this);
         if (Seed == null) return;

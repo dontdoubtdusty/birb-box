@@ -7,7 +7,7 @@ public class Feather : Entity
 {
     public const float Radius = 0.24f;             // how big it is for clicks and for being pushed off rocks and water
     public const float Length = 0.5f, Width = 0.17f, Thickness = 0.02f;    // the drawn vane (WorldDrawer.DrawFeathers)
-    private const float RestHeight = 0.04f;        // how high a feather lying on the dirt sits
+    public const float RestHeight = 0.04f;        // how high a feather lying on the dirt sits
     private const float OffscreenDrainRate = 2f;   // life drains this many times faster when hidden
     private const float FadeTime = 6f;             // last seconds spent fading out
     private const float PopSpeed = 1.6f;           // how fast it leaps out of the bird, upward
@@ -68,10 +68,11 @@ public class Feather : Entity
         Tilt = swing * SwayTilt;
         Heading += swing * TurnRate * dt;
 
-        if (Position.Y > RestHeight || velocity.Y > 0f) return;
+        if (Position.Y > Terrain.HeightAt(Position) + RestHeight || velocity.Y > 0f) return;
 
         // A feather over the water or a rock ends up on the shore or beside it
-        Position = Pool.PushOut(Rock.PushOut(new Vector3(Position.X, RestHeight, Position.Z), Radius), Radius);
+        Vector3 rested = Pool.PushOut(Rock.PushOut(new Vector3(Position.X, 0f, Position.Z), Radius), Radius);
+        Position = Terrain.OnGround(rested, RestHeight);
         velocity = Vector3.Zero;
         Tilt = 0f;
         IsLanded = true;

@@ -37,6 +37,7 @@ public class HoloCamera
 
     // HOLOGRAM VIEW
     public bool InHologramView { get; private set; }
+    public float EyeRise;       // how high the ground is under the garden's middle, in box units; the observer's eye stands that much higher (set by GameEngine)
     public float HoloPitch = 0.22f;
 
     public Camera3D Camera;
@@ -224,7 +225,7 @@ public class HoloCamera
     // Worked out in box units, then grown and lifted into the room, so the hologram camera lands exactly there.
     private void InsidePose(out Vector3 position, out Vector3 target)
     {
-        PoseFor(new Vector3(0f, InsideAimY, 0f), HoloPitch, InsideDistance, out Vector3 boxPosition, out Vector3 boxTarget);
+        PoseFor(new Vector3(0f, InsideAimY + EyeRise, 0f), HoloPitch, InsideDistance, out Vector3 boxPosition, out Vector3 boxTarget);
         Vector3 floor = new Vector3(0f, HoloLift + GrowLift, 0f);
         position = boxPosition * GrowScale + floor;
         target = boxTarget * GrowScale + floor;

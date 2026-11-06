@@ -144,7 +144,7 @@ public class Storyteller
         {
             float reach = view.WorldHalfWidth * FocusSpread;
             Vector3 spot = new Vector3(view.Center.X + Rng.Range(-reach, reach), 0f, view.Center.Y + Rng.Range(-reach, reach));
-            ctx.Focus = World.Instance.PullInside(spot, 4f);
+            ctx.Focus = Terrain.OnGround(World.Instance.PullInside(spot, 4f));
         }
         else
         {

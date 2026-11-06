@@ -8,7 +8,7 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Cube 5.22 Alpha";
+    public const string Version = "Birb Cube 5.23 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
@@ -441,6 +441,8 @@ public class GameEngine
         float wheel = Raylib.GetMouseWheelMove();
         bool wheelZoomsWorld = input.BirdsShowing
             && (Camera.InHologramView ? !input.MouseBlocked : input.MouseOverBox);
+        float eyeTarget = Terrain.HeightAt(View.Center.X, View.Center.Y) * View.Zoom;    // the observer stands on the ground, eased so panning over a slope glides
+        Camera.EyeRise += (eyeTarget - Camera.EyeRise) * MathF.Min(1f, dt * 5f);
         Camera.Update(input.MouseBlocked, wheelZoomsWorld);
         View.Immersion = Camera.Immersion;    // stepping into the garden opens up the misty margin past the walls
         if (wheelZoomsWorld) View.ZoomBy(wheel);

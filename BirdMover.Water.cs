@@ -105,7 +105,7 @@ public partial class BirdMover
             }
             land = Rock.PushOut(land, RockRoom);
             flightFrom = bird.Position;
-            flightLanding = new Vector3(land.X, bird.GroundY, land.Z);
+            flightLanding = new Vector3(land.X, bird.StandY(land.X, land.Z), land.Z);
             waterFlight = true;
         }
         return true;

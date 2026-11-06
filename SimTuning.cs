@@ -38,6 +38,9 @@ public class SimTuning
     public float WearSpeed = 1f;                   // times as fast as the wear rates in GroundWear.cs
     public float RegrowSpeed = 1f;                 // times as fast as the regrowth in GroundWear.cs
 
+    // THE GROUND (see Terrain.cs)
+    public float TerrainHeight = 1f;               // the highest the ground rises in the next New world (0 = flat); a world keeps the height it was rolled with
+
     // DAY AND NIGHT (see WorldClock.cs)
     public float DayMinutes = 15f;                 // one full day and night, in sim minutes (a RimWorld day, rounded down)
     public float NightBrightness = 1f;             // times the night light: lower is darker (the day isn't touched)
@@ -88,6 +91,7 @@ public class SimTuning
         DropsPerMinute = MathF.Max(0f, DropsPerMinute);
         MaxFood = Math.Clamp(MaxFood, 1, 2000);
         SpoilSpeed = MathF.Max(0.01f, SpoilSpeed);
+        TerrainHeight = Math.Clamp(TerrainHeight, 0f, 3f);
         WearSpeed = MathF.Max(0f, WearSpeed);
         RegrowSpeed = MathF.Max(0f, RegrowSpeed);
         DayMinutes = MathF.Max(1f, DayMinutes);

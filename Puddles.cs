@@ -26,6 +26,7 @@ public class Puddles
     private const float MinWear = 0.6f;           // the dirt must be at least this bare in the middle...
     private const float RimWear = 0.35f;          // ...and this bare around its rim
     private const float Gap = 1.2f;               // room kept between two puddles' edges
+    private const float HollowDepth = 0.12f;      // on rolling ground a puddle needs a dip: the ground all round it is higher, but by no more than this
     private const float TryInterval = 2f;         // sim seconds between looks for a new spot
     private const int TriesPerLook = 12;
     private const float FillRate = 0.08f;         // per sim second toward how full the ground's wetness says
@@ -63,15 +64,18 @@ public class Puddles
         }
     }
 
-    // A worn-bare spot with room around it: no rock, water, feeder, sprout, seed heap or other puddle in the way.
+    // A spot with room around it: no rock, water, feeder, sprout, seed heap or other puddle in the way. On rolling ground it must be a
+    // hollow (lower than the ground all round it); on flat ground it must be worn-bare dirt, as before.
     private bool CanForm(Vector3 spot, float size, World world, GroundWear wear)
     {
-        if (wear.At(spot) < MinWear) return false;
+        if (Terrain.IsFlat && wear.At(spot) < MinWear) return false;
+        float here = Terrain.HeightAt(spot);
         for (int k = 0; k < 4; k++)
         {
             float angle = k * MathF.PI / 2f;
             Vector3 rim = spot + new Vector3(MathF.Cos(angle), 0f, MathF.Sin(angle)) * size * 0.7f;
-            if (wear.At(rim) < RimWear) return false;
+            if (Terrain.IsFlat) { if (wear.At(rim) < RimWear) return false; }
+            else if (Terrain.HeightAt(rim) < here - 0.005f || Terrain.HeightAt(rim) > here + HollowDepth) return false;
         }
 
         if (Rock.At(spot, size + 0.2f) != null) return false;

@@ -158,7 +158,7 @@ public class HawkShadow : StoryEvent
     private void React()
     {
         if (Strength <= 0f) return;
-        Vector3 shadow = new Vector3(Position.X, 0f, Position.Y);
+        Vector3 shadow = new Vector3(Position.X, Terrain.HeightAt(Position.X, Position.Y), Position.Y);
         List<Bird> birds = World.Instance.GetAllEntities<Bird>().Where(CanReact).ToList();
 
         if (alarmName == null)

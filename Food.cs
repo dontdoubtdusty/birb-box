@@ -46,11 +46,14 @@ public class Food : Entity
     private Rock? rollingOff;                   // the rock it landed on and is rolling down, or null
     private float rollSpeed = 0f;
     private const float RollStartSpeed = 0.6f, RollSpeedUp = 5f, RestPastEdge = 0.15f;
+    private const float SlideMinSlope = 0.07f, SlideFullSlope = 0.25f, SlideMaxDistance = 1.6f, SlideStartSpeed = 0.4f, SlideSpeedUp = 3f;
+    private bool sliding = false;               // rolling downhill after landing on a slope
+    private float slideSpeed = 0f, slideLeft = 0f;
     private bool removed = false;
     private bool needsLanding = false;          // placed straight on the dirt: lands (and maybe joins a pile) on its first update
 
     public bool IsLanded { get; private set; }
-    public bool IsRolling => rollingOff != null;
+    public bool IsRolling => rollingOff != null || sliding;
     public float FallSpeed => fallSpeed;
     public float Total { get; private set; }
     public bool IsFullyEaten => Total <= 0.01f;
@@ -66,9 +69,10 @@ public class Food : Entity
     // age: how long ago it landed (SettledAge for seed loaded from a save).
     public Food(Vector3 position, Dictionary<SeedType, float> contents, Feeder? feeder = null, float impactSpeed = 0f, float age = 0f)
     {
-        Position = position;
+        float ground = Terrain.HeightAt(position);
+        Position = feeder == null && position.Y <= ground ? new Vector3(position.X, ground, position.Z) : position;    // dirt seed rests on the ground
         Feeder = feeder;
-        IsLanded = feeder != null || position.Y <= 0f;
+        IsLanded = feeder != null || position.Y <= ground;
         needsLanding = feeder == null && IsLanded;
         foreach ((SeedType seed, float amount) in contents) AddLayer(new SeedLayer(seed, amount, age) { ImpactSpeed = impactSpeed });
         RecountContents();
@@ -85,7 +89,11 @@ public class Food : Entity
             if (removed) return;
         }
 
-        if (rollingOff != null)
+        if (sliding)
+        {
+            Slide(dt);
+        }
+        else if (rollingOff != null)
         {
             RollOff(dt);
         }
@@ -93,7 +101,7 @@ public class Food : Entity
         {
             // A feeder that was picked up while the seed fell can't catch it anymore.
             bool caught = LandOn != null && LandOn.InWorld;
-            float floor = caught ? LandOn!.Info.CatchHeight : 0f;
+            float floor = caught ? LandOn!.Position.Y + LandOn.Info.CatchHeight : Terrain.HeightAt(Position);
 
             fallSpeed += World.Gravity * dt;
             float y = MathF.Max(floor, Position.Y - fallSpeed * dt);
@@ -114,7 +122,7 @@ public class Food : Entity
             {
                 IsLanded = true;
                 if (caught) DropInto(LandOn!);
-                else Land(fallSpeed);
+                else if (!TryStartSlide()) Land(fallSpeed);
                 if (removed) return;
             }
         }
@@ -239,7 +247,7 @@ public class Food : Entity
         if (dist >= rock.Radius + RestPastEdge)
         {
             flat = rock.Flat + dir * (rock.Radius + RestPastEdge);
-            Position = Rock.PushOut(new Vector3(flat.X, 0f, flat.Y));    // clear of a rock right beside it too
+            Position = Terrain.OnGround(Rock.PushOut(new Vector3(flat.X, 0f, flat.Y)));    // clear of a rock right beside it too
             rollingOff = null;
             IsLanded = true;
             Land(0f);
@@ -247,6 +255,39 @@ public class Food : Entity
         }
         Vector3 onTop = new Vector3(flat.X, 0f, flat.Y);
         Position = new Vector3(flat.X, rock.HeightAt(onTop), flat.Y);
+    }
+
+    // Seed that lands on a slope rolls a little way downhill before it settles (only the steeper slopes; level ground keeps it where it fell).
+    private bool TryStartSlide()
+    {
+        if (Feeder != null || Plant != null) return false;
+        Vector2 down = Terrain.DownhillAt(Position.X, Position.Z);
+        float slope = Terrain.SlopeAt(Position.X, Position.Z);
+        if (down == Vector2.Zero || slope < SlideMinSlope) return false;
+
+        sliding = true;
+        IsLanded = false;
+        slideSpeed = SlideStartSpeed;
+        slideLeft = Math.Clamp(slope / SlideFullSlope, 0.2f, 1f) * SlideMaxDistance;
+        fallSpeed = 0f;
+        return true;
+    }
+
+    // Rolls downhill, getting quicker, until it has gone its distance or the ground levels out, then settles like any landing.
+    private void Slide(float dt)
+    {
+        Vector2 down = Terrain.DownhillAt(Position.X, Position.Z);
+        float step = slideSpeed * dt;
+        slideSpeed += SlideSpeedUp * dt;
+        slideLeft -= step;
+
+        if (down != Vector2.Zero) Position = Terrain.OnGround(World.Instance.PullInside(new Vector3(Position.X + down.X * step, 0f, Position.Z + down.Y * step), 0.3f));
+        if (slideLeft > 0f && down != Vector2.Zero && Terrain.SlopeAt(Position.X, Position.Z) >= SlideMinSlope * 0.5f) return;
+
+        sliding = false;
+        IsLanded = true;
+        Position = Terrain.OnGround(Rock.PushOut(Position));
+        Land(0f);
     }
 
     // Hands this seed to the feeder. Whatever doesn't fit carries on falling to the dirt beside it.
@@ -277,7 +318,7 @@ public class Food : Entity
     // A save from before layers has one layer per seed, all as old as the pile was.
     public static Food FromSave(FoodSave save)
     {
-        Feeder? below = save.Position.Y > 0f ? FoodSpawner.FeederBelow(save.Position) : null;
+        Feeder? below = save.Position.Y > Terrain.HeightAt(save.Position) + 0.01f ? FoodSpawner.FeederBelow(save.Position) : null;
         Food food = new Food(save.Position, new()) { LandOn = below };
         food.fallSpeed = save.FallSpeed;
         food.needsLanding = false;    // it already landed (or joined a pile) before it was saved

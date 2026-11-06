@@ -92,7 +92,7 @@ public partial class WorldDrawer
             // Landed: a tiny splash spreading flat on the ground (on the water the rain rings show it instead)
             Vector3 world = view.ToWorld(new Vector3(x, 0f, z));
             if (Pool.IsWater(world)) continue;
-            Vector3 ground = new Vector3(x, 0.01f, z);
+            Vector3 ground = new Vector3(x, Terrain.HeightAt(world) * view.Zoom + 0.01f, z);
             float shrink = NearShrink(Vector3.Distance(ground, eye));
             if (shrink <= 0f) continue;
             float grow = (since - fallTime) / SplatTime;

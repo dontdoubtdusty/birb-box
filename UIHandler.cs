@@ -133,6 +133,7 @@ public class UIHandler
 
         if (ImGui.CollapsingHeader("World"))
         {
+            Slider("Ground height (next New world)", ref t.TerrainHeight, d.TerrainHeight, 0f, 3f, "%.2f");
             Slider("Seed spoils", ref t.SpoilSpeed, d.SpoilSpeed, 0.1f, 10f, "%.2fx");
             Slider("Grass wears", ref t.WearSpeed, d.WearSpeed, 0f, 5f, "%.2fx");
             Slider("Grass regrows", ref t.RegrowSpeed, d.RegrowSpeed, 0f, 10f, "%.2fx");
@@ -403,7 +404,7 @@ public class UIHandler
         Vector3 here = bird.Position;
         string sleep = bird.Roosting ? "  roosting" : bird.Napping ? "  napping" : "";
         ImGui.Text($"{bird.Name}: {bird.State}, pose {bird.Pose}{sleep}");
-        ImGui.Text($"At {here.X:0.0}, {here.Z:0.0}   {(bird.IsFlying ? $"flying, {here.Y - bird.GroundY:0.0} up" : "on the ground")}");
+        ImGui.Text($"At {here.X:0.0}, {here.Z:0.0}   {(bird.IsFlying ? $"flying, {here.Y - bird.StandY(here.X, here.Z):0.0} up" : "on the ground")}");
 
         if (bird.TargetFood is Food food)
         {

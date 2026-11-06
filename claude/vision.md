@@ -49,7 +49,7 @@ The world inside should feel like a zen garden crossed with a real (slightly exa
 
 ## World Beautification
 Decided Nov 5: the garden stops being a flat floor. The ground comes first, then the pool and the stream are carved into it, so nothing is built twice.
-- [Planned] Gentle uneven ground: low swells and dips across the world, the highest a few bird-heights tall, never hills. Low enough that the fog still hides where the ground meets the cube's walls and no bird hides behind a rise. Made fresh for each new world and saved. The cabin, the store and the Designer stay flat.
+- [Built 5.23, untested] Gentle uneven ground: low swells and dips across the world, the highest a few bird-heights tall, never hills. Low enough that the fog still hides where the ground meets the cube's walls and no bird hides behind a rise. Made fresh for each new world and saved. The cabin, the store and the Designer stay flat.
 - [Planned] Slopes are lit by the time of day like everything else, so dawn and dusk light catches the swells.
 - [Planned] Everything on the ground sits on it: birds walk, land and hop at the ground's height; seed, feathers, rocks, feeders and sprouts rest on the slope; rain splashes, the Hawk's Shadow and labels follow it; the Hologram View's eye stands on the ground.
 - [Planned] Seed rolls a little way downhill before it settles. Rain puddles gather in the hollows instead of on worn dirt.

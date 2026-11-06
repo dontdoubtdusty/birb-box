@@ -86,7 +86,7 @@ public class Pool : Entity
             Droplet d = droplets[i];
             d.Velocity.Y -= World.Gravity * dt;
             d.Position += d.Velocity * dt;
-            if (d.Position.Y <= 0f) droplets.RemoveAt(i);
+            if (d.Position.Y <= Terrain.HeightAt(d.Position)) droplets.RemoveAt(i);
             else droplets[i] = d;
         }
     }
@@ -202,7 +202,14 @@ public class Pool : Entity
     public PoolSave ToSave() => new() { Lobes = lobes.Select(l => new LobeSave { Center = l.Center, Radius = l.Radius }).ToList() };
 
     public static Pool FromSave(PoolSave save) =>
-        new Pool(save.Lobes.Select(l => new Lobe { Center = l.Center, Radius = l.Radius }));
+        LevelGround(new Pool(save.Lobes.Select(l => new Lobe { Center = l.Center, Radius = l.Radius })));
+
+    // Flattens the ground around a pool that is going into the world.
+    private static Pool LevelGround(Pool pool)
+    {
+        Terrain.FlattenAround(pool);
+        return pool;
+    }
 
     // ---------------- A NEW POOL ----------------
 
@@ -231,7 +238,7 @@ public class Pool : Entity
             Pool pool = new Pool(shape);
             if (!pool.IsClear(world) || keepClear.Any(spot => pool.DistanceAt(spot) < Sprout.Reach + 0.3f)) continue;
 
-            world.AddEntity(pool);
+            world.AddEntity(LevelGround(pool));
             world.FlushChanges();
             return;
         }

@@ -83,7 +83,7 @@ public partial class BirdMover
         if (bird.IsFlying)
         {
             Vector2 back = -HeadingVector(bird.Heading) * 0.5f;
-            landingSpot ??= Pool.PushOut(Rock.PushOut(new Vector3(bird.Position.X + back.X, bird.GroundY, bird.Position.Z + back.Y), RockRoom), PoolRoom);
+            landingSpot ??= GroundedAt(Pool.PushOut(Rock.PushOut(new Vector3(bird.Position.X + back.X, 0f, bird.Position.Z + back.Y), RockRoom), PoolRoom));
             if (FlyToward(landingSpot.Value, dt)) landingSpot = null;
             return;
         }
@@ -242,6 +242,9 @@ public partial class BirdMover
         ParentBird.Position = OnGround(ParentBird.Position);
     }
 
+    // The same spot with its Y set so this bird's feet touch the ground there.
+    private Vector3 GroundedAt(Vector3 spot) => new Vector3(spot.X, ParentBird.StandY(spot.X, spot.Z), spot.Z);
+
     // A spot on the ground kept off the rocks and out of the water, at the height its feet stand.
     // A bather may go into the shallows (up to WadeDepth). Any other bird that's in the water (a bath cut short)
     // can't go any deeper than it is, and PoolForce walks it out; a roosting one steps straight out.
@@ -260,7 +263,7 @@ public partial class BirdMover
 
         float depth = -Pool.Distance(spot);
         float sink = depth > 0f ? Math.Clamp(depth / WadeDepth, 0f, 1f) * SinkShare * bird.GroundY : 0f;
-        return new Vector3(spot.X, bird.GroundY - sink, spot.Z);
+        return new Vector3(spot.X, bird.StandY(spot.X, spot.Z) - sink, spot.Z);
     }
 
     // ---------------- FLOCKING ----------------
@@ -562,7 +565,7 @@ public partial class BirdMover
 
         Vector2 dir = HeadingVector(bird.Heading);
         Vector2 flat = rock.Flat + dir * (rock.Radius + 0.35f);
-        landingSpot = Pool.PushOut(Rock.PushOut(new Vector3(flat.X, bird.GroundY, flat.Y), RockRoom), PoolRoom);
+        landingSpot = GroundedAt(Pool.PushOut(Rock.PushOut(new Vector3(flat.X, 0f, flat.Y), RockRoom), PoolRoom));
         if (!bird.IsFlying) landingSpot = null;    // never got off the ground
     }
 

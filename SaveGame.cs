@@ -12,7 +12,7 @@ public class SaveGame
 {
     public const string FileName = "birbcube-save.json";
     private const float AutosaveInterval = 120f;    // seconds of real time
-    private const int FormatVersion = 1;            // goes up if the file's layout changes in a way old saves can't follow
+    private const int FormatVersion = 2;           // goes up if the file's layout changes in a way old saves can't follow
 
     public static string FilePath => Path.Combine(Assets.ProjectFolder ?? AppContext.BaseDirectory, FileName);
 
@@ -71,6 +71,7 @@ public class SaveGame
                             ?? throw new InvalidDataException("the file is empty");
             Apply(data, engine);
             EventLog.Add("The terrarium flickers back to life, just as you left it.");
+            if (data.Terrain == null) EventLog.Add("This garden is still flat. Pick New world in the Esc menu to get rolling ground (its birds and feathers stay behind with it).");
         }
         catch (Exception e)
         {
@@ -85,7 +86,7 @@ public class SaveGame
     // Everything back to how a first run starts: an empty SaveData is a brand-new world, then wild seed is scattered.
     public void StartNewWorld(GameEngine engine)
     {
-        Apply(new SaveData(), engine);
+        Apply(new SaveData { Terrain = Terrain.Roll(engine.World.HalfSize) }, engine);    // a new world rolls fresh ground
         engine.SeedStartingWorld();
     }
 
@@ -125,6 +126,7 @@ public class SaveGame
             GroundWear = engine.Wear.ToSave(),
             Rocks = new(),
             Pool = Pool.Current?.ToSave(),
+            Terrain = Terrain.ToSave(),
         };
 
         // Seed sitting in a feeder is saved with its feeder, and seed on a sprout's heads with its sprout.
@@ -151,6 +153,7 @@ public class SaveGame
     {
         World world = engine.World;
         world.Clear();
+        Terrain.FromSave(data.Terrain, world.HalfSize);    // first: everything below stands on it (no terrain saved = flat ground)
         engine.SelectedBird = null;
         engine.SelectedFeeder = null;
         engine.HoveredBird = null;
@@ -183,6 +186,10 @@ public class SaveGame
         engine.BirdSpawner.RestoreRegulars(KeepKnownSpecies(data.Regulars, away: true));    // after the log, which it may add to
         engine.Wear.Restore(data.GroundWear, world.HalfSize);
 
+        // The pool of a saved world goes in before anything stands on the ground: it levels the ground around itself (Terrain.FlattenAround).
+        if (data.Pool != null) world.AddEntity(Pool.FromSave(data.Pool));
+        world.FlushChanges();
+
         // Feeders go in first, so seed that was still falling can find the feeder below it.
         // A save from a bigger world can have things past the edge: they're pulled back inside (see PullInside).
         foreach (FeederSave feeder in data.Feeders) Feeder.FromSave(feeder).PlaceAt(world.PullInside(feeder.Position));
@@ -192,7 +199,6 @@ public class SaveGame
         // around it (clear of the feeders). A save from before rocks gets fresh rocks; one from before the pool (4.93)
         // gets a pool placed clear of its rocks, feeders and sprouts. The lush grass around them is worked out from where they are.
         if (data.Rocks != null) foreach (RockSave rock in data.Rocks) world.AddEntity(Rock.FromSave(rock));
-        if (data.Pool != null) world.AddEntity(Pool.FromSave(data.Pool));
         world.FlushChanges();
         if (data.Rocks == null && data.Pool == null) Pool.PlaceNew(world);
         if (data.Rocks == null) Rock.PlaceNew(world);
@@ -210,7 +216,7 @@ public class SaveGame
         foreach (FoodSave food in data.Seed)
         {
             food.Position = world.PullInside(food.Position);
-            if (food.Position.Y <= 0f) food.Position = Pool.PushOut(Rock.PushOut(food.Position));
+            if (food.Position.Y <= Terrain.HeightAt(food.Position)) food.Position = Terrain.OnGround(Pool.PushOut(Rock.PushOut(food.Position)));
             world.AddEntity(Food.FromSave(food));
         }
         foreach (FeatherSave feather in data.LooseFeathers)
@@ -218,13 +224,14 @@ public class SaveGame
             Species? species = Birds.Find(feather.Species);
             if (species == null) continue;    // its species' file is gone
             feather.Position = Pool.PushOut(Rock.PushOut(world.PullInside(feather.Position), Feather.Radius), Feather.Radius);
+            if (feather.Landed) feather.Position = Terrain.OnGround(feather.Position, Feather.RestHeight);
             world.AddEntity(Feather.FromSave(feather, species));
         }
         foreach (BirdSave save in KeepKnownSpecies(data.Birds, away: false))
         {
             Bird bird = Bird.FromSave(save);
             BringBirdInside(bird, world);
-            if (!bird.IsFlying) bird.Position = Pool.PushOut(bird.Position);    // a bird that was wading steps out onto the shore
+            if (!bird.IsFlying) bird.Position = Terrain.OnGround(Pool.PushOut(bird.Position), bird.GroundY);    // a bird that was wading steps out onto the shore
             world.AddEntity(bird);
         }
         world.FlushChanges();
@@ -261,7 +268,7 @@ public class SaveGame
 
         // Just outside the edge, on the side the bird was on, heading straight in.
         float edge = world.HalfSize + 2f;
-        Vector3 start = new Vector3(Math.Clamp(bird.Position.X, -edge, edge), bird.GroundY, Math.Clamp(bird.Position.Z, -edge, edge));
+        Vector3 start = new Vector3(Math.Clamp(bird.Position.X, -edge, edge), bird.StandY(Math.Clamp(bird.Position.X, -edge, edge), Math.Clamp(bird.Position.Z, -edge, edge)), Math.Clamp(bird.Position.Z, -edge, edge));
         Vector3 inward = Vector3.Normalize(new Vector3(-start.X, 0f, -start.Z));
         bird.Position = start;
         bird.FlightTarget = start + inward * 8f;
@@ -282,7 +289,8 @@ public class SaveData
 
     // THE PLAYER
     public float SimTime { get; set; }
-    public double? ClockDays { get; set; }                            // the world's calendar (WorldClock.Days); null before 4.92
+    public TerrainSave? Terrain { get; set; }                         // the ground's seed and height; null before 5.23 (flat ground)
+    public double? ClockDays { get; set; }                          // the world's calendar (WorldClock.Days); null before 4.92
     public WeatherSave? Weather { get; set; }                         // the rain, the clouds, the wet ground and its puddles; null before 4.96
     public StorySave? Story { get; set; }                             // the Storyteller's timers (not a running event); null before 5.22
     public Dictionary<string, int> Feathers { get; set; } = new();    // how many of each species' feather, by species key (FeatherPurse)

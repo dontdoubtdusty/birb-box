@@ -43,7 +43,7 @@ public class Sprout : Entity
 
     private Sprout(Vector3 position, SeedType seed, float lifespan, int look)
     {
-        Position = new Vector3(position.X, 0f, position.Z);
+        Position = new Vector3(position.X, Terrain.HeightAt(position), position.Z);
         Seed = seed;
         Lifespan = lifespan;
         Look = look;
@@ -127,7 +127,7 @@ public class Sprout : Entity
         float angle = Rng.Range(0f, MathF.Tau);
         float distance = Rng.Range(0.15f, ShedReach);
         Vector3 spot = Pool.PushOut(Rock.PushOut(Position + new Vector3(MathF.Cos(angle) * distance, 0f, MathF.Sin(angle) * distance)));
-        spot.Y = ShedHeight;
+        spot.Y = Terrain.HeightAt(spot) + ShedHeight;
         World.Instance.AddEntity(new Food(spot, new() { [Seed] = taken }) { LandOn = FoodSpawner.FeederBelow(spot) });
         return true;
     }

@@ -12,24 +12,24 @@
       "text": "Decide relief, order, old saves, water touches (Nov 5)"
     },
     {
-      "completed": false,
+      "completed": true,
       "id": "wb-a",
       "text": "A. Terrain height grid per new world, saved; FormatVersion bump; old save loads flat and offers New world"
     },
     {
-      "completed": false,
+      "completed": true,
       "id": "wb-b",
       "text": "B. Every ground thing reads HeightAt (birds, seed, feathers, rocks, feeders, sprouts, splashes, hawk, labels, clicks, Hologram View eye); seed rolls downhill; puddles in hollows"
     },
     {
-      "completed": false,
+      "completed": true,
       "id": "wb-c",
       "text": "C. Floor becomes a lit mesh; fog still hides the cut at the walls"
     },
     {
       "completed": false,
       "id": "wb-d",
-      "text": "D. Pool sits in a dip (both pool shape copies match)"
+      "text": "D. Pool sits in a dip (both pool shape copies match). Only the levelling is done (5.23: ground flattened around the pool); the real dip is open"
     },
     {
       "completed": false,
@@ -47,10 +47,10 @@
       "text": "Checks: nothing floats or sinks, clicks on slopes, nobody walks the deep middle, draw ms"
     }
   ],
-  "columnId": "next",
+  "columnId": "doing",
   "createdAt": 1793575200002,
   "description": "Gentle uneven ground, then the pool and a stream carved into it. Step B (about 20 files assume flat ground at Y=0) is the bulk. Before Trees. Design: `vision.md`, World Beautification. Steps, questions and checks: `next-session-plan.md`, World Beautification.",
-  "order": 9000,
+  "order": 1000,
   "priority": "Medium",
   "tags": [
     "Garden",
@@ -58,5 +58,5 @@
     "Terrain"
   ],
   "title": "World Beautification: uneven ground, pool dip, stream",
-  "updatedAt": 1794040000000
+  "updatedAt": 1793929939891
 }

@@ -316,7 +316,7 @@ void main()
     {
         vec2 world = boxPos.xz / viewZoom + viewCenter;
         vec3 ground = groundColor(world);
-        normal = vec3(0.0, 1.0, 0.0);
+        // (the floor keeps its mesh normal, so the swells catch the sun; the water below tips it from straight up)
 
         // Rain-soaked ground: darker and a little cooler
         ground *= mix(vec3(1.0), vec3(0.68, 0.70, 0.74), groundWet);

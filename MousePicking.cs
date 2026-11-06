@@ -42,11 +42,11 @@ public class MousePicking
     public Vector3? FloorPoint()
     {
         Ray ray = RayInBox();
-        if (MathF.Abs(ray.Direction.Y) < 0.0001f) return null;
 
-        float t = -ray.Position.Y / ray.Direction.Y;
-        if (t < 0) return null;
-        Vector3 localPoint = ray.Position + ray.Direction * t;
+        // Walk the ray down onto the ground in world units (the ground is no longer flat), then back into box space.
+        Ray worldRay = new Ray(view.ToWorld(ray.Position), ray.Direction);
+        if (!Terrain.RayHit(worldRay, 400f, out Vector3 worldHit)) return null;
+        Vector3 localPoint = view.ToLocal(worldHit);
 
         float limit = MathF.Max(0.85f, view.FogStart);
         if (ViewWindow.EdgeAmount(localPoint.X, localPoint.Z, view.HalfWidth) > limit) return null;

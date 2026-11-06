@@ -158,7 +158,7 @@ public class BirdSpawner
             default: start = new Vector3(edge, 0, along); break;
         }
 
-        bird.Position = new Vector3(start.X, bird.GroundY, start.Z);
+        bird.Position = new Vector3(start.X, bird.StandY(start.X, start.Z), start.Z);
         Vector3 inward = Vector3.Normalize(new Vector3(-start.X, 0, -start.Z));
         bird.FlightTarget = start + inward * 8f;
         bird.ArrivingByAir = false;
@@ -181,7 +181,7 @@ public class BirdSpawner
     public static void FlyDownTo(Bird bird, Vector3 landing, float? fromAngle = null)
     {
         landing = Pool.PushOut(Rock.PushOut(landing, 0.3f), 0.4f);
-        landing.Y = bird.GroundY;
+        landing.Y = bird.StandY(landing.X, landing.Z);
 
         float angle = fromAngle ?? Rng.Range(0f, MathF.PI * 2f);
         Vector3 start = landing + new Vector3(MathF.Sin(angle) * 15f, 0, MathF.Cos(angle) * 15f);

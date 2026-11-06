@@ -23,8 +23,8 @@ public class Rock : Entity
 
     public Rock(Vector3 position, float radius, float height, int look)
     {
-        Position = new Vector3(position.X, 0f, position.Z);
         Radius = radius;
+        Position = new Vector3(position.X, LowestGroundUnder(position, radius), position.Z);    // sits on the lowest ground under it, so no gap shows on the downhill side
         Height = height;
         Look = look;
     }
@@ -33,11 +33,23 @@ public class Rock : Entity
 
     public Vector2 Flat => new Vector2(Position.X, Position.Z);
 
-    // The top of the rock at a world position (a dome), or 0 off the rock.
+    // The top of the rock at a world position (a dome on its base), or the ground's height off the rock.
     public float HeightAt(Vector3 pos)
     {
         float d = Vector2.Distance(new Vector2(pos.X, pos.Z), Flat) / Radius;
-        return d >= 1f ? 0f : Height * MathF.Sqrt(1f - d * d);
+        return d >= 1f ? Terrain.HeightAt(pos) : Position.Y + Height * MathF.Sqrt(1f - d * d);
+    }
+
+    // The lowest ground height at the centre and eight points around the rim.
+    private static float LowestGroundUnder(Vector3 centre, float radius)
+    {
+        float lowest = Terrain.HeightAt(centre);
+        for (int i = 0; i < 8; i++)
+        {
+            float a = i * MathF.PI / 4f;
+            lowest = MathF.Min(lowest, Terrain.HeightAt(centre.X + MathF.Cos(a) * radius, centre.Z + MathF.Sin(a) * radius));
+        }
+        return lowest;
     }
 
     // Saving (see SaveGame.cs)

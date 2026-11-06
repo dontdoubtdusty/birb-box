@@ -62,8 +62,8 @@ public class FoodSpawner
         if (!HasRoom) return;
 
         contents ??= new() { [SeedType.Wild] = WildPileAmount };
-        if (position.Y <= 0f) position = Pool.PushOut(Rock.PushOut(position));    // seed placed straight on the ground lands beside a rock or the pool, not in it
-        Feeder? below = position.Y > 0f ? FeederBelow(position) : null;
+        if (position.Y <= Terrain.HeightAt(position)) position = Terrain.OnGround(Pool.PushOut(Rock.PushOut(position)));    // seed placed straight on the ground lands beside a rock or the pool, not in it
+        Feeder? below = position.Y > Terrain.HeightAt(position) ? FeederBelow(position) : null;
         World.Instance.AddEntity(new Food(position, contents) { LandOn = below });
     }
 
@@ -72,7 +72,7 @@ public class FoodSpawner
         foreach (Feeder feeder in World.Instance.GetAllEntities<Feeder>())
         {
             float distance = Vector2.Distance(new Vector2(position.X, position.Z), new Vector2(feeder.Position.X, feeder.Position.Z));
-            if (distance <= feeder.Info.CatchRadius && position.Y > feeder.Info.CatchHeight) return feeder;
+            if (distance <= feeder.Info.CatchRadius && position.Y > feeder.Position.Y + feeder.Info.CatchHeight) return feeder;
         }
         return null;
     }

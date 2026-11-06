@@ -1,0 +1,27 @@
+{
+  "archived": false,
+  "checklist": [
+    { "completed": true,  "id": "v523-0", "text": "It builds (dotnet build: no errors, no warnings)" },
+    { "completed": false, "id": "v523-1", "text": "Smoke test (qa-plan.md section 3); the hologram still looks normal (hologram.fs and the new floor mesh are untested: if the floor is missing, black or inside out, check WorldDrawer.BuildFloor / DrawFloor)" },
+    { "completed": false, "id": "v523-2", "text": "Esc menu, New world: gentle swells across the garden, flat at the walls and level around the pool; slopes are lit differently from the flats (try dawn and dusk with the time keys)" },
+    { "completed": false, "id": "v523-3", "text": "Nothing floats or sinks: birds walking, landing and bathing, seed, feathers, rocks, feeders, sprouts, rain splashes (zoom in on a slope)" },
+    { "completed": false, "id": "v523-4", "text": "Clicks and pouring land under the cursor on slopes; placing a feeder on a slope works" },
+    { "completed": false, "id": "v523-5", "text": "Seed poured on a slope rolls a little way downhill, then settles; seed on a rock still rolls off" },
+    { "completed": false, "id": "v523-6", "text": "Hologram View: the eye stands on the ground in the middle and eases over slopes when panning" },
+    { "completed": false, "id": "v523-7", "text": "Rain: puddles gather in hollows" },
+    { "completed": false, "id": "v523-8", "text": "Save and reload keeps the same ground; an old save loads flat and logs the New world hint once" },
+    { "completed": false, "id": "v523-9", "text": "Tab, World, Ground height (next New world): 0 gives flat ground, 3 gives hills; draw ms about the same as before" },
+    { "completed": false, "id": "v523-10", "text": "Commit" }
+  ],
+  "columnId": "test",
+  "createdAt": 1794100000000,
+  "description": "World Beautification steps A, B and C (session 48). `Terrain.cs`: a height grid rolled per new world from a seed (saved as seed and height, FormatVersion 2), levelled around the pool. Everything on the ground reads Terrain.HeightAt (birds via Bird.StandY, seed, feathers, rocks, feeders, sprouts, splashes, hawk, mouse floor clicks, the Hologram View eye). Seed slides downhill; puddles form in hollows. The floor is now a lit grid mesh in world units (WorldDrawer.BuildFloor), rebuilt when Terrain.Version changes. Not run: only compiled. The pool dip (step D proper), stream and reeds are still to come.",
+  "order": 28000,
+  "priority": "High",
+  "tags": [
+    "Terrain",
+    "5.23"
+  ],
+  "title": "5.23 Uneven ground (World Beautification A-C)",
+  "updatedAt": 1794100000000
+}
