@@ -2,10 +2,12 @@ using System.Numerics;
 using Raylib_cs;
 
 // The shape of the ground: a grid of heights over the whole world, rolled from a seed for each new world.
-// Heights run from 0 (the old flat floor, so hollows are never below it) up to Amplitude, and fade back to 0 near the
-// world's edge so the ground meets the cube's walls level. All zeros is the flat case: an old save, or Amplitude 0.
-// Only the seed and the amplitude are saved; the grid is rebuilt from them, the same every time.
-// Everything that sits on the ground asks HeightAt for the Y of the dirt at its X and Z.
+// Heights run from 0 (the old flat floor) up to Amplitude, and fade back to 0 near the world's edge so the ground meets
+// the cube's walls level. The only ground below 0 is the pool's bed (see FlattenAround). All zeros is the flat case:
+// an old save, or Amplitude 0, which has no pool dip either.
+// Only the seed and the amplitude are saved; the grid is rebuilt from them (and the pool's shape), the same every time.
+// Everything that sits on the ground asks HeightAt for the Y of the dirt at its X and Z. The water's flat surface is
+// SurfaceAt: the same as HeightAt on land, WaterLevel over the pool. Birds wade on the bed; what is drawn and clicked is the surface.
 public static class Terrain
 {
     public const float Spacing = 0.5f;           // world units between grid points
@@ -13,6 +15,11 @@ public static class Terrain
     private const float BigSwell = 14f;          // size of the broad swells (world units per noise cell)
     private const float SmallSwell = 6f;         // size of the finer ones, at a third of the strength
     private const float BankWidth = 2.5f;        // the ground rises from the pool's shore to its full height over this distance
+    private const float PoolDepth = 0.4f;        // how far below the shore the pool's bed sinks, at its deepest
+    private const float DipWidth = 1.4f;         // the bed reaches that depth this far in from the shore
+    private const float StreamSlack = 0.25f;     // grid points this close to a stream's edge (or nearer) are dropped to its bed
+    private const float StreamBed = -0.15f;      // the stream's bed: just under the water's surface
+    public const float WaterLevel = -0.12f;     // the pool's flat surface, a little below the shore so the bank reads as a lip
 
     public static int Seed { get; private set; }
     public static float Amplitude { get; private set; }
@@ -72,7 +79,8 @@ public static class Terrain
         }
     }
 
-    // Levels the ground under and around the pool: the shore and the water sit at 0, and the banks rise gently from it.
+    // Shapes the ground around the pool: the shore sits at 0, the banks rise gently from it, and inside the shore the bed
+    // sinks smoothly to PoolDepth below it (shallow at the edge, deeper in the middle).
     // Called whenever a pool is made or loaded (not saved: it is worked out again from the pool's shape).
     public static void FlattenAround(Pool pool)
     {
@@ -81,13 +89,28 @@ public static class Terrain
         {
             for (int iz = 0; iz < size; iz++)
             {
-                float d = pool.DistanceAt(new Vector2(ix * Spacing - half, iz * Spacing - half));
+                Vector2 spot = new(ix * Spacing - half, iz * Spacing - half);
+                float d = pool.DistanceAt(spot, Pool.MaxSwell);    // the widest the water ever gets, so a swollen stream still has its bed
                 if (d >= BankWidth) continue;
+
+                if (d < 0f)
+                {
+                    grid[ix, iz] = -PoolDepth * MathEx.Smooth(Math.Clamp(-d / DipWidth, 0f, 1f));    // pool and creek alike
+                    continue;
+                }
                 grid[ix, iz] *= MathEx.Smooth(Math.Clamp(d / BankWidth, 0f, 1f));
+                // The stream is narrower than a grid cell: every point within half a cell of it is lowered to its bed,
+                // or the channel would be missed between grid points.
+                if (d < StreamSlack) grid[ix, iz] = MathF.Min(grid[ix, iz], StreamBed);
             }
         }
         Version++;
     }
+
+    // The top of what you see at a spot: the ground on land, the flat water over the pool.
+    public static float SurfaceAt(float x, float z) => MathF.Max(HeightAt(x, z), WaterLevel);
+
+    public static float SurfaceAt(Vector3 p) => SurfaceAt(p.X, p.Z);
 
     // The ground's height at a spot (smoothly blended between grid points). Outside the world it is 0.
     public static float HeightAt(float x, float z)
@@ -109,13 +132,13 @@ public static class Terrain
     // The same position with its Y set to the ground there plus lift (a bird's feet offset, a seed's radius, and so on).
     public static Vector3 OnGround(Vector3 p, float lift = 0f) => new(p.X, HeightAt(p.X, p.Z) + lift, p.Z);
 
-    // The direction straight up from the slope (unit length), from the heights a little to each side.
+    // The direction straight up from the visible surface (unit length), from the heights a little to each side.
     public static Vector3 NormalAt(float x, float z)
     {
         if (Amplitude <= 0f) return Vector3.UnitY;
         const float d = Spacing;
-        float dx = HeightAt(x + d, z) - HeightAt(x - d, z);
-        float dz = HeightAt(x, z + d) - HeightAt(x, z - d);
+        float dx = SurfaceAt(x + d, z) - SurfaceAt(x - d, z);
+        float dz = SurfaceAt(x, z + d) - SurfaceAt(x, z - d);
         return Vector3.Normalize(new Vector3(-dx, 2f * d, -dz));
     }
 
@@ -138,14 +161,15 @@ public static class Terrain
         return down.LengthSquared() < 1e-6f ? Vector2.Zero : Vector2.Normalize(down);
     }
 
-    // The ground point under a ray, found by stepping along it: used for mouse clicks on slopes. False if it never reaches the ground.
+    // The surface point under a ray (the ground, or the water's top), found by stepping along it: used for mouse clicks on slopes.
+    // False if it never reaches the surface.
     public static bool RayHit(Ray ray, float maxDistance, out Vector3 hit)
     {
         hit = default;
         if (ray.Direction.Y >= -1e-5f && ray.Position.Y > Amplitude) return false;    // looking level or up from above the highest ground
 
         float prevT = 0f;
-        float prevAbove = ray.Position.Y - HeightAt(ray.Position.X, ray.Position.Z);
+        float prevAbove = ray.Position.Y - SurfaceAt(ray.Position.X, ray.Position.Z);
         if (prevAbove <= 0f) return false;
 
         // Big steps while high above the ground, small ones near it (the ground can't rise faster than a slope of about 1).
@@ -154,7 +178,7 @@ public static class Terrain
         {
             t += Math.Clamp(prevAbove * 0.5f, 0.1f, 2f);
             Vector3 p = ray.Position + ray.Direction * t;
-            float above = p.Y - HeightAt(p.X, p.Z);
+            float above = p.Y - SurfaceAt(p.X, p.Z);
             if (above <= 0f)
             {
                 // The ray crossed the ground between the last two steps: narrow it down by halving.
@@ -163,10 +187,10 @@ public static class Terrain
                 {
                     float mid = (lo + hi) * 0.5f;
                     Vector3 m = ray.Position + ray.Direction * mid;
-                    if (m.Y - HeightAt(m.X, m.Z) > 0f) lo = mid; else hi = mid;
+                    if (m.Y - SurfaceAt(m.X, m.Z) > 0f) lo = mid; else hi = mid;
                 }
                 Vector3 h = ray.Position + ray.Direction * hi;
-                hit = new Vector3(h.X, HeightAt(h.X, h.Z), h.Z);
+                hit = new Vector3(h.X, SurfaceAt(h.X, h.Z), h.Z);
                 return true;
             }
             prevT = t;

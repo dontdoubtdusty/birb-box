@@ -123,7 +123,7 @@ The player should be able to get attached to birds. Most birds you see should co
 
 ## World and simulation
 - [Built] The world is larger than the hologram volume, which is a window onto one patch of it: 56x56, only a little bigger than the widest view (about 40x40), so you can zoom all the way out and still move a bit.
-- [Built] World edge: fog only. Panning stops when the view reaches the edge, so you never see past it. In the Hologram View the misty margin fades out at the world's edge too.
+- [Built] World edge: fog only. Panning stops when the view reaches the edge, so you never see past it. In the Hologram View a flat apron of ground carries on past the edge, fading into the mist and sky, so the world reads as a patch of something bigger.
 - [Built] Birds keep simulating outside the window. They wander into the fog and new ones arrive from it; nothing spawns or despawns in view.
 - [Built] Birds keep living while the box is switched off.
 - [Built] Only what's inside the window is drawn (in the Hologram View, the window plus its misty margin).

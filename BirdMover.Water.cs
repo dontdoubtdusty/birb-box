@@ -286,7 +286,7 @@ public partial class BirdMover
     }
 
     // Flies to a spot on the ground in a low arc, highest at the middle (up to WaterFlightArc). True on landing.
-    private bool FlyArc(Vector3 from, Vector3 to, float dt)
+    private bool FlyArc(Vector3 from, Vector3 to, float dt, float speed = FlySpeed)
     {
         Bird bird = ParentBird;
         bird.Pose = BirdPose.Fly;
@@ -294,7 +294,7 @@ public partial class BirdMover
         Vector2 target = Flat(to);
         float total = MathF.Max(0.01f, Vector2.Distance(Flat(from), target));
         float left = Vector2.Distance(here, target);
-        float step = FlySpeed * dt;
+        float step = speed * dt;
         if (left <= step)
         {
             bird.Position = to;

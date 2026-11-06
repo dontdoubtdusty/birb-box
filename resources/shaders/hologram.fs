@@ -36,6 +36,9 @@ uniform vec3 directLight;    // light from the sun or moon: 0.65 at midday, gold
 uniform vec3 hazeColor;      // what fading things shift toward near the fog: hologram-tinted by day, deep blue at night
 uniform int poolLobeCount;   // the pool (Pool.cs): how many circles make up its shape, 0 for none
 uniform vec3 poolLobes[3];   // each circle's world X, world Z and radius
+uniform int streamCount;     // the stream (Pool.cs): how many points it has, 0 for none
+uniform vec3 streamPts[9];  // each point's world X, world Z and half-width, from the spring down to the pool
+uniform float streamSwell;   // how much wider the stream is right now, each side (Pool.Swell)
 uniform int rippleCount;     // ripple rings on the water right now
 uniform vec4 ripples[8];     // each ring's world X, world Z, age in seconds, strength 0 to 1
 uniform float rippleLife;    // seconds a ring lasts (Pool.RippleLife)
@@ -46,7 +49,7 @@ uniform vec4 puddles[6];     // each one's world X, world Z, full radius, how fu
 uniform float edgeWidth;     // how far in from the cube's walls (box units) things start turning to pure hologram
 uniform float edgeStrength;  // how strong that edge look is: 0 off, 1 the normal look, up to 2 (0 while drawing the store)
 uniform float observer;      // 0 in the room view, 1 standing in the garden (the Hologram View): the fog moves out past the walls
-uniform float worldHalf;     // half the bird world's width (World.HalfSize), so nothing past its edge ever shows
+uniform float worldHalf;     // half the width of the world plus its apron (World.HalfSize + WorldDrawer.ApronWidth): the ground ends here, so nothing past it ever shows
 uniform vec3 lampPos;        // the store's lamp (StoreRenderer), in scene space
 uniform vec3 lampColor;      // its light; 0 when it's off, and always 0 in the bird world
 uniform float lampReach;     // how far (scene units) until its light has dropped to half
@@ -164,8 +167,10 @@ vec3 groundColor(vec2 world)
     // Wear: 0 untouched, 1 bare. The ragged noise makes worn spots fray at the edges instead of being round.
     vec2 wearUV = (world + worldHalfSize) / (2.0 * worldHalfSize);
     vec4 wearMap = texture(texture1, wearUV);
-    float wear = wearMap.r;
-    float lush = wearMap.a;
+    // Past the world's edge (the apron, Hologram View only) nothing has been worn or made lush, and the map doesn't reach there
+    float onMap = step(max(abs(wearUV.x - 0.5), abs(wearUV.y - 0.5)), 0.5);
+    float wear = wearMap.r * onMap;
+    float lush = wearMap.a * onMap;
     float frayed = wear + (noise(world * 4.0) - 0.5) * 0.3;
 
     // Around rocks the grass fills in even where the patches would leave dirt
@@ -195,6 +200,28 @@ float smoothMin(float a, float b, float k)
     return min(a, b) - h * h * k * 0.25;
 }
 
+// How far a world spot is from the stream (Pool.StreamDistance), and which way the nearest piece of it flows (toward the pool).
+float streamDistance(vec2 world, out vec2 flow)
+{
+    float best = 100000.0;
+    flow = vec2(0.0);
+    for (int i = 0; i < 8; i++)
+    {
+        if (i + 1 >= streamCount) break;
+        vec2 a = streamPts[i].xy;
+        vec2 ab = streamPts[i + 1].xy - a;
+        float t = clamp(dot(world - a, ab) / max(dot(ab, ab), 0.000001), 0.0, 1.0);
+        float radius = mix(streamPts[i].z, streamPts[i + 1].z, t) + streamSwell;
+        float here = length(world - (a + ab * t)) - radius;
+        if (here < best)
+        {
+            best = here;
+            flow = normalize(ab);
+        }
+    }
+    return best;
+}
+
 float waterDistance(vec2 world)
 {
     float d = 100000.0;
@@ -204,15 +231,28 @@ float waterDistance(vec2 world)
         float here = length(world - poolLobes[i].xy) - poolLobes[i].z;
         d = (i == 0) ? here : smoothMin(d, here, 0.9);
     }
+    if (streamCount >= 2)
+    {
+        vec2 flow;
+        d = smoothMin(d, streamDistance(world, flow), 0.8);
+    }
     return d;
 }
 
+// Which way the stream flows at the spot being shaded, and how much of the water here is stream (0 in the pool, 1 in the stream).
+// Set in main before the water's height is looked up.
+vec2 gFlow = vec2(0.0);
+float gFlowAmount = 0.0;
+
 // How high the water surface stands at a world spot: two slow drifting swells, plus the ripple rings.
+// In the stream the swells run downstream, faster and stronger, so the glints visibly flow.
 // Only its slope is used (for the glints); the surface itself is drawn flat.
 float waterHeight(vec2 world)
 {
-    float h = noise(world * 1.7 + time * vec2(0.11, 0.07)) * 0.012
-            + noise(world * 4.1 - time * vec2(0.09, 0.14)) * 0.005;
+    vec2 drift1 = mix(vec2(0.11, 0.07), -gFlow * 0.9, gFlowAmount);
+    vec2 drift2 = mix(vec2(-0.09, -0.14), -gFlow * 1.8, gFlowAmount);
+    float h = (noise(world * 1.7 + time * drift1) * 0.012
+             + noise(world * 4.1 + time * drift2) * 0.005) * (1.0 + gFlowAmount * 1.5);
     for (int i = 0; i < 8; i++)
     {
         if (i >= rippleCount) break;
@@ -341,6 +381,13 @@ void main()
         {
             // A little ragged noise so the shore isn't a perfect curve; aa softens the waterline over about a pixel
             d += (noise(world * 5.0) - 0.5) * 0.06;
+
+            // In the stream, which way it flows (fades out where the stream opens into the pool)
+            if (streamCount >= 2)
+            {
+                float streamD = streamDistance(world, gFlow);
+                gFlowAmount = 1.0 - smoothstep(0.0, 0.8, streamD - d);
+            }
             float aa = max(fwidth(d), 0.002);
             wet = 1.0 - smoothstep(-aa, aa, d);
             waterline = exp(-pow(d / max(0.025, aa * 1.2), 2.0));

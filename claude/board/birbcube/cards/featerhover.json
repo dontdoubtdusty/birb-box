@@ -1,14 +1,14 @@
 {
   "archived": false,
   "checklist": [],
-  "columnId": "next",
+  "columnId": "doing",
   "createdAt": 1793830000000,
   "description": "Feathers should be slightly easier to see, and give feedback on hover (glow or lift, maybe cursor). Look: `WorldDrawer.DrawFeathers`, `Feather.Length/Width`; hover can reuse the nearest-feather pick in `MousePicking`. Estimate 30-50k tokens.",
-  "order": 160,
+  "order": -1000,
   "priority": "Medium",
   "tags": [
     "Feathers"
   ],
   "title": "Feathers: easier to see, hover feedback",
-  "updatedAt": 1793830000000
+  "updatedAt": 1793932876457
 }

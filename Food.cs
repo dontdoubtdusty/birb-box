@@ -69,7 +69,7 @@ public class Food : Entity
     // age: how long ago it landed (SettledAge for seed loaded from a save).
     public Food(Vector3 position, Dictionary<SeedType, float> contents, Feeder? feeder = null, float impactSpeed = 0f, float age = 0f)
     {
-        float ground = Terrain.HeightAt(position);
+        float ground = Terrain.SurfaceAt(position);    // over the pool, seed lands on the water's top and sinks (see Land)
         Position = feeder == null && position.Y <= ground ? new Vector3(position.X, ground, position.Z) : position;    // dirt seed rests on the ground
         Feeder = feeder;
         IsLanded = feeder != null || position.Y <= ground;
@@ -101,7 +101,7 @@ public class Food : Entity
         {
             // A feeder that was picked up while the seed fell can't catch it anymore.
             bool caught = LandOn != null && LandOn.InWorld;
-            float floor = caught ? LandOn!.Position.Y + LandOn.Info.CatchHeight : Terrain.HeightAt(Position);
+            float floor = caught ? LandOn!.Position.Y + LandOn.Info.CatchHeight : Terrain.SurfaceAt(Position);
 
             fallSpeed += World.Gravity * dt;
             float y = MathF.Max(floor, Position.Y - fallSpeed * dt);

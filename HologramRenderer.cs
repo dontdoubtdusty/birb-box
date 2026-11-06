@@ -79,6 +79,7 @@ public class HologramRenderer
     private readonly SkyOrbs skyOrbs = new SkyOrbs();    // the sun and moon under the cube's ceiling in the room view (5.06)
     public Backdrop Backdrop { get; } = new Backdrop();
     public ChatMessages ChatMessages { get; } = new ChatMessages();
+    public Feather? HoveredFeather { get => worldDrawer.HoveredFeather; set => worldDrawer.HoveredFeather = value; }
 
     // Shader uniform locations
     private HoloUniforms holoUniforms = null!, grainUniforms = null!;
@@ -396,7 +397,7 @@ public class HologramRenderer
             Raylib.SetShaderValue(shader, edgeWidth, edgeWidthAmount, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, edgeStrength, v.EdgeStrength, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, observer, v.Observer, ShaderUniformDataType.Float);
-            Raylib.SetShaderValue(shader, worldHalf, World.Instance.HalfSize, ShaderUniformDataType.Float);
+            Raylib.SetShaderValue(shader, worldHalf, World.Instance.HalfSize + WorldDrawer.ApronWidth(view), ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, lampColor, Vector3.Zero, ShaderUniformDataType.Vec3);    // only the store lights its lamp
             Raylib.SetShaderValue(shader, selfLit, 0f, ShaderUniformDataType.Float);
             Raylib.SetShaderValue(shader, shadeColor, light.Shade, ShaderUniformDataType.Vec3);

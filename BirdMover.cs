@@ -80,6 +80,13 @@ public partial class BirdMover
             return;
         }
 
+        // Fluttering over the stream to the far bank
+        if (crossing)
+        {
+            UpdateCrossing(dt);
+            return;
+        }
+
         if (bird.IsFlying)
         {
             Vector2 back = -HeadingVector(bird.Heading) * 0.5f;
@@ -103,6 +110,11 @@ public partial class BirdMover
         }
 
         if (bird.State == BirdState.Wandering && UpdatePausing(dt))
+        {
+            return;
+        }
+
+        if (TryStartCrossing(dt))
         {
             return;
         }

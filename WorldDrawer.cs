@@ -14,6 +14,8 @@ public partial class WorldDrawer
     private int locMoss;
     private int locPoolLobeCount, locPoolLobes, locRippleCount, locRipples, locRippleLife;    // the pool, drawn by the floor (see DrawFloor)
     private readonly Vector3[] poolLobes = new Vector3[Pool.MaxLobes];
+    private readonly Vector3[] streamPoints = new Vector3[Pool.MaxStreamPoints];
+    private int locStreamCount, locStreamPoints, locStreamSwell;    // the stream, drawn by the floor like the pool
     private readonly Vector4[] ripples = new Vector4[Pool.MaxRipples];
 
     // The ground wear map (GroundWear) as a two-channel texture, handed to the floor as its second texture (texture1):
@@ -25,9 +27,17 @@ public partial class WorldDrawer
     private const double WearUploadInterval = 0.2;    // seconds of real time between uploads
 
     private Model floorModel;
+    private Model apronModel;    // flat ground in a frame around the world, so the Hologram View's misty margin has ground to fade over
+    private float apronWidth;
     private bool floorBuilt = false;
+
+    // How far the apron reaches past the world's edge: as far as the Hologram View's margin can reach out at the widest zoom
+    // (the margin is ObserverMargin times the cube's half-width, and zooming out shows the most world per box unit), plus a little.
+    // Shared with HologramRenderer, which hands it to the shader as the edge where the ground finally gives out.
+    public static float ApronWidth(ViewWindow view) => view.HalfWidth / ViewWindow.ZoomLevels[0] * ViewWindow.ObserverMargin + 2f;
     private int floorVersion = -1;    // Terrain.Version the floor mesh was built from
     private Model featherModel;    // a unit sphere, squashed flat into a vane or thinned into a quill
+    public Feather? HoveredFeather;    // the feather under the mouse (set each frame by GameEngine); drawn lifted, bigger and brighter
     private Model rockModel;     // a low, faceted sphere; each rock is a few of these squashed together
     private readonly BirbAnimator animator = new BirbAnimator();
     private readonly UnitShapes shapes = new UnitShapes();    // for feeders
@@ -42,12 +52,16 @@ public partial class WorldDrawer
         locMoss = Raylib.GetShaderLocation(holoShader, "moss");
         locPoolLobeCount = Raylib.GetShaderLocation(holoShader, "poolLobeCount");
         locPoolLobes = Raylib.GetShaderLocation(holoShader, "poolLobes");
+        locStreamCount = Raylib.GetShaderLocation(holoShader, "streamCount");
+        locStreamPoints = Raylib.GetShaderLocation(holoShader, "streamPts");
+        locStreamSwell = Raylib.GetShaderLocation(holoShader, "streamSwell");
         locRippleCount = Raylib.GetShaderLocation(holoShader, "rippleCount");
         locRipples = Raylib.GetShaderLocation(holoShader, "ripples");
         locRippleLife = Raylib.GetShaderLocation(holoShader, "rippleLife");
         FindWeatherUniforms();
 
-        // The floor covers the whole world; the shader's fog and the world's edge cut off the rest (see BuildFloor).
+        // The floor covers the whole world; the apron carries the ground on past it (see BuildFloor).
+        apronWidth = ApronWidth(view);
         BuildFloor();
         grainRoundMesh = Raylib.GenMeshSphere(0.5f, 6, 8);
         grainBlockMesh = Raylib.GenMeshCube(1f, 1f, 1f);
@@ -64,6 +78,7 @@ public partial class WorldDrawer
     public void Unload()
     {
         Raylib.UnloadModel(floorModel);
+        Raylib.UnloadModel(apronModel);
         if (wearTexture.Id != 0) Raylib.UnloadTexture(wearTexture);
         // The grain material isn't unloaded: that would unload its shader too, which HologramRenderer owns.
         Raylib.UnloadMesh(grainRoundMesh);
@@ -78,7 +93,12 @@ public partial class WorldDrawer
     // so one mesh serves every zoom and pan. Rebuilt only when the ground changes (a new world, a load, or the pool levelling it).
     private void BuildFloor()
     {
-        if (floorBuilt) Raylib.UnloadModel(floorModel);
+        if (floorBuilt)
+        {
+            Raylib.UnloadModel(floorModel);
+            Raylib.UnloadModel(apronModel);
+        }
+        apronModel = BuildApron(World.Instance.HalfSize, apronWidth);
 
         float half = World.Instance.HalfSize;
         int cells = Terrain.IsFlat ? 1 : (int)MathF.Round(half * 2f / Terrain.Spacing);
@@ -106,7 +126,7 @@ public partial class WorldDrawer
                 {
                     float x = -half + (ix + cornerX[k]) * step;
                     float z = -half + (iz + cornerZ[k]) * step;
-                    vertices[v] = new Vector3(x, Terrain.HeightAt(x, z), z);
+                    vertices[v] = new Vector3(x, Terrain.SurfaceAt(x, z), z);    // the water is drawn as a flat surface; the bed under it is never seen
                     normals[v] = Terrain.NormalAt(x, z);
                     v++;
                 }
@@ -121,6 +141,51 @@ public partial class WorldDrawer
         floorVersion = Terrain.Version;
     }
 
+    // The apron: four flat rectangles around the world, level with its edge (the terrain is flattened to 0 there). Level ground,
+    // no normals to vary, so it is a handful of big triangles. It gets the floor's shader, which leaves wear and the pool out of it.
+    private Model BuildApron(float half, float width)
+    {
+        float outer = half + width;
+        // Each rectangle as (minX, minZ, maxX, maxZ): the north and south strips run the full width, the east and west ones fill between
+        float[,] strips =
+        {
+            { -outer, -outer, outer, -half },
+            { -outer, half, outer, outer },
+            { -outer, -half, -half, half },
+            { half, -half, outer, half },
+        };
+
+        Mesh mesh = new Mesh { VertexCount = 4 * 6, TriangleCount = 4 * 2 };
+        mesh.AllocVertices();
+        mesh.AllocNormals();
+        mesh.AllocTexCoords();
+        Span<Vector3> vertices = mesh.VerticesAs<Vector3>();
+        Span<Vector3> normals = mesh.NormalsAs<Vector3>();
+        Span<Vector2> texCoords = mesh.TexCoordsAs<Vector2>();
+        texCoords.Clear();
+
+        // Same corner order as the floor: counter-clockwise seen from above
+        ReadOnlySpan<int> cornerX = stackalloc int[] { 0, 0, 1, 1, 0, 1 };
+        ReadOnlySpan<int> cornerZ = stackalloc int[] { 0, 1, 0, 0, 1, 1 };
+        int v = 0;
+        for (int s = 0; s < 4; s++)
+        {
+            for (int k = 0; k < 6; k++)
+            {
+                float x = cornerX[k] == 0 ? strips[s, 0] : strips[s, 2];
+                float z = cornerZ[k] == 0 ? strips[s, 1] : strips[s, 3];
+                vertices[v] = new Vector3(x, 0f, z);
+                normals[v] = Vector3.UnitY;
+                v++;
+            }
+        }
+
+        Raylib.UploadMesh(ref mesh, false);
+        Model model = Raylib.LoadModelFromMesh(mesh);
+        Raylib.SetMaterialShader(ref model, 0, ref holoShader);
+        return model;
+    }
+
     public void DrawFloor(ViewWindow view)
     {
         if (floorVersion != Terrain.Version) BuildFloor();
@@ -133,6 +198,13 @@ public partial class WorldDrawer
         Vector3 floorAt = view.BoxToScene(view.ToLocal(Vector3.Zero));
         Raylib.DrawModelEx(floorModel, floorAt, Vector3.UnitY, view.YawDegrees, new Vector3(view.Zoom), Color.White);
         DrawStats.CountModel();
+
+        // The ground past the world's edge, only while standing in the garden (the room view's walls cut it off anyway)
+        if (view.Immersion > 0.001f)
+        {
+            Raylib.DrawModelEx(apronModel, floorAt, Vector3.UnitY, view.YawDegrees, new Vector3(view.Zoom), Color.White);
+            DrawStats.CountModel();
+        }
         Raylib.SetShaderValue(holoShader, locIsFloor, 0, ShaderUniformDataType.Int);
     }
 
@@ -152,6 +224,16 @@ public partial class WorldDrawer
             Pool.Ripple ripple = pool!.Ripples[i];
             ripples[i] = new Vector4(ripple.Spot.X, ripple.Spot.Y, ripple.Age, ripple.Strength);
         }
+
+        int streamCount = pool?.Stream.Count ?? 0;
+        for (int i = 0; i < streamCount; i++)
+        {
+            Pool.StreamPoint point = pool!.Stream[i];
+            streamPoints[i] = new Vector3(point.Spot.X, point.Spot.Y, point.Radius);
+        }
+        Raylib.SetShaderValue(holoShader, locStreamCount, streamCount, ShaderUniformDataType.Int);
+        if (streamCount > 0) Raylib.SetShaderValueV(holoShader, locStreamPoints, streamPoints, ShaderUniformDataType.Vec3, streamCount);
+        Raylib.SetShaderValue(holoShader, locStreamSwell, Pool.Swell, ShaderUniformDataType.Float);
 
         Raylib.SetShaderValue(holoShader, locPoolLobeCount, lobeCount, ShaderUniformDataType.Int);
         if (lobeCount > 0) Raylib.SetShaderValueV(holoShader, locPoolLobes, poolLobes, ShaderUniformDataType.Vec3, lobeCount);
@@ -282,6 +364,8 @@ public partial class WorldDrawer
         }
     }
 
+    private const float HoverGrow = 1.25f, HoverLift = 0.12f, HoverBrighten = 0.45f;    // the hovered feather: size, height in box units, paleness
+
     // Feathers: a flat oval vane in the species' color with a paler quill down the middle. They rock as they fall
     // and lie flat once landed, each pointing its own way (turned with the view so they stay put on the ground).
     private void DrawFeathers(ViewWindow view)
@@ -294,11 +378,16 @@ public partial class WorldDrawer
             Matrix4x4 turn = Raymath.MatrixMultiply(Raymath.MatrixRotateX(feather.Tilt), Raymath.MatrixRotateY(feather.Heading + view.Yaw));
             int alpha = (int)(255 * feather.Alpha);
 
-            Color species = feather.Species.Color;
-            featherModel.Transform = Raymath.MatrixMultiply(Raymath.MatrixScale(Feather.Length, Feather.Thickness, Feather.Width), turn);
+            // Under the mouse: a little bigger, floating above the dirt and paler, so it reads as clickable
+            bool hover = feather == HoveredFeather;
+            float grow = hover ? HoverGrow : 1f;
+            if (hover) at.Y += HoverLift * view.Zoom;
+
+            Color species = hover ? Palette.Mix(feather.Species.Color, Color.White, HoverBrighten) : feather.Species.Color;
+            featherModel.Transform = Raymath.MatrixMultiply(Raymath.MatrixScale(Feather.Length * grow, Feather.Thickness * grow, Feather.Width * grow), turn);
             Raylib.DrawModel(featherModel, at, view.Zoom, new Color(species.R, species.G, species.B, alpha));
 
-            featherModel.Transform = Raymath.MatrixMultiply(Raymath.MatrixScale(Feather.Length * 1.05f, Feather.Thickness * 1.6f, Feather.Thickness * 1.6f), turn);
+            featherModel.Transform = Raymath.MatrixMultiply(Raymath.MatrixScale(Feather.Length * 1.05f * grow, Feather.Thickness * 1.6f * grow, Feather.Thickness * 1.6f * grow), turn);
             Raylib.DrawModel(featherModel, at, view.Zoom, new Color(235, 235, 225, alpha));
             DrawStats.CountModel();
             DrawStats.CountModel();

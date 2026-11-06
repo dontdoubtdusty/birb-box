@@ -23,7 +23,8 @@ public class ChatMessages
     private const float NameLabelWidth = 1.8f;      // box units, same text scale as the chat labels
     private const float NameLift = 0.3f;            // above the top of the bird's head, in box units
     private const float NameAlpha = 0.85f;
-    private const int NameTextureWidth = 256;
+    private const int TexScale = 2;                // label textures are drawn this many times bigger than the base layout, so close-ups stay sharp
+    private const int NameTextureWidth = 256 * TexScale;
 
     private class NameTag
     {
@@ -45,15 +46,15 @@ public class ChatMessages
     private const string RejoinText = " has rejoined the chat";
     private const string LeaveText = " has left the chat";
 
-    private const int TextureWidth = 512, TextureHeight = 48;
+    private const int TextureWidth = 512 * TexScale, TextureHeight = 48 * TexScale;
 
     // READABILITY (all labels)
     private const float NameLighten = 0.45f;          // how far a bird's color is mixed toward white for its name
-    private const int OutlineWidth = 2;               // pixels in the label texture
+    private const int OutlineWidth = 2 * TexScale;               // pixels in the label texture
     private static readonly Color OutlineColor = new Color(6, 9, 14, 255);
     private static readonly Color PlateColor = new Color(6, 9, 14, 100);    // the faint plate behind the text
-    private const int PlatePadding = 12;              // plate reaches this far past the text on each side
-    private const int PlateMargin = 4;                // gap above and below the plate inside the texture
+    private const int PlatePadding = 12 * TexScale;              // plate reaches this far past the text on each side
+    private const int PlateMargin = 4 * TexScale;                // gap above and below the plate inside the texture
     private const float NearDistance = 14f;           // closer than this, labels keep their base size
     private const float DistanceGrowth = 0.5f;        // 0: fixed in the box, 1: same size on screen at any distance
     private const float MaxGrowth = 1.8f;
@@ -71,7 +72,7 @@ public class ChatMessages
     private const float SleepAlpha = 0.85f;
     private const float SleepLighten = 0.55f;     // how far the hologram color is mixed toward white
     private const float SleepFadeTime = 0.8f;     // seconds for a bird's z's to fade in as it settles, and out as it wakes
-    private const int ZTextureSize = 64;
+    private const int ZTextureSize = 64 * TexScale;
 
     private RenderTexture2D zTexture;                                // one z, drawn once in white and tinted when shown
     private readonly Dictionary<int, float> sleepFade = new();      // by bird EntityID: 0 awake, 1 fully asleep
@@ -238,7 +239,7 @@ public class ChatMessages
         {
             if (msg.Texture.Id != 0) continue;
             msg.Texture = Raylib.LoadRenderTexture(TextureWidth, TextureHeight);
-            Raylib.SetTextureFilter(msg.Texture.Texture, TextureFilter.Bilinear);
+            Raylib.SetTextureFilter(msg.Texture.Texture, TextureFilter.Trilinear);
             if (msg.Bird != null) RenderLabel(msg.Texture, msg.Bird.Name, msg.Bird.Species.Color, msg.Leaving, msg.Bird.Visits > 1);
             else RenderEventLabel(msg.Texture, msg.Text ?? "");
         }
@@ -247,12 +248,19 @@ public class ChatMessages
         if (zTexture.Id == 0) RenderZ();
     }
 
+    // Fills in the smaller copies of a finished label texture, so it stays clean when drawn small (needs the Trilinear filter).
+    private static void BuildMipmaps(RenderTexture2D target)
+    {
+        Texture2D texture = target.Texture;
+        Raylib.GenTextureMipmaps(ref texture);
+    }
+
     // The sleeping z, drawn once in white with a dark outline: a top bar, a diagonal and a bottom bar, with rounded joints.
     // Drawn as lines rather than a letter so it sits exactly in the middle of its texture.
     private void RenderZ()
     {
         zTexture = Raylib.LoadRenderTexture(ZTextureSize, ZTextureSize);
-        Raylib.SetTextureFilter(zTexture.Texture, TextureFilter.Bilinear);
+        Raylib.SetTextureFilter(zTexture.Texture, TextureFilter.Trilinear);
 
         float s = ZTextureSize;
         Vector2[] corners = { new(s * 0.28f, s * 0.26f), new(s * 0.72f, s * 0.26f), new(s * 0.28f, s * 0.74f), new(s * 0.72f, s * 0.74f) };
@@ -261,6 +269,7 @@ public class ChatMessages
             DrawZStrokes(corners, s * 0.11f + OutlineWidth * 2, OutlineColor);
             DrawZStrokes(corners, s * 0.11f, Color.White);
         Raylib.EndTextureMode();
+        BuildMipmaps(zTexture);
     }
 
     // The three strokes of a z through its corners (top left, top right, bottom left, bottom right).
@@ -290,7 +299,7 @@ public class ChatMessages
             if (tag == null)
             {
                 tag = new NameTag { Texture = Raylib.LoadRenderTexture(NameTextureWidth, TextureHeight) };
-                Raylib.SetTextureFilter(tag.Texture.Texture, TextureFilter.Bilinear);
+                Raylib.SetTextureFilter(tag.Texture.Texture, TextureFilter.Trilinear);
                 nameTags[bird.EntityID] = tag;
             }
             tag.Name = bird.Name;
@@ -301,8 +310,8 @@ public class ChatMessages
     // Just the name, in a lightened bird color, on its plate, centered and shrunk to fit.
     private static void RenderName(RenderTexture2D target, string name, Color color)
     {
-        int size = 34;
-        while (size > 10 && UiText.Measure(name, size) > NameTextureWidth - PlatePadding * 2 - 4) size -= 2;
+        int size = 34 * TexScale;
+        while (size > 10 * TexScale && UiText.Measure(name, size) > NameTextureWidth - PlatePadding * 2 - 4 * TexScale) size -= 2 * TexScale;
         int width = UiText.Measure(name, size);
         int x = (NameTextureWidth - width) / 2;
         int y = (TextureHeight - size) / 2;
@@ -312,6 +321,7 @@ public class ChatMessages
             DrawPlate(x, width);
             DrawOutlined(name, x, y, size, Lighten(color));
         Raylib.EndTextureMode();
+        BuildMipmaps(target);
     }
 
     // The name in a lightened bird color, the rest in white, on one plate, centered and shrunk to fit.
@@ -323,8 +333,8 @@ public class ChatMessages
         if (leaving) nameColor = Raylib.ColorBrightness(nameColor, -0.3f);
         Color textColor = leaving ? Palette.DimText : Palette.Text;
 
-        int size = 36;
-        while (size > 10 && UiText.Measure(name + text, size) > TextureWidth - PlatePadding * 2 - 4) size -= 2;
+        int size = 36 * TexScale;
+        while (size > 10 * TexScale && UiText.Measure(name + text, size) > TextureWidth - PlatePadding * 2 - 4 * TexScale) size -= 2 * TexScale;
         int nameWidth = UiText.Measure(name, size);
         int width = UiText.Measure(name + text, size);
         int x = (TextureWidth - width) / 2;
@@ -336,13 +346,14 @@ public class ChatMessages
             DrawOutlined(name, x, y, size, nameColor);
             DrawOutlined(text, x + nameWidth, y, size, textColor);
         Raylib.EndTextureMode();
+        BuildMipmaps(target);
     }
 
     // An event's line in plain light text on its plate, centered and shrunk to fit.
     private static void RenderEventLabel(RenderTexture2D target, string text)
     {
-        int size = 36;
-        while (size > 10 && UiText.Measure(text, size) > TextureWidth - PlatePadding * 2 - 4) size -= 2;
+        int size = 36 * TexScale;
+        while (size > 10 * TexScale && UiText.Measure(text, size) > TextureWidth - PlatePadding * 2 - 4 * TexScale) size -= 2 * TexScale;
         int width = UiText.Measure(text, size);
         int x = (TextureWidth - width) / 2;
         int y = (TextureHeight - size) / 2;
@@ -352,6 +363,7 @@ public class ChatMessages
             DrawPlate(x, width);
             DrawOutlined(text, x, y, size, Palette.Text);
         Raylib.EndTextureMode();
+        BuildMipmaps(target);
     }
 
     // A faint dark rounded plate behind a line of text, a little wider than the text.

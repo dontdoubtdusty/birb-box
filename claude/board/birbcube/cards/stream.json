@@ -27,14 +27,14 @@
       "text": "C. Floor becomes a lit mesh; fog still hides the cut at the walls"
     },
     {
-      "completed": false,
+      "completed": true,
       "id": "wb-d",
-      "text": "D. Pool sits in a dip (both pool shape copies match). Only the levelling is done (5.23: ground flattened around the pool); the real dip is open"
+      "text": "D. Pool sits in a dip: bed sinks 0.4 below the shore, flat water surface 0.12 below it (5.25, untested)"
     },
     {
       "completed": false,
       "id": "wb-e",
-      "text": "E. Stream from a spring to the pool: flow, sip, bathe, cross, seed drifts, trickle sound, minimap"
+      "text": "E1+E2 built (5.25, untested): creek from a spring into the pool, drawn, glints flow, swells with wet ground; birds sip, bathe and cross it. E3 open: seed drifts downstream, trickle sound, minimap, spring look"
     },
     {
       "completed": false,

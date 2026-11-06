@@ -1,0 +1,27 @@
+{
+  "archived": false,
+  "checklist": [
+    { "completed": true,  "id": "v525-0", "text": "It builds (dotnet build: no errors, no warnings)" },
+    { "completed": false, "id": "v525-1", "text": "Smoke test (qa-plan.md section 3); the floor still draws (hologram.fs changed: if it is black or the game crashes at start, check streamDistance and the streamPts[9] array)" },
+    { "completed": false, "id": "v525-2", "text": "Esc menu, New world: a creek runs from a spring into the pool, 0.9 wide to 2.4, with a lip at the bank; the painted water edge matches where birds stop" },
+    { "completed": false, "id": "v525-3", "text": "Glints run downstream; the creek widens a little while the ground is soaked after rain (Tab, make it rain) and narrows as it dries" },
+    { "completed": false, "id": "v525-4", "text": "Nothing floats or sinks near the water: birds wading, seed over the pool landing on the surface and plipping, splashes, feathers; clicks and pouring over the creek land under the cursor" },
+    { "completed": false, "id": "v525-5", "text": "Birds sip and bathe along the creek; bathers do not vanish in the deeper middle" },
+    { "completed": false, "id": "v525-6", "text": "Birds cross the creek: a low slow hop over narrow water, a flight over wide; they land clear of water and rocks and never cross the pool; nobody gets stuck against a bank" },
+    { "completed": false, "id": "v525-7", "text": "Save and reload keeps the same creek; an old save has none" },
+    { "completed": false, "id": "v525-8", "text": "Tuning if it looks small or odd: SpringRadius, MouthRadius, StreamLength* and MaxSwell (Pool.cs), StreamSlack (Terrain.cs)" },
+    { "completed": false, "id": "v525-9", "text": "Commit" }
+  ],
+  "columnId": "test",
+  "createdAt": 1794200000000,
+  "description": "World Beautification D (pool dip) and E1-E2 (session 50). Terrain.SurfaceAt gives a flat water level over a sunken bed; the creek lives in Pool.cs (DistanceAt covers pool and creek) and hologram.fs (streamDistance). BirdMover.Crossing.cs lets birds hop or fly over it. Not run: only compiled. E3 (seed drift, sound, minimap, spring look) and F (reeds, lily pads, stones) are still to come.",
+  "order": 29000,
+  "priority": "High",
+  "tags": [
+    "Terrain",
+    "Water",
+    "5.25"
+  ],
+  "title": "5.25 Pool dip and creek (World Beautification D, E1-E2)",
+  "updatedAt": 1794200000000
+}

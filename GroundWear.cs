@@ -73,19 +73,33 @@ public class GroundWear
         foreach (Pool.Lobe lobe in pool.Lobes)
         {
             float reach = lobe.Radius + ring + 1f;
-            int x0 = Math.Max(0, (int)((lobe.Center.X - reach + HalfSize) * CellsPerUnit));
-            int x1 = Math.Min(Size - 1, (int)((lobe.Center.X + reach + HalfSize) * CellsPerUnit));
-            int z0 = Math.Max(0, (int)((lobe.Center.Y - reach + HalfSize) * CellsPerUnit));
-            int z1 = Math.Min(Size - 1, (int)((lobe.Center.Y + reach + HalfSize) * CellsPerUnit));
-            for (int z = z0; z <= z1; z++)
+            AddLushBox(pool, ring, lobe.Center - new Vector2(reach), lobe.Center + new Vector2(reach));
+        }
+
+        // Along the stream, a box around each stretch of it
+        for (int s = 0; s + 1 < pool.Stream.Count; s++)
+        {
+            Pool.StreamPoint a = pool.Stream[s], b = pool.Stream[s + 1];
+            float reach = MathF.Max(a.Radius, b.Radius) + Pool.MaxSwell + ring + 1f;
+            AddLushBox(pool, ring, Vector2.Min(a.Spot, b.Spot) - new Vector2(reach), Vector2.Max(a.Spot, b.Spot) + new Vector2(reach));
+        }
+    }
+
+    // Raises the lush grass in a box of the world to what the water's distance calls for (full at the shore, gone at ring).
+    private void AddLushBox(Pool pool, float ring, Vector2 min, Vector2 max)
+    {
+        int x0 = Math.Max(0, (int)((min.X + HalfSize) * CellsPerUnit));
+        int x1 = Math.Min(Size - 1, (int)((max.X + HalfSize) * CellsPerUnit));
+        int z0 = Math.Max(0, (int)((min.Y + HalfSize) * CellsPerUnit));
+        int z1 = Math.Min(Size - 1, (int)((max.Y + HalfSize) * CellsPerUnit));
+        for (int z = z0; z <= z1; z++)
+        {
+            for (int x = x0; x <= x1; x++)
             {
-                for (int x = x0; x <= x1; x++)
-                {
-                    Vector2 world = new Vector2((x + 0.5f) / CellsPerUnit - HalfSize, (z + 0.5f) / CellsPerUnit - HalfSize);
-                    float t = Math.Clamp(1f - pool.DistanceAt(world) / ring, 0f, 1f);
-                    int i = z * Size + x;
-                    Lush[i] = MathF.Max(Lush[i], t * t * (3f - 2f * t));
-                }
+                Vector2 world = new Vector2((x + 0.5f) / CellsPerUnit - HalfSize, (z + 0.5f) / CellsPerUnit - HalfSize);
+                float t = Math.Clamp(1f - pool.DistanceAt(world) / ring, 0f, 1f);
+                int i = z * Size + x;
+                Lush[i] = MathF.Max(Lush[i], t * t * (3f - 2f * t));
             }
         }
     }

@@ -437,6 +437,7 @@ public class PuddleSave
 public class PoolSave
 {
     public List<LobeSave> Lobes { get; set; } = new();
+    public List<LobeSave> Stream { get; set; } = new();    // the stream's points (Center = where, Radius = half-width); empty for none
 }
 
 public class LobeSave

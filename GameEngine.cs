@@ -8,7 +8,7 @@ public class GameEngine
     public static GameEngine Instance { get; private set; } = null!;
 
     // Shown in the window title and printed on top of the pedestal's bezel ring. Bump it as the build changes.
-    public const string Version = "Birb Cube 5.23 Alpha";
+    public const string Version = "Birb Cube 5.25 Alpha";
 
     // SYSTEMS
     public World World { get; private set; }
@@ -93,6 +93,7 @@ public class GameEngine
 
     // PLACING FEEDERS: where a carried feeder would go (box space), or null when the mouse isn't over clear floor
     public Vector3? PlacingSpot { get; private set; }
+    private bool featherCursorOn;          // the pointing-hand cursor is showing because the mouse is over a feather
     // FOLLOWING: the bird the view slides along with, selected or not. Only a manual move of the view
     // (WASD, dragging the world map, Center on something else) or the bird leaving the world stops it.
     public Bird? FollowedBird;
@@ -470,6 +471,11 @@ public class GameEngine
     {
         Placer.Update(input.BirdsShowing);
         PlacingSpot = Placer.Carried != null && input.BirdsShowing && !input.MouseBlocked && !input.MouseOverRocker ? Mouse.FloorPoint() : null;
+        bool pointing = Placer.Carried == null && input.BirdsShowing && !input.MouseBlocked && !input.MouseOverRocker && !Mode.InStore;
+        Renderer.HoveredFeather = pointing ? Mouse.PickFeather(Mouse.RayInBox()) : null;    // lifts under the mouse (WorldDrawer.DrawFeathers)
+        bool overFeather = Renderer.HoveredFeather != null;
+        if (overFeather != featherCursorOn) Raylib.SetMouseCursor(overFeather ? MouseCursor.PointingHand : MouseCursor.Default);    // only on change, so ImGui keeps its own cursors
+        featherCursorOn = overFeather;
 
         if (Camera.ClickedThisFrame && !input.MouseBlocked)
         {
